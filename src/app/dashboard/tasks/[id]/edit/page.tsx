@@ -47,6 +47,7 @@ export default function EditTask() {
   const [saveLoading, setSaveLoading] = useState<boolean>(false);
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadingStages, setLoadingStages] = useState<boolean>(false);
   
   const params = useParams();
   const router = useRouter();
@@ -104,12 +105,12 @@ export default function EditTask() {
         
         // בדיקה אם המשתמש הוא הבעלים של המשימה או הפרויקט
         if (user) {
-          if (taskData.assignee_id === user.id) {
+          if (taskData.assignees && taskData.assignees.includes(user.id)) {
             setIsOwner(true);
           } else {
             // נטען את הפרויקט כדי לבדוק אם המשתמש הוא בעל הפרויקט
             const projectData = await projectService.getProjectById(taskData.project_id);
-            if (projectData && projectData.owner_id === user.id) {
+            if (projectData && projectData.owner === user.id) {
               setIsOwner(true);
             } else {
               setLoadError('אין לך הרשאה לערוך משימה זו');
@@ -129,7 +130,7 @@ export default function EditTask() {
         
         // טעינת השלבים של הפרויקט הנוכחי
         if (taskData.project_id) {
-          const stagesData = await stageService.getStagesByProject(taskData.project_id);
+          const stagesData = await stageService.getProjectStages(taskData.project_id);
           setStages(stagesData);
         }
       } catch (err) {
@@ -154,31 +155,21 @@ export default function EditTask() {
   
   // פונקציה לטעינת שלבים של פרויקט
   const fetchStages = async (projectId: string) => {
-    if (!projectId) return;
-    
     try {
-      const stagesData = await stageService.getStagesByProject(projectId);
+      setLoadingStages(true);
+      const stagesData = await stageService.getProjectStages(projectId);
       setStages(stagesData);
-      
-      // אם שלב הנוכחי לא שייך לפרויקט החדש, נאפס אותו
-      if (task.stage_id) {
-        const stageExists = stagesData.some(stage => stage.id === task.stage_id);
-        if (!stageExists) {
-          setTask(prev => ({ ...prev, stage_id: stagesData.length > 0 ? stagesData[0].id : '' }));
-        }
-      } else if (stagesData.length > 0) {
-        setTask(prev => ({ ...prev, stage_id: stagesData[0].id }));
-      }
-    } catch (err) {
-      console.error('שגיאה בטעינת שלבים:', err);
-      
+    } catch (error) {
+      console.error('Error fetching stages:', error);
       toast({
-        title: 'שגיאה בטעינת שלבי הפרויקט',
+        title: 'שגיאה בטעינת שלבים',
+        description: error instanceof Error ? error.message : 'אירעה שגיאה בלתי צפויה',
         status: 'error',
-        duration: 3000,
+        duration: 5000,
         isClosable: true,
-        position: 'top-right',
       });
+    } finally {
+      setLoadingStages(false);
     }
   };
   
