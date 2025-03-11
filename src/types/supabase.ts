@@ -25,6 +25,7 @@ export interface Database {
           project_manager_id: string | null
           priority: string
           progress: number
+          description: string | null
         }
         Insert: {
           id?: string
@@ -41,6 +42,7 @@ export interface Database {
           project_manager_id?: string | null
           priority?: string
           progress?: number
+          description?: string | null
         }
         Update: {
           id?: string
@@ -57,6 +59,7 @@ export interface Database {
           project_manager_id?: string | null
           priority?: string
           progress?: number
+          description?: string | null
         }
       }
       stages: {
