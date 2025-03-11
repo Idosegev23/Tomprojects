@@ -70,6 +70,7 @@ export interface Database {
           created_at: string
           updated_at: string
           project_id: string
+          order: number | null
         }
         Insert: {
           id?: string
@@ -78,6 +79,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
           project_id: string
+          order?: number | null
         }
         Update: {
           id?: string
@@ -86,6 +88,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
           project_id?: string
+          order?: number | null
         }
       }
       tasks: {
