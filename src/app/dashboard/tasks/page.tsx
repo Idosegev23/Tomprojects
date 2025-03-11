@@ -244,7 +244,7 @@ export default function Tasks() {
   // קבלת שם פרויקט לפי מזהה
   const getProjectName = (projectId: string) => {
     const project = projects.find(p => p.id === projectId);
-    return project ? project.title : 'לא משויך לפרויקט';
+    return project ? project.name : 'לא משויך לפרויקט';
   };
   
   // מצבי סטטוס אפשריים
@@ -296,7 +296,7 @@ export default function Tasks() {
           onChange={(e) => setSelectedProject(e.target.value)}
         >
           {projects.map(project => (
-            <option key={project.id} value={project.id}>{project.title}</option>
+            <option key={project.id} value={project.id}>{project.name}</option>
           ))}
         </Select>
         

@@ -326,7 +326,7 @@ export default function EditTask() {
             <FormLabel>תיאור</FormLabel>
             <Textarea
               name="description"
-              value={task.description}
+              value={task.description || ''}
               onChange={handleChange}
               placeholder="תיאור מפורט של המשימה..."
               minH="120px"
@@ -344,7 +344,7 @@ export default function EditTask() {
                 placeholder="בחר פרויקט"
               >
                 {projects.map(project => (
-                  <option key={project.id} value={project.id}>{project.title}</option>
+                  <option key={project.id} value={project.id}>{project.name}</option>
                 ))}
               </Select>
               {errors.project_id && <FormErrorMessage>{errors.project_id}</FormErrorMessage>}
@@ -355,13 +355,13 @@ export default function EditTask() {
               <FormLabel>שלב</FormLabel>
               <Select
                 name="stage_id"
-                value={task.stage_id}
+                value={task.stage_id || ''}
                 onChange={handleChange}
                 placeholder={stages.length === 0 ? "אין שלבים זמינים" : "בחר שלב"}
                 isDisabled={!task.project_id || stages.length === 0}
               >
                 {stages.map(stage => (
-                  <option key={stage.id} value={stage.id}>{stage.name}</option>
+                  <option key={stage.id} value={stage.id}>{stage.title}</option>
                 ))}
               </Select>
               {errors.stage_id && <FormErrorMessage>{errors.stage_id}</FormErrorMessage>}
@@ -404,7 +404,7 @@ export default function EditTask() {
               <Input
                 name="due_date"
                 type="date"
-                value={task.due_date}
+                value={task.due_date || ''}
                 onChange={handleChange}
               />
             </FormControl>

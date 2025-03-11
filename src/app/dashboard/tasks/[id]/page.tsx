@@ -85,13 +85,15 @@ export default function TaskPage() {
         
         // בדיקה אם המשתמש הוא הבעלים של המשימה או הפרויקט
         if (user) {
-          if (taskData.assignee_id === user.id) {
+          if (taskData.assignees && taskData.assignees.includes(user.id)) {
             setIsOwner(true);
           } else {
             // נטען את הפרויקט כדי לבדוק אם המשתמש הוא בעל הפרויקט
             const projectData = await projectService.getProjectById(taskData.project_id);
-            if (projectData && projectData.owner_id === user.id) {
+            if (projectData && projectData.owner === user.id) {
               setIsOwner(true);
+            } else {
+              setError('אין לך הרשאה לצפות במשימה זו');
             }
           }
         }
@@ -336,9 +338,9 @@ export default function TaskPage() {
           <Text color="gray.600" fontSize="sm" mb={4}>
             <FiBookmark style={{ display: 'inline', marginLeft: '8px' }} />
             פרויקט: <Text as="span" fontWeight="medium" color="primary.600" cursor="pointer" onClick={() => router.push(`/dashboard/projects/${project.id}`)}>
-              {project.title}
+              {project.name}
             </Text>
-            {stage && ` > ${stage.name}`}
+            {stage && ` > ${stage.title}`}
           </Text>
         )}
         

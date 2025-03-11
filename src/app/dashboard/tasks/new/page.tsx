@@ -99,7 +99,7 @@ export default function NewTask() {
     if (!projectId) return;
     
     try {
-      const stagesData = await stageService.getStagesByProject(projectId);
+      const stagesData = await stageService.getProjectStages(projectId);
       setStages(stagesData);
       
       // בחירת שלב ברירת מחדל אם יש שלבים
@@ -261,7 +261,7 @@ export default function NewTask() {
                 isDisabled={projectsLoading || projects.length === 0}
               >
                 {projects.map(project => (
-                  <option key={project.id} value={project.id}>{project.title}</option>
+                  <option key={project.id} value={project.id}>{project.name}</option>
                 ))}
               </Select>
               {errors.project_id && <FormErrorMessage>{errors.project_id}</FormErrorMessage>}
@@ -283,7 +283,7 @@ export default function NewTask() {
                 isDisabled={!task.project_id || stages.length === 0}
               >
                 {stages.map(stage => (
-                  <option key={stage.id} value={stage.id}>{stage.name}</option>
+                  <option key={stage.id} value={stage.id}>{stage.title}</option>
                 ))}
               </Select>
               {errors.stage_id && <FormErrorMessage>{errors.stage_id}</FormErrorMessage>}

@@ -589,7 +589,7 @@ const TaskTree: React.FC<TaskTreeProps> = ({ tasks, projectId, onEditTask, onDel
         
         {getTasksWithoutStage().length > 0 && (
           <StageGroup
-            stage={{ id: 'no-stage', title: 'משימות ללא שלב', description: '', project_id: projectId, created_at: null, updated_at: null }}
+            stage={{ id: 'no-stage', title: 'משימות ללא שלב', description: '', project_id: projectId, created_at: '', updated_at: '', order: null }}
             tasks={getTasksWithoutStage()}
             onEditTask={onEditTask}
             onDeleteTask={onDeleteTask}
