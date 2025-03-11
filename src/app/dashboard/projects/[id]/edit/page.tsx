@@ -422,11 +422,11 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
             <Heading size="md" mb={2}>פרטי הפרויקט</Heading>
             
             <FormControl isInvalid={!!errors.title}>
-              <FormLabel htmlFor="title">שם הפרויקט</FormLabel>
+              <FormLabel htmlFor="name">שם הפרויקט</FormLabel>
               <Input
-                id="title"
-                name="title"
-                value={project.title || ''}
+                id="name"
+                name="name"
+                value={project.name || ''}
                 onChange={handleChange}
                 placeholder="הזן שם פרויקט"
               />
@@ -463,12 +463,12 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
             </FormControl>
             
             <FormControl>
-              <FormLabel htmlFor="due_date">תאריך יעד</FormLabel>
+              <FormLabel htmlFor="planned_end_date">תאריך יעד</FormLabel>
               <Input
-                id="due_date"
-                name="due_date"
+                id="planned_end_date"
+                name="planned_end_date"
                 type="date"
-                value={project.due_date || ''}
+                value={project.planned_end_date || ''}
                 onChange={handleChange}
               />
             </FormControl>
@@ -508,7 +508,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                   </Text>
                 ) : (
                   stages
-                    .sort((a, b) => a.order - b.order)
+                    .sort((a, b) => (a.order || 0) - (b.order || 0))
                     .map(stage => (
                       <Flex
                         key={stage.id}
@@ -519,7 +519,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                         justify="space-between"
                         align="center"
                       >
-                        <Text fontWeight="medium">{stage.name}</Text>
+                        <Text fontWeight="medium">{stage.title}</Text>
                         <HStack>
                           <IconButton
                             aria-label="העלה שלב"
