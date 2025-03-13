@@ -34,7 +34,7 @@ export default function NewTask() {
     project_id: '',
     stage_id: '',
     priority: 'medium',
-    status: 'to do',
+    status: 'todo',
     due_date: formatDateForInput(addDays(new Date(), 7)),
   });
   
@@ -313,10 +313,10 @@ export default function NewTask() {
                 value={task.status}
                 onChange={handleChange}
               >
-                <option value="to do">לביצוע</option>
-                <option value="in progress">בתהליך</option>
-                <option value="in review">בבדיקה</option>
-                <option value="completed">הושלם</option>
+                <option value="todo">לביצוע</option>
+                <option value="in_progress">בתהליך</option>
+                <option value="review">בבדיקה</option>
+                <option value="done">הושלם</option>
               </Select>
             </FormControl>
             

@@ -80,6 +80,12 @@ export default function EditTask() {
         return;
       }
       
+      // אם המזהה הוא "new", נפנה את המשתמש לדף יצירת משימה חדשה
+      if (taskId === 'new') {
+        router.push('/dashboard/tasks/new');
+        return;
+      }
+      
       try {
         // טעינת פרטי המשימה
         const taskData = await taskService.getTaskById(taskId);
@@ -391,10 +397,10 @@ export default function EditTask() {
                 value={task.status}
                 onChange={handleChange}
               >
-                <option value="to do">לביצוע</option>
-                <option value="in progress">בתהליך</option>
-                <option value="in review">בבדיקה</option>
-                <option value="completed">הושלם</option>
+                <option value="todo">לביצוע</option>
+                <option value="in_progress">בתהליך</option>
+                <option value="review">בבדיקה</option>
+                <option value="done">הושלם</option>
               </Select>
             </FormControl>
             

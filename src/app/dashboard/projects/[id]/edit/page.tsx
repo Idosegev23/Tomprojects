@@ -66,6 +66,12 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
   
   // טעינת פרטי הפרויקט
   useEffect(() => {
+    // אם המזהה הוא "new", נפנה את המשתמש לדף יצירת פרויקט חדש
+    if (id === 'new') {
+      router.push('/dashboard/projects/new');
+      return;
+    }
+    
     const fetchProjectData = async () => {
       try {
         setLoading(true);
@@ -305,7 +311,6 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
         status: 'error',
         duration: 5000,
         isClosable: true,
-        position: 'top-right',
       });
     }
   };

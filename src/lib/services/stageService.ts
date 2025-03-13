@@ -36,6 +36,11 @@ export const stageService = {
   
   // יצירת שלב חדש
   async createStage(stage: NewStage): Promise<Stage> {
+    // וידוא שיש מזהה UUID
+    if (!stage.id) {
+      stage.id = crypto.randomUUID();
+    }
+    
     const { data, error } = await supabase
       .from('stages')
       .insert(stage)
@@ -84,6 +89,7 @@ export const stageService = {
   async createDefaultStages(projectId: string): Promise<Stage[]> {
     const defaultStages = [
       { 
+        id: crypto.randomUUID(),
         project_id: projectId, 
         title: 'לביצוע', 
         description: 'משימות שיש לבצע',
@@ -91,6 +97,7 @@ export const stageService = {
         updated_at: new Date().toISOString()
       },
       { 
+        id: crypto.randomUUID(),
         project_id: projectId, 
         title: 'בתהליך', 
         description: 'משימות שנמצאות בתהליך ביצוע',
@@ -98,6 +105,7 @@ export const stageService = {
         updated_at: new Date().toISOString()
       },
       { 
+        id: crypto.randomUUID(),
         project_id: projectId, 
         title: 'לבדיקה', 
         description: 'משימות שהושלמו וממתינות לבדיקה',
@@ -105,6 +113,7 @@ export const stageService = {
         updated_at: new Date().toISOString()
       },
       { 
+        id: crypto.randomUUID(),
         project_id: projectId, 
         title: 'הושלם', 
         description: 'משימות שהושלמו',

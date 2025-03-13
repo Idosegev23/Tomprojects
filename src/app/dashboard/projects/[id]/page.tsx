@@ -46,6 +46,7 @@ import {
   FiEye as ViewIcon,
   FiCalendar as CalendarIcon,
   FiPlus,
+  FiRefreshCw,
 } from 'react-icons/fi';
 import projectService from '@/lib/services/projectService';
 import taskService from '@/lib/services/taskService';
@@ -84,6 +85,12 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   
   // טעינת נתוני הפרויקט
   useEffect(() => {
+    // אם המזהה הוא "new", נפנה את המשתמש לדף יצירת פרויקט חדש
+    if (id === 'new') {
+      router.push('/dashboard/projects/new');
+      return;
+    }
+    
     const loadProjectData = async () => {
       try {
         setLoading(true);
@@ -100,8 +107,8 @@ export default function ProjectPage({ params }: ProjectPageProps) {
         const stagesData = await stageService.getProjectStages(id);
         setStages(stagesData);
         
-        // טעינת המשימות של הפרויקט
-        const tasksData = await taskService.getTasks({ projectId: id });
+        // טעינת משימות הפרויקט
+        const tasksData = await taskService.getProjectSpecificTasks(id);
         setTasks(tasksData);
         
         // חישוב התקדמות הפרויקט
@@ -125,7 +132,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     };
     
     loadProjectData();
-  }, [id, toast]);
+  }, [id, toast, router]);
   
   // מחיקת פרויקט
   const handleDeleteProject = async () => {
@@ -250,14 +257,32 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   // טיפול בשינוי סטטוס משימה
   const handleStatusChange = async (taskId: string, status: string) => {
     try {
+      console.log('handleStatusChange - status before normalization:', status);
+      
+      // המרת הסטטוס לאותיות קטנות
+      let normalizedStatus = status.toLowerCase();
+      
+      console.log('handleStatusChange - normalizedStatus after normalization:', normalizedStatus);
+      
       // וידוא שהסטטוס תקין
       const validStatuses = ['todo', 'in_progress', 'review', 'done'];
-      if (!validStatuses.includes(status)) {
-        throw new Error(`סטטוס לא תקין: ${status}. הסטטוסים התקינים הם: ${validStatuses.join(', ')}`);
+      if (!validStatuses.includes(normalizedStatus)) {
+        // אם הסטטוס לא תקין, ננסה למפות אותו לערך תקין
+        if (normalizedStatus === 'לביצוע' || normalizedStatus === 'to do' || normalizedStatus === 'todo') {
+          normalizedStatus = 'todo';
+        } else if (normalizedStatus === 'בתהליך' || normalizedStatus === 'in progress' || normalizedStatus === 'in_progress') {
+          normalizedStatus = 'in_progress';
+        } else if (normalizedStatus === 'בבדיקה' || normalizedStatus === 'in review' || normalizedStatus === 'review') {
+          normalizedStatus = 'review';
+        } else if (normalizedStatus === 'הושלם' || normalizedStatus === 'completed' || normalizedStatus === 'done') {
+          normalizedStatus = 'done';
+        } else {
+          throw new Error(`סטטוס לא תקין: ${normalizedStatus}. הסטטוסים התקינים הם: ${validStatuses.join(', ')}`);
+        }
       }
       
       // עדכון הסטטוס בשרת
-      const updatedTask = await taskService.updateTaskStatus(taskId, status);
+      const updatedTask = await taskService.updateTaskStatus(taskId, normalizedStatus);
       
       // עדכון המשימה ברשימה המקומית
       setTasks(tasks.map(task => task.id === taskId ? updatedTask : task));
@@ -268,7 +293,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       
       toast({
         title: 'סטטוס המשימה עודכן',
-        description: `המשימה עודכנה לסטטוס: ${status}`,
+        description: `המשימה עודכנה לסטטוס: ${normalizedStatus}`,
         status: 'success',
         duration: 3000,
         isClosable: true,
@@ -356,6 +381,45 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     }
   };
   
+  // סנכרון משימות הפרויקט
+  const handleSyncTasks = async () => {
+    try {
+      setLoading(true);
+      
+      // קריאה לפונקציה לסנכרון משימות הפרויקט
+      await projectService.syncProjectTasks(id);
+      
+      // רענון רשימת המשימות
+      const updatedTasks = await taskService.getTasksByProject(id);
+      setTasks(updatedTasks);
+      
+      // עדכון התקדמות הפרויקט
+      const updatedProgress = await projectService.calculateProjectProgress(id);
+      setProgress(updatedProgress);
+      
+      toast({
+        title: 'משימות הפרויקט סונכרנו בהצלחה',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+        position: 'top-right',
+      });
+    } catch (error) {
+      console.error('Error syncing project tasks:', error);
+      
+      toast({
+        title: 'שגיאה בסנכרון משימות הפרויקט',
+        description: error instanceof Error ? error.message : 'אירעה שגיאה בסנכרון המשימות',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+        position: 'top-right',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   return (
     <Box>
       {/* כותרת הפרויקט ומידע בסיסי */}
@@ -375,6 +439,15 @@ export default function ProjectPage({ params }: ProjectPageProps) {
               </Badge>
             </HStack>
             <HStack>
+              <Button
+                leftIcon={<FiRefreshCw />}
+                size="sm"
+                colorScheme="blue"
+                onClick={handleSyncTasks}
+                isLoading={loading}
+              >
+                סנכרון משימות
+              </Button>
               <Button
                 leftIcon={<FiEdit />}
                 size="sm"

@@ -181,12 +181,42 @@ export default function Tasks() {
   // עדכון סטטוס משימה
   const handleStatusChange = async (taskId: string, newStatus: string) => {
     try {
-      await taskService.updateTaskStatus(taskId, newStatus);
+      // המרת הסטטוס לאותיות קטנות
+      let normalizedStatus = newStatus.toLowerCase();
+      
+      // וידוא שהסטטוס תקין ותואם לאילוצים בבסיס הנתונים
+      const validStatuses = ['todo', 'in_progress', 'review', 'done'];
+      
+      if (!validStatuses.includes(normalizedStatus)) {
+        // אם הסטטוס לא תקין, ננסה למפות אותו לערך תקין
+        if (normalizedStatus === 'לביצוע' || normalizedStatus === 'to do' || normalizedStatus === 'todo') {
+          normalizedStatus = 'todo';
+        } else if (normalizedStatus === 'בתהליך' || normalizedStatus === 'in progress' || normalizedStatus === 'in_progress') {
+          normalizedStatus = 'in_progress';
+        } else if (normalizedStatus === 'בבדיקה' || normalizedStatus === 'in review' || normalizedStatus === 'review') {
+          normalizedStatus = 'review';
+        } else if (normalizedStatus === 'הושלם' || normalizedStatus === 'completed' || normalizedStatus === 'done') {
+          normalizedStatus = 'done';
+        } else {
+          // אם לא הצלחנו למפות, נציג שגיאה
+          toast({
+            title: 'שגיאה בעדכון הסטטוס',
+            description: `הסטטוס "${normalizedStatus}" אינו תקין. יש להשתמש באחד מהסטטוסים המוגדרים: ${validStatuses.join(', ')}`,
+            status: 'error',
+            duration: 5000,
+            isClosable: true,
+            position: 'top-right',
+          });
+          return;
+        }
+      }
+      
+      await taskService.updateTaskStatus(taskId, normalizedStatus);
       
       // עדכון המשימה ברשימה המקומית
       setTasks(prevTasks => 
         prevTasks.map(task => 
-          task.id === taskId ? { ...task, status: newStatus } : task
+          task.id === taskId ? { ...task, status: normalizedStatus } : task
         )
       );
       
@@ -250,10 +280,10 @@ export default function Tasks() {
   // מצבי סטטוס אפשריים
   const statusOptions = [
     { value: '', label: 'כל הסטטוסים' },
-    { value: 'to do', label: 'לביצוע' },
-    { value: 'in progress', label: 'בתהליך' },
-    { value: 'in review', label: 'בבדיקה' },
-    { value: 'completed', label: 'הושלם' },
+    { value: 'todo', label: 'לביצוע' },
+    { value: 'in_progress', label: 'בתהליך' },
+    { value: 'review', label: 'בבדיקה' },
+    { value: 'done', label: 'הושלם' },
   ];
   
   // מצבי עדיפות אפשריים
@@ -300,11 +330,11 @@ export default function Tasks() {
           ))}
         </Select>
         
-        <Select 
-          placeholder="סטטוס" 
-          maxW={{ base: "100%", md: "160px" }}
+        <Select
+          placeholder="סטטוס"
           value={selectedStatus}
           onChange={(e) => setSelectedStatus(e.target.value)}
+          bg="white"
         >
           {statusOptions.map(option => (
             <option key={option.value} value={option.value}>{option.label}</option>
@@ -448,11 +478,11 @@ function TaskItem({
         <Checkbox 
           size="lg" 
           colorScheme="green" 
-          isChecked={task.status === 'completed'} 
+          isChecked={task.status === 'done'} 
           onChange={(e) => {
             onStatusChange(
               task.id, 
-              e.target.checked ? 'completed' : 'to do'
+              e.target.checked ? 'done' : 'todo'
             );
           }}
         />
@@ -460,8 +490,8 @@ function TaskItem({
         <Box>
           <Text 
             fontWeight="medium" 
-            textDecoration={task.status === 'completed' ? 'line-through' : 'none'}
-            color={task.status === 'completed' ? 'gray.500' : 'inherit'}
+            textDecoration={task.status === 'done' ? 'line-through' : 'none'}
+            color={task.status === 'done' ? 'gray.500' : 'inherit'}
           >
             {task.title}
           </Text>
@@ -477,12 +507,19 @@ function TaskItem({
             </Text>
             {task.due_date && (
               <Text fontSize="xs" color={
-                new Date(task.due_date) < new Date() && task.status !== 'completed'
+                new Date(task.due_date) < new Date() && task.status !== 'done'
                   ? 'red.500'
                   : 'gray.600'
               }>
                 יעד: {formatDate(task.due_date)}
               </Text>
+            )}
+            {/* סימון משימות שעבר זמנן */}
+            {task.due_date && 
+              new Date(task.due_date) < new Date() && task.status !== 'done' && (
+              <Badge colorScheme="red" ml={2}>
+                איחור
+              </Badge>
             )}
           </HStack>
         </Box>

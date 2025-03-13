@@ -117,10 +117,11 @@ export interface Database {
           updated_at: string
           hierarchical_number: string | null
           parent_task_id: string | null
+          is_template: boolean | null
         }
         Insert: {
           id?: string
-          project_id: string
+          project_id: string | null
           stage_id?: string | null
           title: string
           description?: string | null
@@ -143,6 +144,7 @@ export interface Database {
           updated_at?: string
           hierarchical_number?: string | null
           parent_task_id?: string | null
+          is_template?: boolean | null
         }
         Update: {
           id?: string
@@ -169,6 +171,7 @@ export interface Database {
           updated_at?: string
           hierarchical_number?: string | null
           parent_task_id?: string | null
+          is_template?: boolean | null
         }
       }
     }
@@ -196,3 +199,8 @@ export type UpdateStage = Database['public']['Tables']['stages']['Update']
 export type Task = Database['public']['Tables']['tasks']['Row']
 export type NewTask = Database['public']['Tables']['tasks']['Insert'] 
 export type UpdateTask = Database['public']['Tables']['tasks']['Update'] 
+
+// טיפוס מורחב של Task שכולל גם את תתי-המשימות
+export interface TaskWithChildren extends Task {
+  children?: TaskWithChildren[];
+} 

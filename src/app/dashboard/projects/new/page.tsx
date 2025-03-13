@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -18,13 +18,38 @@ import {
   useToast,
   Switch,
   Text,
+  Checkbox,
+  HStack,
+  Badge,
+  Spinner,
+  InputGroup,
+  InputLeftElement,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
+  Tag,
+  TagLabel,
+  TagCloseButton,
+  Wrap,
+  WrapItem,
+  IconButton,
+  useDisclosure,
+  Tooltip,
+  useColorModeValue,
+  Grid,
+  GridItem,
+  Collapse,
+  Icon,
 } from '@chakra-ui/react';
 import { useRouter } from 'next/navigation';
-import { FiSave, FiArrowRight } from 'react-icons/fi';
+import { FiSave, FiArrowRight, FiSearch, FiCalendar, FiFilter, FiTag, FiPlus, FiTrash2 } from 'react-icons/fi';
+import { InfoIcon } from '@chakra-ui/icons';
 import projectService from '@/lib/services/projectService';
 import stageService from '@/lib/services/stageService';
 import taskService from '@/lib/services/taskService';
-import type { NewProject } from '@/types/supabase';
+import type { NewProject, Task, NewTask } from '@/types/supabase';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 
 export default function NewProject() {
@@ -47,10 +72,95 @@ export default function NewProject() {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [useDefaultTasks, setUseDefaultTasks] = useState(true);
+  const [showCustomTaskSelection, setShowCustomTaskSelection] = useState(false);
+  const [availableTasks, setAvailableTasks] = useState<Task[]>([]);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  const [selectedTaskTemplates, setSelectedTaskTemplates] = useState<Task[]>([]);
+  
+  // משתנים חדשים למשימה מותאמת אישית
+  const [newCustomTask, setNewCustomTask] = useState<{
+    title: string;
+    description: string;
+    status: string;
+    priority: string;
+    due_date?: string;
+    labels: string[];
+  }>({
+    title: '',
+    description: '',
+    status: 'todo',
+    priority: 'medium',
+    due_date: '',
+    labels: [],
+  });
+  
+  const [newLabelInput, setNewLabelInput] = useState('');
+  const [customTaskErrors, setCustomTaskErrors] = useState<{
+    title?: string;
+  }>({});
   
   const { user } = useAuthContext();
   const router = useRouter();
   const toast = useToast();
+  
+  // טעינת כל המשימות הזמינות כתבניות
+  useEffect(() => {
+    const loadAllTaskTemplates = async () => {
+      try {
+        setLoadingTasks(true);
+        const tasks = await taskService.getAllTaskTemplates();
+        setAvailableTasks(tasks);
+      } catch (err) {
+        console.error('שגיאה בטעינת תבניות משימות:', err);
+        toast({
+          title: 'שגיאה בטעינת משימות',
+          description: err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } finally {
+        setLoadingTasks(false);
+      }
+    };
+    
+    loadAllTaskTemplates();
+  }, [toast]);
+  
+  // סינון משימות לפי חיפוש וסינונים פעילים
+  const filteredTasks = availableTasks.filter(task => {
+    // סינון לפי חיפוש
+    const matchesSearch = 
+      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    // סינון לפי תגיות פעילות
+    const matchesFilters = activeFilters.length === 0 || 
+      (task.labels && task.labels.some(label => activeFilters.includes(label)));
+    
+    return matchesSearch && matchesFilters;
+  });
+  
+  // קבלת כל התגיות הייחודיות מהמשימות
+  const getAllUniqueLabels = (): string[] => {
+    const allLabels = availableTasks
+      .filter(task => task.labels && task.labels.length > 0)
+      .flatMap(task => task.labels || []);
+    
+    // תיקון שגיאת הלינטר - שימוש בגישה אחרת ללא Set
+    const uniqueLabels: string[] = [];
+    allLabels.forEach(label => {
+      if (!uniqueLabels.includes(label)) {
+        uniqueLabels.push(label);
+      }
+    });
+    return uniqueLabels;
+  };
+  
+  const uniqueLabels = getAllUniqueLabels();
   
   const validateForm = () => {
     const newErrors: { name?: string; status?: string } = {};
@@ -72,6 +182,187 @@ export default function NewProject() {
     setProject(prev => ({ ...prev, [name]: value }));
   };
   
+  // טיפול בבחירת משימה
+  const handleTaskSelection = (task: Task, isSelected: boolean) => {
+    if (isSelected) {
+      setSelectedTaskIds(prev => [...prev, task.id]);
+      setSelectedTaskTemplates(prev => [...prev, task]);
+    } else {
+      setSelectedTaskIds(prev => prev.filter(id => id !== task.id));
+      setSelectedTaskTemplates(prev => prev.filter(t => t.id !== task.id));
+    }
+  };
+  
+  // טיפול בבחירת כל המשימות המסוננות
+  const handleSelectAll = (isSelected: boolean) => {
+    if (isSelected) {
+      setSelectedTaskIds(filteredTasks.map(task => task.id));
+      setSelectedTaskTemplates(filteredTasks);
+    } else {
+      setSelectedTaskIds([]);
+      setSelectedTaskTemplates([]);
+    }
+  };
+  
+  // טיפול בהוספת/הסרת סינון
+  const toggleFilter = (label: string) => {
+    if (activeFilters.includes(label)) {
+      setActiveFilters(prev => prev.filter(f => f !== label));
+    } else {
+      setActiveFilters(prev => [...prev, label]);
+    }
+  };
+  
+  // המרת תאריך לפורמט מקומי
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'לא נקבע';
+    
+    try {
+      return new Date(dateString).toLocaleDateString('he-IL');
+    } catch (e) {
+      return 'תאריך לא תקין';
+    }
+  };
+  
+  // קבלת צבע לפי סטטוס
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'todo':
+      case 'לביצוע':
+        return 'gray';
+      case 'in progress':
+      case 'בתהליך':
+        return 'blue';
+      case 'review':
+      case 'לבדיקה':
+        return 'orange';
+      case 'done':
+      case 'הושלם':
+        return 'green';
+      default:
+        return 'gray';
+    }
+  };
+  
+  // הסרת משימה מהרשימה הנבחרת
+  const removeSelectedTask = (taskId: string) => {
+    setSelectedTaskIds(prev => prev.filter(id => id !== taskId));
+    setSelectedTaskTemplates(prev => prev.filter(task => task.id !== taskId));
+  };
+  
+  // פונקציה לטיפול בשינויים בטופס המשימה המותאמת אישית
+  const handleCustomTaskChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setNewCustomTask(prev => ({ ...prev, [name]: value }));
+    
+    // ניקוי שגיאות בעת הקלדה
+    if (name === 'title' && customTaskErrors.title) {
+      setCustomTaskErrors(prev => ({ ...prev, title: undefined }));
+    }
+  };
+  
+  // פונקציה להוספת תגית חדשה למשימה המותאמת אישית
+  const addNewLabel = () => {
+    if (newLabelInput.trim() && !newCustomTask.labels.includes(newLabelInput.trim())) {
+      setNewCustomTask(prev => ({
+        ...prev,
+        labels: [...prev.labels, newLabelInput.trim()]
+      }));
+      setNewLabelInput('');
+    }
+  };
+  
+  // פונקציה להסרת תגית ממשימה מותאמת אישית
+  const removeLabel = (labelToRemove: string) => {
+    setNewCustomTask(prev => ({
+      ...prev,
+      labels: prev.labels.filter(label => label !== labelToRemove)
+    }));
+  };
+  
+  // פונקציה לאימות טופס המשימה המותאמת אישית
+  const validateCustomTaskForm = () => {
+    const newErrors: { title?: string } = {};
+    
+    if (!newCustomTask.title.trim()) {
+      newErrors.title = 'שם המשימה הוא שדה חובה';
+    }
+    
+    setCustomTaskErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+  
+  // פונקציה להוספת משימה מותאמת אישית
+  const addCustomTask = async () => {
+    if (!validateCustomTaskForm()) {
+      return;
+    }
+    
+    try {
+      // יצירת משימה חדשה כתבנית
+      const newTask: NewTask = {
+        id: crypto.randomUUID(),
+        project_id: null, // ללא שיוך לפרויקט - חשוב להשתמש ב-null ולא בסטרינג ריק
+        title: newCustomTask.title,
+        description: newCustomTask.description || null,
+        status: newCustomTask.status,
+        priority: newCustomTask.priority,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+      };
+      
+      if (newCustomTask.due_date) {
+        newTask.due_date = newCustomTask.due_date;
+      }
+      
+      if (newCustomTask.labels.length > 0) {
+        newTask.labels = newCustomTask.labels;
+      }
+      
+      // שמירת המשימה החדשה
+      const createdTask = await taskService.createTask(newTask);
+      
+      // הוספת המשימה החדשה לרשימת המשימות הנבחרות
+      setSelectedTaskIds(prev => [...prev, createdTask.id]);
+      setSelectedTaskTemplates(prev => [...prev, createdTask]);
+      
+      // איפוס טופס המשימה המותאמת אישית
+      setNewCustomTask({
+        title: '',
+        description: '',
+        status: 'todo',
+        priority: 'medium',
+        due_date: '',
+        labels: [],
+      });
+      
+      // הצגת הודעת הצלחה
+      toast({
+        title: 'המשימה נוצרה בהצלחה',
+        description: 'המשימה נוספה לרשימת המשימות הנבחרות',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+        position: 'top-right',
+      });
+      
+      // עדכון רשימת המשימות הזמינות
+      setAvailableTasks(prev => [...prev, createdTask]);
+      
+    } catch (err) {
+      console.error('שגיאה ביצירת משימה מותאמת אישית:', err);
+      toast({
+        title: 'שגיאה ביצירת משימה',
+        description: err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -84,18 +375,13 @@ export default function NewProject() {
       
       // הוספת מזהה בעלים ותאריכים
       const newProject: NewProject = {
+        id: crypto.randomUUID(),
         name: project.name,
         owner: user?.email || null,
         status: project.status,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      
-      // אם יש תיאור, נוסיף אותו
-      if (project.description) {
-        // @ts-ignore - אנחנו יודעים שזה שדה תקין
-        newProject.description = project.description;
-      }
       
       // אם יש תאריך יעד, נוסיף אותו
       if (project.due_date) {
@@ -133,6 +419,32 @@ export default function NewProject() {
             position: 'top-right',
           });
         }
+      } else if (showCustomTaskSelection && selectedTaskIds.length > 0 && stages.length > 0) {
+        // אם המשתמש בחר משימות מותאמות אישית
+        try {
+          // שכפול המשימות שנבחרו לפרויקט החדש
+          const clonedTasks = await taskService.cloneTasksToProject(selectedTaskIds, createdProject.id, stages[0].id);
+          
+          toast({
+            title: 'המשימות שנבחרו שוכפלו בהצלחה',
+            description: `${clonedTasks.length} משימות נוצרו בפרויקט החדש`,
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+            position: 'top-right',
+          });
+        } catch (taskError) {
+          console.error('שגיאה בשכפול משימות מותאמות אישית:', taskError);
+          
+          toast({
+            title: 'שגיאה בשכפול המשימות',
+            description: taskError instanceof Error ? taskError.message : 'אירעה שגיאה בלתי צפויה',
+            status: 'warning',
+            duration: 5000,
+            isClosable: true,
+            position: 'top-right',
+          });
+        }
       }
       
       toast({
@@ -159,6 +471,93 @@ export default function NewProject() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+  
+  // פונקציה ליצירת משימות ברירת מחדל
+  const createDefaultTaskTemplates = async (): Promise<Task[]> => {
+    // בדיקה אם כבר יש משימות תבניות
+    const existingTemplates = await taskService.getAllTaskTemplates();
+    if (existingTemplates.length > 0) {
+      return existingTemplates; // אם יש כבר תבניות, נחזיר אותן
+    }
+    
+    // משימות ברירת מחדל לפרויקטי נדל"ן
+    const defaultTemplates: NewTask[] = [
+      {
+        id: crypto.randomUUID(),
+        project_id: null, // ללא שיוך לפרויקט - חשוב להשתמש ב-null ולא בסטרינג ריק
+        title: 'איתור קרקע מתאימה',
+        description: 'חיפוש וסינון קרקעות פוטנציאליות לפרויקט',
+        status: 'todo',
+        priority: 'high',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        labels: ['קרקע', 'איתור']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null, // ללא שיוך לפרויקט - חשוב להשתמש ב-null ולא בסטרינג ריק
+        title: 'בדיקת היתכנות ראשונית',
+        description: 'בדיקת תב"ע, זכויות בנייה, ומגבלות תכנוניות',
+        status: 'todo',
+        priority: 'high',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        labels: ['תכנון', 'היתכנות']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null, // ללא שיוך לפרויקט - חשוב להשתמש ב-null ולא בסטרינג ריק
+        title: 'משא ומתן לרכישת הקרקע',
+        description: 'ניהול מו"מ עם בעלי הקרקע וגיבוש הסכם',
+        status: 'todo',
+        priority: 'high',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        labels: ['קרקע', 'רכישה']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null, // ללא שיוך לפרויקט - חשוב להשתמש ב-null ולא בסטרינג ריק
+        title: 'גיוס צוות תכנון',
+        description: 'בחירת אדריכל, מהנדסים ויועצים',
+        status: 'todo',
+        priority: 'medium',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        labels: ['תכנון', 'צוות']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null, // ללא שיוך לפרויקט - חשוב להשתמש ב-null ולא בסטרינג ריק
+        title: 'תכנון אדריכלי ראשוני',
+        description: 'הכנת תכניות קונספט ראשוניות',
+        status: 'todo',
+        priority: 'medium',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        labels: ['תכנון', 'אדריכלות']
+      }
+    ];
+    
+    // שמירת המשימות החדשות
+    const createdTasks: Task[] = [];
+    
+    for (const template of defaultTemplates) {
+      try {
+        const createdTask = await taskService.createTask(template);
+        createdTasks.push(createdTask);
+      } catch (err) {
+        console.error('שגיאה ביצירת משימת ברירת מחדל:', err);
+      }
+    }
+    
+    return createdTasks;
   };
   
   return (
@@ -224,57 +623,461 @@ export default function NewProject() {
               />
             </FormControl>
             
-            <FormControl display="flex" alignItems="center">
-              <FormLabel htmlFor="use-default-tasks" mb="0">
-                צור משימות ברירת מחדל לפרויקט נדל"ן
-              </FormLabel>
-              <Switch
-                id="use-default-tasks"
-                isChecked={useDefaultTasks}
-                onChange={(e) => setUseDefaultTasks(e.target.checked)}
-                colorScheme="primary"
-              />
-            </FormControl>
+            <Divider />
             
-            {useDefaultTasks && (
-              <Box p={4} bg="gray.50" borderRadius="md">
-                <Text fontSize="sm" color="gray.600">
-                  הפרויקט ייווצר עם משימות ברירת מחדל לפרויקט נדל"ן, כולל:
-                </Text>
-                <Text fontSize="sm" mt={2}>
-                  • איתור ורכישת קרקע
-                </Text>
-                <Text fontSize="sm">
-                  • תכנון ואישורים
-                </Text>
-                <Text fontSize="sm">
-                  • ביצוע
-                </Text>
-                <Text fontSize="sm">
-                  • שיווק ומכירות
-                </Text>
-                <Text fontSize="sm">
-                  • מסירה ואכלוס
-                </Text>
-              </Box>
-            )}
+            <Heading size="md">משימות</Heading>
             
-            <Flex justify="space-between" mt={4}>
-              <Button
-                onClick={() => router.back()}
-                rightIcon={<FiArrowRight />}
-                variant="outline"
-              >
-                חזרה
-              </Button>
+            <Tabs variant="enclosed" colorScheme="primary">
+              <TabList>
+                <Tab>משימות ברירת מחדל</Tab>
+                <Tab>הוספת משימות מותאמות אישית</Tab>
+              </TabList>
               
+              <TabPanels>
+                <TabPanel p={4}>
+                  <FormControl display="flex" alignItems="center" mb={4}>
+                    <FormLabel htmlFor="use-default-tasks" mb="0">
+                      צור משימות ברירת מחדל לפרויקט נדל"ן
+                    </FormLabel>
+                    <Switch
+                      id="use-default-tasks"
+                      isChecked={useDefaultTasks}
+                      onChange={(e) => {
+                        setUseDefaultTasks(e.target.checked);
+                        if (e.target.checked) {
+                          setShowCustomTaskSelection(false);
+                        }
+                      }}
+                      colorScheme="primary"
+                    />
+                  </FormControl>
+                  
+                  {useDefaultTasks && (
+                    <Box p={4} bg="gray.50" borderRadius="md" mt={4}>
+                      <Text fontSize="sm" color="gray.600">
+                        הפרויקט ייווצר עם משימות ברירת מחדל לפרויקט נדל"ן, כולל:
+                      </Text>
+                      <Text fontSize="sm" mt={2}>
+                        • איתור ורכישת קרקע
+                      </Text>
+                      <Text fontSize="sm">
+                        • תכנון ואישורים
+                      </Text>
+                      <Text fontSize="sm">
+                        • ביצוע
+                      </Text>
+                      <Text fontSize="sm">
+                        • שיווק ומכירות
+                      </Text>
+                      <Text fontSize="sm">
+                        • מסירה ואכלוס
+                      </Text>
+                    </Box>
+                  )}
+                  
+                  <Divider my={4} />
+                  
+                  <Box>
+                    <Text fontSize="md" fontWeight="bold" mb={2}>
+                      בחר משימות קיימות לשיוך לפרויקט:
+                    </Text>
+                    <Text fontSize="sm" color="blue.600" mb={4}>
+                      <Box as={InfoIcon} display="inline" mr={1} />
+                      המשימות שתבחר ישוכפלו לפרויקט החדש. המשימות המקוריות יישארו ללא שינוי במאגר המשימות.
+                    </Text>
+                    
+                    <InputGroup mb={4}>
+                      <InputLeftElement pointerEvents="none">
+                        <FiSearch color="gray.300" />
+                      </InputLeftElement>
+                      <Input 
+                        placeholder="חיפוש משימות..." 
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        bg="white"
+                      />
+                    </InputGroup>
+                    
+                    {/* סינון לפי תגיות */}
+                    {uniqueLabels.length > 0 && (
+                      <Box mb={4}>
+                        <Flex align="center" mb={2}>
+                          <FiTag style={{ marginLeft: '8px' }} />
+                          <Text fontSize="sm" fontWeight="bold">
+                            סנן לפי תגיות:
+                          </Text>
+                        </Flex>
+                        <Wrap spacing={2}>
+                          {uniqueLabels.map(label => (
+                            <WrapItem key={`filter-${label}`}>
+                              <Tag 
+                                size="md" 
+                                colorScheme={activeFilters.includes(label) ? "primary" : "gray"}
+                                borderRadius="full"
+                                cursor="pointer"
+                                onClick={() => toggleFilter(label)}
+                              >
+                                <TagLabel>{label}</TagLabel>
+                              </Tag>
+                            </WrapItem>
+                          ))}
+                        </Wrap>
+                      </Box>
+                    )}
+                    
+                    {loadingTasks ? (
+                      <Flex justify="center" py={4}>
+                        <Spinner size="md" />
+                      </Flex>
+                    ) : filteredTasks.length === 0 ? (
+                      <Box textAlign="center" py={4}>
+                        <Text mb={4}>
+                          {searchTerm || activeFilters.length > 0 ? 'לא נמצאו משימות התואמות את החיפוש' : 'אין משימות זמינות לבחירה'}
+                        </Text>
+                        <Text fontSize="sm" color="blue.600" mb={4}>
+                          <Box as={InfoIcon} display="inline" mr={1} />
+                          ניתן ליצור משימות חדשות בטאב "הוספת משימות מותאמות אישית"
+                        </Text>
+                        <Button
+                          colorScheme="primary"
+                          leftIcon={<FiPlus />}
+                          onClick={async () => {
+                            try {
+                              setLoadingTasks(true);
+                              // יצירת משימות ברירת מחדל
+                              const defaultTasks = await createDefaultTaskTemplates();
+                              setAvailableTasks(defaultTasks);
+                              
+                              toast({
+                                title: 'משימות ברירת מחדל נוצרו בהצלחה',
+                                description: `נוצרו ${defaultTasks.length} משימות ברירת מחדל`,
+                                status: 'success',
+                                duration: 3000,
+                                isClosable: true,
+                                position: 'top-right',
+                              });
+                            } catch (err) {
+                              console.error('שגיאה ביצירת משימות ברירת מחדל:', err);
+                              toast({
+                                title: 'שגיאה ביצירת משימות ברירת מחדל',
+                                description: err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה',
+                                status: 'error',
+                                duration: 5000,
+                                isClosable: true,
+                              });
+                            } finally {
+                              setLoadingTasks(false);
+                            }
+                          }}
+                          mr={2}
+                        >
+                          צור משימות ברירת מחדל
+                        </Button>
+                        <Button
+                          colorScheme="blue"
+                          leftIcon={<FiPlus />}
+                          onClick={() => {
+                            // מעבר לטאב השני
+                            const tabsElement = document.querySelector('[role="tablist"]');
+                            if (tabsElement) {
+                              const secondTab = tabsElement.children[1] as HTMLElement;
+                              if (secondTab) {
+                                secondTab.click();
+                                setShowCustomTaskSelection(true);
+                              }
+                            }
+                          }}
+                        >
+                          צור משימות מותאמות אישית
+                        </Button>
+                      </Box>
+                    ) : (
+                      <>
+                        <Flex justify="space-between" align="center" mb={2}>
+                          <Checkbox 
+                            isChecked={selectedTaskIds.length === filteredTasks.length && filteredTasks.length > 0}
+                            onChange={(e) => handleSelectAll(e.target.checked)}
+                          >
+                            בחר הכל ({filteredTasks.length})
+                          </Checkbox>
+                          <Text fontSize="sm">נבחרו {selectedTaskIds.length} משימות</Text>
+                        </Flex>
+                        
+                        <Divider mb={2} />
+                        
+                        <VStack spacing={2} align="stretch" maxH="300px" overflowY="auto" bg="white" p={2} borderRadius="md">
+                          {filteredTasks.map(task => (
+                            <Box 
+                              key={task.id} 
+                              p={3} 
+                              borderWidth="1px" 
+                              borderRadius="md"
+                              _hover={{ bg: 'gray.50' }}
+                            >
+                              <Flex justify="space-between" align="flex-start">
+                                <HStack align="flex-start" spacing={3}>
+                                  <Checkbox 
+                                    isChecked={selectedTaskIds.includes(task.id)}
+                                    onChange={(e) => handleTaskSelection(task, e.target.checked)}
+                                  />
+                                  <VStack align="flex-start" spacing={1}>
+                                    <Text fontWeight="bold">{task.title}</Text>
+                                    {task.description && (
+                                      <Text fontSize="sm" noOfLines={2}>{task.description}</Text>
+                                    )}
+                                    <HStack spacing={2} flexWrap="wrap">
+                                      <Badge colorScheme={getStatusColor(task.status)}>{task.status}</Badge>
+                                      {task.due_date && (
+                                        <Text fontSize="xs" color="gray.600">
+                                          <FiCalendar style={{ display: 'inline', marginLeft: '2px' }} />
+                                          {formatDate(task.due_date)}
+                                        </Text>
+                                      )}
+                                      {task.labels && task.labels.length > 0 && (
+                                        <Wrap spacing={1} mt={1}>
+                                          {task.labels.map(label => (
+                                            <WrapItem key={`${task.id}-${label}`}>
+                                              <Tag size="sm" colorScheme="blue" borderRadius="full">
+                                                {label}
+                                              </Tag>
+                                            </WrapItem>
+                                          ))}
+                                        </Wrap>
+                                      )}
+                                    </HStack>
+                                  </VStack>
+                                </HStack>
+                              </Flex>
+                            </Box>
+                          ))}
+                        </VStack>
+                      </>
+                    )}
+                  </Box>
+                  
+                  {/* תצוגת המשימות שנבחרו */}
+                  {selectedTaskTemplates.length > 0 && (
+                    <Box mt={6}>
+                      <Text fontSize="md" fontWeight="bold" mb={2}>
+                        משימות שנבחרו ({selectedTaskTemplates.length}):
+                      </Text>
+                      <VStack spacing={2} align="stretch" maxH="200px" overflowY="auto" bg="white" p={2} borderRadius="md">
+                        {selectedTaskTemplates.map(task => (
+                          <Box 
+                            key={`selected-${task.id}`} 
+                            p={3} 
+                            borderWidth="1px" 
+                            borderRadius="md"
+                            _hover={{ bg: 'gray.50' }}
+                          >
+                            <Flex justify="space-between" align="center">
+                              <VStack align="flex-start" spacing={1}>
+                                <Text fontWeight="bold">{task.title}</Text>
+                                <HStack spacing={2}>
+                                  <Badge colorScheme={getStatusColor(task.status)}>{task.status}</Badge>
+                                  {task.labels && task.labels.length > 0 && (
+                                    <Wrap spacing={1}>
+                                      {task.labels.map(label => (
+                                        <WrapItem key={`selected-${task.id}-${label}`}>
+                                          <Tag size="sm" colorScheme="blue" borderRadius="full">
+                                            {label}
+                                          </Tag>
+                                        </WrapItem>
+                                      ))}
+                                    </Wrap>
+                                  )}
+                                </HStack>
+                              </VStack>
+                              <IconButton
+                                aria-label="הסר משימה"
+                                icon={<FiTrash2 />}
+                                size="sm"
+                                colorScheme="red"
+                                variant="ghost"
+                                onClick={() => removeSelectedTask(task.id)}
+                              />
+                            </Flex>
+                          </Box>
+                        ))}
+                      </VStack>
+                    </Box>
+                  )}
+                </TabPanel>
+                
+                <TabPanel p={4}>
+                  <FormControl display="flex" alignItems="center" mb={4}>
+                    <FormLabel htmlFor="use-custom-tasks" mb="0">
+                      הוסף משימות מותאמות אישית
+                    </FormLabel>
+                    <Switch
+                      id="use-custom-tasks"
+                      isChecked={showCustomTaskSelection}
+                      onChange={(e) => {
+                        setShowCustomTaskSelection(e.target.checked);
+                        if (e.target.checked) {
+                          setUseDefaultTasks(false);
+                        }
+                      }}
+                      colorScheme="primary"
+                    />
+                  </FormControl>
+                  
+                  {showCustomTaskSelection && (
+                    <Box p={4} bg="gray.50" borderRadius="md" mt={4}>
+                      <VStack spacing={4} align="stretch">
+                        <Box>
+                          <Text fontSize="md" fontWeight="bold">
+                            הוספת משימה חדשה:
+                          </Text>
+                          <Text fontSize="sm" color="blue.600" mb={2}>
+                            <Box as={InfoIcon} display="inline" mr={1} />
+                            המשימות שתיצור יתווספו למאגר המשימות הכללי ויהיו זמינות לפרויקטים עתידיים. עותק של כל משימה ישויך לפרויקט הנוכחי.
+                          </Text>
+                        </Box>
+                        
+                        <FormControl isInvalid={!!customTaskErrors.title}>
+                          <FormLabel htmlFor="title">כותרת המשימה</FormLabel>
+                          <Input
+                            id="title"
+                            name="title"
+                            value={newCustomTask.title}
+                            onChange={handleCustomTaskChange}
+                            placeholder="הזן כותרת למשימה"
+                            bg="white"
+                          />
+                          <FormErrorMessage>{customTaskErrors.title}</FormErrorMessage>
+                        </FormControl>
+                        
+                        <FormControl>
+                          <FormLabel htmlFor="description">תיאור המשימה</FormLabel>
+                          <Textarea
+                            id="description"
+                            name="description"
+                            value={newCustomTask.description}
+                            onChange={handleCustomTaskChange}
+                            placeholder="הזן תיאור למשימה (לא חובה)"
+                            bg="white"
+                            minH="100px"
+                          />
+                        </FormControl>
+                        
+                        <HStack spacing={4}>
+                          <FormControl>
+                            <FormLabel htmlFor="status">סטטוס</FormLabel>
+                            <Select
+                              id="status"
+                              name="status"
+                              value={newCustomTask.status}
+                              onChange={handleCustomTaskChange}
+                              bg="white"
+                            >
+                              <option value="todo">לביצוע</option>
+                              <option value="in_progress">בתהליך</option>
+                              <option value="review">בבדיקה</option>
+                              <option value="done">הושלם</option>
+                            </Select>
+                          </FormControl>
+                          
+                          <FormControl>
+                            <FormLabel htmlFor="priority">עדיפות</FormLabel>
+                            <Select
+                              id="priority"
+                              name="priority"
+                              value={newCustomTask.priority}
+                              onChange={handleCustomTaskChange}
+                              bg="white"
+                            >
+                              <option value="low">נמוכה</option>
+                              <option value="medium">בינונית</option>
+                              <option value="high">גבוהה</option>
+                              <option value="urgent">דחופה</option>
+                            </Select>
+                          </FormControl>
+                        </HStack>
+                        
+                        <FormControl>
+                          <FormLabel htmlFor="due_date">תאריך יעד</FormLabel>
+                          <Input
+                            id="due_date"
+                            name="due_date"
+                            type="date"
+                            value={newCustomTask.due_date || ''}
+                            onChange={handleCustomTaskChange}
+                            bg="white"
+                          />
+                        </FormControl>
+                        
+                        <FormControl>
+                          <FormLabel htmlFor="labels">תגיות</FormLabel>
+                          <HStack>
+                            <Input
+                              id="new-label"
+                              value={newLabelInput}
+                              onChange={(e) => setNewLabelInput(e.target.value)}
+                              placeholder="הוסף תגית חדשה"
+                              bg="white"
+                            />
+                            <Button
+                              onClick={addNewLabel}
+                              colorScheme="primary"
+                              isDisabled={!newLabelInput.trim()}
+                            >
+                              הוסף
+                            </Button>
+                          </HStack>
+                          
+                          {newCustomTask.labels.length > 0 && (
+                            <Wrap spacing={2} mt={2}>
+                              {newCustomTask.labels.map(label => (
+                                <WrapItem key={`new-label-${label}`}>
+                                  <Tag size="md" colorScheme="primary" borderRadius="full">
+                                    <TagLabel>{label}</TagLabel>
+                                    <TagCloseButton onClick={() => removeLabel(label)} />
+                                  </Tag>
+                                </WrapItem>
+                              ))}
+                            </Wrap>
+                          )}
+                        </FormControl>
+                        
+                        <Button
+                          onClick={addCustomTask}
+                          colorScheme="primary"
+                          leftIcon={<FiPlus />}
+                          alignSelf="flex-start"
+                          mt={2}
+                        >
+                          הוסף משימה
+                        </Button>
+                      </VStack>
+                    </Box>
+                  )}
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
+            
+            <Divider />
+            
+            <Box mb={4} p={4} borderWidth="1px" borderRadius="md" bg="blue.50">
+              <Flex align="center" mb={2}>
+                <InfoIcon color="blue.500" mr={2} />
+                <Text fontWeight="bold">הסבר על שכפול משימות</Text>
+              </Flex>
+              <Text fontSize="sm">
+                בחירת משימות מהרשימה תיצור <strong>עותקים חדשים</strong> של המשימות בפרויקט החדש.
+                המשימות המקוריות יישארו ללא שינוי ויהיו זמינות לשימוש בפרויקטים אחרים.
+              </Text>
+            </Box>
+            
+            <Flex justify="flex-end" mt={4}>
               <Button
                 type="submit"
-                leftIcon={<FiSave />}
                 colorScheme="primary"
+                size="lg"
                 isLoading={isSubmitting}
+                leftIcon={<FiSave />}
               >
-                שמור פרויקט
+                צור פרויקט
               </Button>
             </Flex>
           </VStack>

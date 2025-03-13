@@ -4,6 +4,7 @@ import { Project, NewProject, UpdateProject } from '@/types/supabase';
 export const projectService = {
   // קריאת כל הפרויקטים
   async getProjects(): Promise<Project[]> {
+    // קריאת מידע בסיסי מטבלת projects
     const { data, error } = await supabase
       .from('projects')
       .select('*')
@@ -14,11 +15,19 @@ export const projectService = {
       throw new Error(error.message);
     }
     
-    return data || [];
+    if (!data || data.length === 0) {
+      return [];
+    }
+    
+    // בעתיד ניתן להוסיף כאן קוד שמעשיר את המידע על כל פרויקט
+    // מהטבלה הייחודית שלו
+    
+    return data;
   },
   
   // קריאת פרויקט אחד לפי מזהה
   async getProjectById(id: string): Promise<Project | null> {
+    // קריאת מידע בסיסי מטבלת projects
     const { data, error } = await supabase
       .from('projects')
       .select('*')
@@ -30,11 +39,22 @@ export const projectService = {
       throw new Error(error.message);
     }
     
+    if (!data) {
+      return null;
+    }
+    
+    // כרגע נחזיר רק את המידע הבסיסי מטבלת projects
+    // בעתיד נוכל להוסיף מידע נוסף מהטבלה הייחודית לפרויקט
     return data;
   },
   
   // יצירת פרויקט חדש
   async createProject(project: NewProject): Promise<Project> {
+    // וידוא שיש מזהה UUID
+    if (!project.id) {
+      project.id = crypto.randomUUID();
+    }
+    
     const { data, error } = await supabase
       .from('projects')
       .insert(project)
@@ -46,7 +66,30 @@ export const projectService = {
       throw new Error(error.message);
     }
     
+    // יצירת טבלה ייחודית לפרויקט
+    try {
+      await this.createProjectTable(data.id);
+    } catch (tableError) {
+      console.error(`Error creating project table for project ${data.id}:`, tableError);
+      // לא נזרוק שגיאה כאן כדי לא לעצור את יצירת הפרויקט
+    }
+    
     return data;
+  },
+  
+  // יצירת טבלה ייחודית לפרויקט
+  async createProjectTable(projectId: string): Promise<void> {
+    try {
+      // קריאה לפונקציה SQL ליצירת טבלה ספציפית לפרויקט
+      await supabase.rpc('create_project_table', {
+        project_id: projectId
+      });
+      
+      console.log(`Project-specific table for project ${projectId} created successfully`);
+    } catch (error) {
+      console.error(`Error creating project-specific table for project ${projectId}:`, error);
+      throw new Error(error instanceof Error ? error.message : 'אירעה שגיאה ביצירת טבלה ספציפית לפרויקט');
+    }
   },
   
   // עדכון פרויקט קיים
@@ -114,6 +157,21 @@ export const projectService = {
       progress,
       updated_at: new Date().toISOString()
     });
+  },
+
+  // סנכרון משימות של פרויקט
+  async syncProjectTasks(projectId: string): Promise<void> {
+    try {
+      // קריאה לפונקציה SQL לסנכרון המשימות
+      await supabase.rpc('sync_project_tasks', {
+        project_id: projectId
+      });
+      
+      console.log(`All tasks for project ${projectId} synced successfully`);
+    } catch (error) {
+      console.error(`Error syncing tasks for project ${projectId}:`, error);
+      throw new Error(error instanceof Error ? error.message : 'אירעה שגיאה בסנכרון המשימות');
+    }
   }
 };
 

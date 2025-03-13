@@ -69,6 +69,12 @@ export default function TaskPage() {
         return;
       }
       
+      // אם המזהה הוא "new", נפנה את המשתמש לדף יצירת משימה חדשה
+      if (taskId === 'new') {
+        router.push('/dashboard/tasks/new');
+        return;
+      }
+      
       try {
         setLoading(true);
         
@@ -167,10 +173,40 @@ export default function TaskPage() {
     if (!task) return;
     
     try {
-      await taskService.updateTaskStatus(taskId, newStatus);
+      // המרת הסטטוס לאותיות קטנות
+      let normalizedStatus = newStatus.toLowerCase();
+      
+      // וידוא שהסטטוס תקין ותואם לאילוצים בבסיס הנתונים
+      const validStatuses = ['todo', 'in_progress', 'review', 'done'];
+      
+      if (!validStatuses.includes(normalizedStatus)) {
+        // אם הסטטוס לא תקין, ננסה למפות אותו לערך תקין
+        if (normalizedStatus === 'לביצוע' || normalizedStatus === 'to do' || normalizedStatus === 'todo') {
+          normalizedStatus = 'todo';
+        } else if (normalizedStatus === 'בתהליך' || normalizedStatus === 'in progress' || normalizedStatus === 'in_progress') {
+          normalizedStatus = 'in_progress';
+        } else if (normalizedStatus === 'בבדיקה' || normalizedStatus === 'in review' || normalizedStatus === 'review') {
+          normalizedStatus = 'review';
+        } else if (normalizedStatus === 'הושלם' || normalizedStatus === 'completed' || normalizedStatus === 'done') {
+          normalizedStatus = 'done';
+        } else {
+          // אם לא הצלחנו למפות, נציג שגיאה
+          toast({
+            title: 'שגיאה בעדכון הסטטוס',
+            description: `הסטטוס "${normalizedStatus}" אינו תקין. יש להשתמש באחד מהסטטוסים המוגדרים: ${validStatuses.join(', ')}`,
+            status: 'error',
+            duration: 5000,
+            isClosable: true,
+            position: 'top-right',
+          });
+          return;
+        }
+      }
+      
+      await taskService.updateTaskStatus(taskId, normalizedStatus);
       
       // עדכון המשימה המקומית
-      setTask({ ...task, status: newStatus });
+      setTask({ ...task, status: normalizedStatus });
       
       toast({
         title: 'סטטוס המשימה עודכן',
@@ -222,13 +258,13 @@ export default function TaskPage() {
   
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'completed':
+      case 'done':
       case 'הושלם': return 'green';
-      case 'in progress':
+      case 'in_progress':
       case 'בתהליך': return 'blue';
-      case 'in review':
+      case 'review':
       case 'בבדיקה': return 'purple';
-      case 'to do':
+      case 'todo':
       case 'לביצוע': return 'gray';
       default: return 'gray';
     }
@@ -240,7 +276,7 @@ export default function TaskPage() {
     try {
       const due = new Date(dueDate);
       const now = new Date();
-      return due < now && (task?.status !== 'completed');
+      return due < now && (task?.status !== 'done');
     } catch (e) {
       return false;
     }
@@ -391,9 +427,9 @@ export default function TaskPage() {
                     </Badge>
                     {isOwner && (
                       <Button size="xs" onClick={() => handleStatusChange(
-                        task.status === 'completed' ? 'to do' : 'completed'
+                        task.status === 'done' ? 'todo' : 'done'
                       )}>
-                        {task.status === 'completed' ? 'סמן כלא הושלם' : 'סמן כהושלם'}
+                        {task.status === 'done' ? 'סמן כלא הושלם' : 'סמן כהושלם'}
                       </Button>
                     )}
                   </HStack>
