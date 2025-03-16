@@ -384,188 +384,159 @@ export default function Tasks() {
   
   return (
     <Box>
-      <Flex justifyContent="space-between" alignItems="center" mb={6}>
-        <Heading>משימות</Heading>
-        <Button 
-          leftIcon={<FiPlus />} 
-          colorScheme="primary"
-          onClick={() => router.push('/dashboard/tasks/new')}
-        >
-          משימה חדשה
-        </Button>
+      <Flex 
+        direction={{ base: 'column', md: 'row' }} 
+        justify="space-between" 
+        align={{ base: 'start', md: 'center' }} 
+        mb={6}
+      >
+        <Heading size={{ base: 'md', md: 'lg' }} mb={{ base: 3, md: 0 }}>משימות</Heading>
+        
+        <HStack spacing={{ base: 2, md: 4 }} width={{ base: 'full', md: 'auto' }}>
+          <Button 
+            leftIcon={<FiPlus />} 
+            colorScheme="primary" 
+            onClick={() => router.push('/dashboard/tasks/new')}
+            size={{ base: 'sm', md: 'md' }}
+          >
+            משימה חדשה
+          </Button>
+        </HStack>
       </Flex>
       
-      <Flex direction={{ base: 'column', md: 'row' }} mb={6} gap={4} wrap="wrap">
-        <InputGroup maxW={{ base: '100%', md: '300px' }}>
-          <InputLeftElement pointerEvents="none">
-            <FiSearch color="gray.300" />
-          </InputLeftElement>
-          <Input 
-            placeholder="חיפוש משימות..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </InputGroup>
-        
-        <Select 
-          placeholder="סנן לפי פרויקט" 
-          value={selectedProject}
-          onChange={(e) => setSelectedProject(e.target.value)}
-          maxW={{ base: '100%', md: '200px' }}
-        >
-          <option value="">כל הפרויקטים</option>
-          {projects.map(project => (
-            <option key={project.id} value={project.id}>
-              {project.name}
-            </option>
-          ))}
-        </Select>
-        
-        <Select 
-          placeholder="סנן לפי יזם" 
-          value={selectedEntrepreneur}
-          onChange={(e) => setSelectedEntrepreneur(e.target.value)}
-          maxW={{ base: '100%', md: '200px' }}
-        >
-          <option value="">כל היזמים</option>
-          {entrepreneurs.map(entrepreneur => (
-            <option key={entrepreneur} value={entrepreneur}>
-              {entrepreneur}
-            </option>
-          ))}
-        </Select>
-        
-        <Select 
-          placeholder="סנן לפי סטטוס" 
-          value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value)}
-          maxW={{ base: '100%', md: '200px' }}
-        >
-          {statusOptions.map(option => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </Select>
-        
-        <Select 
-          placeholder="עדיפות" 
-          maxW={{ base: "100%", md: "160px" }}
-          value={selectedPriority}
-          onChange={(e) => setSelectedPriority(e.target.value)}
-        >
-          {priorityOptions.map(option => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </Select>
-        
-        {/* הוספת אפשרויות מיון */}
-        <Flex gap={2} maxW={{ base: '100%', md: '300px' }}>
-          <Select 
-            placeholder="מיין לפי" 
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            maxW={{ base: '100%', md: '160px' }}
-          >
-            {sortOptions.map(option => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </Select>
-          
-          <Select 
-            value={sortDirection}
-            onChange={(e) => setSortDirection(e.target.value as 'asc' | 'desc')}
-            maxW={{ base: '100%', md: '120px' }}
-            isDisabled={!sortBy}
-          >
-            <option value="asc">עולה</option>
-            <option value="desc">יורד</option>
-          </Select>
-        </Flex>
-      </Flex>
-      
-      <Tabs variant="enclosed" onChange={(index) => setActiveTab(index)}>
-        <TabList>
-          <Tab><HStack><FiList /><Text mr={2}>רשימה</Text></HStack></Tab>
-          <Tab><HStack><FiColumns /><Text mr={2}>קנבן</Text></HStack></Tab>
-          <Tab><HStack><FiCalendar /><Text mr={2}>לוח שנה</Text></HStack></Tab>
+      <Tabs variant="enclosed" mb={6}>
+        <TabList overflowX="auto" flexWrap={{ base: 'nowrap', md: 'wrap' }}>
+          <Tab fontSize={{ base: 'sm', md: 'md' }}>
+            <Box as={FiList} mr={2} />
+            רשימה
+          </Tab>
+          <Tab fontSize={{ base: 'sm', md: 'md' }}>
+            <Box as={FiColumns} mr={2} />
+            קנבן
+          </Tab>
+          <Tab fontSize={{ base: 'sm', md: 'md' }}>
+            <Box as={FiCalendar} mr={2} />
+            גאנט
+          </Tab>
         </TabList>
         
-        <TabPanels>
-          {/* תצוגת רשימה */}
-          <TabPanel p={0} pt={4}>
-            {loading ? (
-              <Flex justify="center" my={10}>
-                <Spinner size="xl" color="primary.500" thickness="4px" />
-              </Flex>
-            ) : error ? (
-              <Flex direction="column" alignItems="center" justifyContent="center" my={10} textAlign="center">
-                <FiAlertCircle size={40} color="red" />
-                <Text mt={4} fontSize="lg" fontWeight="medium">
-                  {error}
-                </Text>
-                <Button 
-                  mt={4}
-                  onClick={() => window.location.reload()}
-                  colorScheme="primary"
-                  variant="outline"
-                >
-                  נסה שוב
-                </Button>
-              </Flex>
-            ) : sortedTasks.length === 0 ? (
-              <Flex direction="column" alignItems="center" justifyContent="center" my={10} textAlign="center">
-                <Text fontSize="lg">לא נמצאו משימות</Text>
-                {searchQuery || selectedProject || selectedStatus || selectedPriority || selectedEntrepreneur ? (
-                  <Text>נסה לשנות את הפילטרים</Text>
-                ) : (
+        <Box 
+          p={4} 
+          borderWidth="1px" 
+          borderTop="none" 
+          borderRadius="0 0 md md"
+        >
+          <Flex 
+            direction={{ base: 'column', md: 'row' }} 
+            mb={4} 
+            gap={3}
+            width="full"
+          >
+            <InputGroup maxW={{ base: 'full', md: '300px' }}>
+              <InputLeftElement pointerEvents="none">
+                <FiSearch color="gray.300" />
+              </InputLeftElement>
+              <Input 
+                placeholder="חיפוש משימות..." 
+                value={searchQuery} 
+                onChange={(e) => setSearchQuery(e.target.value)}
+                size={{ base: 'sm', md: 'md' }}
+              />
+            </InputGroup>
+            
+            <Select 
+              placeholder="סנן לפי פרויקט" 
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              maxW={{ base: 'full', md: '250px' }}
+              size={{ base: 'sm', md: 'md' }}
+            >
+              <option value="">כל הפרויקטים</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+            
+            <Select 
+              placeholder="סנן לפי סטטוס" 
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              maxW={{ base: 'full', md: '200px' }}
+              size={{ base: 'sm', md: 'md' }}
+            >
+              <option value="">כל הסטטוסים</option>
+              <option value="todo">לביצוע</option>
+              <option value="in_progress">בתהליך</option>
+              <option value="review">בבדיקה</option>
+              <option value="done">הושלם</option>
+            </Select>
+            
+            <Select 
+              placeholder="סנן לפי יזם" 
+              value={selectedEntrepreneur}
+              onChange={(e) => setSelectedEntrepreneur(e.target.value)}
+              maxW={{ base: 'full', md: '200px' }}
+              size={{ base: 'sm', md: 'md' }}
+            >
+              <option value="">כל היזמים</option>
+              {entrepreneurs.map((entrepreneur) => (
+                <option key={entrepreneur} value={entrepreneur}>
+                  {entrepreneur}
+                </option>
+              ))}
+            </Select>
+          </Flex>
+          
+          <TabPanels>
+            {/* תצוגת רשימה */}
+            <TabPanel p={0}>
+              {loading ? (
+                <Flex justify="center" align="center" h="200px">
+                  <Spinner size="xl" color="primary.500" />
+                </Flex>
+              ) : filteredTasks.length === 0 ? (
+                <Box textAlign="center" p={8}>
+                  <Text fontSize="lg" mb={4}>לא נמצאו משימות</Text>
                   <Button 
-                    mt={4}
-                    leftIcon={<FiPlus />}
-                    colorScheme="primary"
+                    leftIcon={<FiPlus />} 
+                    colorScheme="primary" 
                     onClick={() => router.push('/dashboard/tasks/new')}
                   >
                     צור משימה חדשה
                   </Button>
-                )}
-              </Flex>
-            ) : (
-              <VStack spacing={2} align="stretch">
-                {sortedTasks.map(task => (
-                  <TaskItem 
-                    key={task.id} 
-                    task={task} 
-                    formatDate={formatDate}
-                    getPriorityColor={getPriorityColor}
-                    getProjectName={getProjectName}
-                    onStatusChange={handleStatusChange}
-                    onDelete={() => handleDeleteTask(task.id)}
-                    onEdit={() => router.push(`/dashboard/tasks/${task.id}/edit`)}
-                    onView={() => router.push(`/dashboard/tasks/${task.id}`)}
-                  />
-                ))}
-                
-                {sortedTasks.length > 0 && (
-                  <Text textAlign="center" color="gray.500" py={4}>
-                    סה"כ: {sortedTasks.length} משימות
-                  </Text>
-                )}
-              </VStack>
-            )}
-          </TabPanel>
-          
-          {/* תצוגת קנבן */}
-          <TabPanel>
-            <Text textAlign="center" p={10} color="gray.500">
-              תצוגת קנבן תהיה זמינה בקרוב - עדיין בפיתוח
-            </Text>
-          </TabPanel>
-          
-          {/* תצוגת לוח שנה */}
-          <TabPanel>
-            <Text textAlign="center" p={10} color="gray.500">
-              תצוגת לוח שנה תהיה זמינה בקרוב - עדיין בפיתוח
-            </Text>
-          </TabPanel>
-        </TabPanels>
+                </Box>
+              ) : (
+                <VStack spacing={3} align="stretch">
+                  {filteredTasks.map((task) => (
+                    <TaskItem 
+                      key={task.id} 
+                      task={task} 
+                      formatDate={formatDate} 
+                      getPriorityColor={getPriorityColor} 
+                      getProjectName={getProjectName}
+                      onStatusChange={handleStatusChange}
+                      onDelete={() => handleDeleteTask(task.id)}
+                      onEdit={() => router.push(`/dashboard/tasks/${task.id}/edit`)}
+                      onView={() => router.push(`/dashboard/tasks/${task.id}`)}
+                    />
+                  ))}
+                </VStack>
+              )}
+            </TabPanel>
+            
+            {/* תצוגת קנבן */}
+            <TabPanel p={0}>
+              {/* תוכן הקנבן */}
+            </TabPanel>
+            
+            {/* תצוגת גאנט */}
+            <TabPanel p={0}>
+              {/* תוכן הגאנט */}
+            </TabPanel>
+          </TabPanels>
+        </Box>
       </Tabs>
     </Box>
   );
@@ -593,83 +564,140 @@ function TaskItem({
   onView
 }: TaskItemProps) {
   return (
-    <Flex 
-      p={3} 
+    <Box 
       borderWidth="1px" 
       borderRadius="md" 
-      justifyContent="space-between"
-      alignItems="center"
-      bg="white"
-      _hover={{ bg: 'gray.50' }}
-      transition="background 0.2s"
+      p={{ base: 3, md: 4 }} 
+      bg="white" 
+      boxShadow="sm"
+      _hover={{ boxShadow: 'md' }}
+      transition="all 0.2s"
     >
-      <HStack spacing={3} flex={1}>
-        <Checkbox 
-          size="lg" 
-          colorScheme="green" 
-          isChecked={task.status === 'done'} 
-          onChange={(e) => {
-            onStatusChange(
-              task.id, 
-              e.target.checked ? 'done' : 'todo'
-            );
-          }}
-        />
-        
-        <Box>
-          <Text 
-            fontWeight="medium" 
-            textDecoration={task.status === 'done' ? 'line-through' : 'none'}
-            color={task.status === 'done' ? 'gray.500' : 'inherit'}
-          >
-            {task.title}
-          </Text>
-          <HStack mt={1} spacing={2}>
-            <Badge colorScheme={getPriorityColor(task.priority)} size="sm">
-              {task.priority}
-            </Badge>
-            <Badge variant="outline" size="sm">
-              {task.status}
-            </Badge>
-            <Text fontSize="xs" color="gray.600">
-              {getProjectName(task.project_id)}
-            </Text>
-            {task.due_date && (
-              <Text fontSize="xs" color={
-                new Date(task.due_date) < new Date() && task.status !== 'done'
-                  ? 'red.500'
-                  : 'gray.600'
-              }>
-                יעד: {formatDate(task.due_date)}
-              </Text>
-            )}
-            {/* סימון משימות שעבר זמנן */}
-            {task.due_date && 
-              new Date(task.due_date) < new Date() && task.status !== 'done' && (
-              <Badge colorScheme="red" ml={2}>
-                איחור
-              </Badge>
-            )}
-          </HStack>
-        </Box>
-      </HStack>
-      
-      <HStack>
-        <Menu>
-          <MenuButton
-            as={IconButton}
-            icon={<FiMoreVertical />}
-            variant="ghost"
-            size="sm"
-            aria-label="אפשרויות"
+      <Flex 
+        direction={{ base: 'column', md: 'row' }} 
+        justify="space-between" 
+        align={{ base: 'start', md: 'center' }}
+      >
+        <Flex 
+          flex="1" 
+          direction={{ base: 'column', md: 'row' }} 
+          align={{ base: 'start', md: 'center' }}
+          mb={{ base: 3, md: 0 }}
+        >
+          <Checkbox 
+            isChecked={task.status === 'done'} 
+            onChange={(e) => onStatusChange(task.id, e.target.checked ? 'done' : 'todo')}
+            mr={{ base: 0, md: 3 }}
+            mb={{ base: 2, md: 0 }}
+            colorScheme="green"
           />
-          <MenuList>
-            <MenuItem onClick={onView}>צפייה</MenuItem>
-            <MenuItem onClick={onEdit}>עריכה</MenuItem>
-            <MenuItem onClick={onDelete} color="red.600">מחיקה</MenuItem>
-          </MenuList>
-        </Menu>
-      </HStack>
-    </Flex>
+          
+          <Box flex="1" onClick={onView} cursor="pointer">
+            <Text 
+              fontWeight="medium" 
+              fontSize={{ base: 'sm', md: 'md' }}
+              textDecoration={task.status === 'done' ? 'line-through' : 'none'}
+              color={task.status === 'done' ? 'gray.500' : 'inherit'}
+              mb={{ base: 1, md: 0 }}
+            >
+              {task.title}
+            </Text>
+            
+            <Flex 
+              wrap="wrap" 
+              gap={2} 
+              mt={{ base: 2, md: 1 }}
+              display={{ base: 'flex', md: 'none' }}
+            >
+              <Badge colorScheme={getPriorityColor(task.priority || '')}>
+                {task.priority}
+              </Badge>
+              
+              <Badge variant="outline">
+                {task.status}
+              </Badge>
+              
+              {task.project_id && (
+                <Badge variant="subtle" colorScheme="blue">
+                  {getProjectName(task.project_id)}
+                </Badge>
+              )}
+              
+              {task.due_date && (
+                <Badge 
+                  colorScheme={
+                    new Date(task.due_date) < new Date() && task.status !== 'done' 
+                      ? 'red' 
+                      : 'gray'
+                  }
+                >
+                  {formatDate(task.due_date)}
+                </Badge>
+              )}
+            </Flex>
+          </Box>
+        </Flex>
+        
+        <Flex 
+          align="center" 
+          gap={{ base: 1, md: 3 }}
+          display={{ base: 'none', md: 'flex' }}
+        >
+          {task.project_id && (
+            <Badge variant="subtle" colorScheme="blue">
+              {getProjectName(task.project_id)}
+            </Badge>
+          )}
+          
+          <Badge colorScheme={getPriorityColor(task.priority || '')}>
+            {task.priority}
+          </Badge>
+          
+          <Badge variant="outline">
+            {task.status}
+          </Badge>
+          
+          {task.due_date && (
+            <Text 
+              fontSize="sm" 
+              color={
+                new Date(task.due_date) < new Date() && task.status !== 'done' 
+                  ? 'red.500' 
+                  : 'gray.500'
+              }
+            >
+              {formatDate(task.due_date)}
+            </Text>
+          )}
+        </Flex>
+        
+        <HStack spacing={1} mt={{ base: 2, md: 0 }}>
+          <IconButton
+            icon={<FiEdit />}
+            aria-label="ערוך משימה"
+            size="sm"
+            variant="ghost"
+            onClick={onEdit}
+          />
+          <Menu>
+            <MenuButton
+              as={IconButton}
+              icon={<FiMoreVertical />}
+              variant="ghost"
+              size="sm"
+              aria-label="אפשרויות נוספות"
+            />
+            <MenuList>
+              <MenuItem icon={<FiEdit />} onClick={onEdit}>
+                ערוך
+              </MenuItem>
+              <MenuItem icon={<FiTrash2 />} color="red.500" onClick={onDelete}>
+                מחק
+              </MenuItem>
+            </MenuList>
+          </Menu>
+        </HStack>
+      </Flex>
+    </Box>
   );
 } 

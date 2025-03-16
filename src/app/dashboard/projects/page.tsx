@@ -144,6 +144,18 @@ export default function Projects() {
     }
   };
   
+  // פונקציה לקבלת טקסט סטטוס מתורגם
+  const getStatusText = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'active': return 'פעיל';
+      case 'planning': return 'בתכנון';
+      case 'on hold': return 'בהמתנה';
+      case 'completed': return 'הושלם';
+      case 'cancelled': return 'בוטל';
+      default: return status;
+    }
+  };
+  
   // המרת תאריך לפורמט מקומי
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'לא נקבע';
@@ -157,98 +169,91 @@ export default function Projects() {
   
   return (
     <Box>
-      <Flex justifyContent="space-between" alignItems="center" mb={6}>
-        <Heading>פרויקטים</Heading>
-        <Button 
-          leftIcon={<FiPlus />} 
-          colorScheme="primary"
-          onClick={() => router.push('/dashboard/projects/new')}
-        >
-          פרויקט חדש
-        </Button>
-      </Flex>
-      
-      <Box mb={6}>
-        <Flex direction={{ base: 'column', md: 'row' }} mb={4} gap={4}>
-          <InputGroup maxW={{ base: '100%', md: '400px' }}>
-            <InputLeftElement pointerEvents="none">
-              <FiSearch color="gray.300" />
-            </InputLeftElement>
-            <Input
-              placeholder="חיפוש פרויקטים..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </InputGroup>
-          
-          <Select 
-            placeholder="סנן לפי יזם" 
-            maxW={{ base: '100%', md: '250px' }}
-            value={filterByEntrepreneur || ''}
-            onChange={(e) => setFilterByEntrepreneur(e.target.value || null)}
-          >
-            <option value="">כל היזמים</option>
-            {entrepreneurs.map(entrepreneur => (
-              <option key={entrepreneur} value={entrepreneur}>
-                {entrepreneur}
-              </option>
-            ))}
-          </Select>
-          
-          <Button
-            leftIcon={<FiPlus />}
-            colorScheme="primary"
+      <Flex 
+        direction={{ base: 'column', md: 'row' }} 
+        justify="space-between" 
+        align={{ base: 'start', md: 'center' }} 
+        mb={6}
+      >
+        <Heading size={{ base: 'md', md: 'lg' }} mb={{ base: 3, md: 0 }}>פרויקטים</Heading>
+        
+        <HStack spacing={{ base: 2, md: 4 }} width={{ base: 'full', md: 'auto' }}>
+          <Button 
+            leftIcon={<FiPlus />} 
+            colorScheme="primary" 
             onClick={() => router.push('/dashboard/projects/new')}
-            ml="auto"
+            size={{ base: 'sm', md: 'md' }}
           >
             פרויקט חדש
           </Button>
-        </Flex>
-      </Box>
+        </HStack>
+      </Flex>
+      
+      <Flex 
+        direction={{ base: 'column', md: 'row' }} 
+        mb={6} 
+        gap={3}
+        width="full"
+      >
+        <InputGroup maxW={{ base: 'full', md: '300px' }}>
+          <InputLeftElement pointerEvents="none">
+            <FiSearch color="gray.300" />
+          </InputLeftElement>
+          <Input 
+            placeholder="חיפוש פרויקטים..." 
+            value={searchQuery} 
+            onChange={(e) => setSearchQuery(e.target.value)}
+            size={{ base: 'sm', md: 'md' }}
+          />
+        </InputGroup>
+        
+        <Select 
+          placeholder="סנן לפי יזם" 
+          value={filterByEntrepreneur || ''}
+          onChange={(e) => setFilterByEntrepreneur(e.target.value || null)}
+          maxW={{ base: 'full', md: '250px' }}
+          size={{ base: 'sm', md: 'md' }}
+        >
+          <option value="">כל היזמים</option>
+          {entrepreneurs.map((entrepreneur) => (
+            <option key={entrepreneur} value={entrepreneur}>
+              {entrepreneur}
+            </option>
+          ))}
+        </Select>
+      </Flex>
       
       {loading ? (
-        <Flex justifyContent="center" my={10}>
-          <Spinner size="xl" color="primary.500" thickness="4px" />
+        <Flex justify="center" align="center" h="200px">
+          <Spinner size="xl" color="primary.500" />
         </Flex>
       ) : error ? (
-        <Flex direction="column" alignItems="center" justifyContent="center" my={10} textAlign="center">
-          <FiAlertCircle size={40} color="red" />
-          <Text mt={4} fontSize="lg" fontWeight="medium">
-            {error}
-          </Text>
-          <Button 
-            mt={4}
-            onClick={() => window.location.reload()}
-            colorScheme="primary"
-            variant="outline"
-          >
-            נסה שוב
-          </Button>
-        </Flex>
+        <Box p={4} bg="red.50" color="red.500" borderRadius="md">
+          <Text>{error}</Text>
+        </Box>
       ) : filteredProjects.length === 0 ? (
-        <Flex direction="column" alignItems="center" justifyContent="center" my={10} textAlign="center">
-          <Text fontSize="lg">לא נמצאו פרויקטים</Text>
-          {searchQuery ? (
-            <Text>נסה לשנות את מילות החיפוש</Text>
-          ) : (
-            <Button 
-              mt={4}
-              leftIcon={<FiPlus />}
-              colorScheme="primary"
-              onClick={() => router.push('/dashboard/projects/new')}
-            >
-              צור פרויקט חדש
-            </Button>
-          )}
-        </Flex>
+        <Box textAlign="center" p={8}>
+          <Text fontSize="lg" mb={4}>לא נמצאו פרויקטים</Text>
+          <Button 
+            leftIcon={<FiPlus />} 
+            colorScheme="primary" 
+            onClick={() => router.push('/dashboard/projects/new')}
+          >
+            צור פרויקט חדש
+          </Button>
+        </Box>
       ) : (
-        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
-          {filteredProjects.map(project => (
+        <SimpleGrid 
+          columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} 
+          spacing={{ base: 4, md: 6 }}
+        >
+          {filteredProjects.map((project) => (
             <ProjectCard 
               key={project.id} 
               project={project} 
-              formatDate={formatDate}
-              getStatusColor={getStatusColor}
+              formatDate={formatDate} 
+              getStatusColor={getStatusColor} 
+              getStatusText={getStatusText}
               onDelete={() => handleDeleteProject(project.id)}
             />
           ))}
@@ -262,15 +267,15 @@ interface ProjectCardProps {
   project: Project;
   formatDate: (date: string | null) => string;
   getStatusColor: (status: string) => string;
+  getStatusText: (status: string) => string;
   onDelete: () => void;
 }
 
-function ProjectCard({ project, formatDate, getStatusColor, onDelete }: ProjectCardProps) {
-  const [progress, setProgress] = useState<number>(0);
-  const [tasksInfo, setTasksInfo] = useState<{ completed: number, total: number }>({ completed: 0, total: 0 });
-  const [loading, setLoading] = useState(true);
-  
+function ProjectCard({ project, formatDate, getStatusColor, getStatusText, onDelete }: ProjectCardProps) {
   const router = useRouter();
+  const [taskCount, setTaskCount] = useState<number | null>(null);
+  const [completedTaskCount, setCompletedTaskCount] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
   
   // טעינת התקדמות הפרויקט ומידע על המשימות
   useEffect(() => {
@@ -280,11 +285,8 @@ function ProjectCard({ project, formatDate, getStatusColor, onDelete }: ProjectC
         
         // השגת מידע על כמות המשימות והמשימות שהושלמו
         const tasksData = await projectService.countTasksInProject(project.id);
-        setTasksInfo(tasksData);
-        
-        // חישוב אחוז ההתקדמות
-        const progressData = await projectService.calculateProjectProgress(project.id);
-        setProgress(progressData);
+        setTaskCount(tasksData.total);
+        setCompletedTaskCount(tasksData.completed);
       } catch (err) {
         console.error(`שגיאה בטעינת פרטי פרויקט ${project.id}:`, err);
       } finally {
@@ -296,34 +298,48 @@ function ProjectCard({ project, formatDate, getStatusColor, onDelete }: ProjectC
   }, [project.id]);
   
   return (
-    <Card>
-      <CardHeader>
-        <Flex justifyContent="space-between" alignItems="flex-start">
-          <VStack align="flex-start" spacing={1}>
-            <Heading size="md">{project.name}</Heading>
-            <Badge colorScheme={getStatusColor(project.status)}>{project.status}</Badge>
-          </VStack>
+    <Card 
+      variant="outline" 
+      borderRadius="md" 
+      overflow="hidden" 
+      h="100%"
+      _hover={{ boxShadow: 'md', transform: 'translateY(-2px)' }}
+      transition="all 0.2s"
+    >
+      <CardHeader pb={2}>
+        <Flex justify="space-between" align="center">
+          <Heading 
+            as="h3" 
+            size={{ base: 'sm', md: 'md' }} 
+            noOfLines={1} 
+            onClick={() => router.push(`/dashboard/projects/${project.id}`)}
+            cursor="pointer"
+            _hover={{ color: 'primary.500' }}
+          >
+            {project.name}
+          </Heading>
+          
           <Menu>
-            <MenuButton 
-              as={IconButton} 
-              aria-label="אפשרויות"
+            <MenuButton
+              as={IconButton}
               icon={<FiMoreVertical />}
               variant="ghost"
               size="sm"
+              aria-label="אפשרויות"
             />
             <MenuList>
               <MenuItem 
-                icon={<FiEdit />}
+                icon={<FiEdit />} 
                 onClick={() => router.push(`/dashboard/projects/${project.id}/edit`)}
               >
-                עריכה
+                ערוך
               </MenuItem>
               <MenuItem 
-                icon={<FiTrash2 />}
+                icon={<FiTrash2 />} 
+                color="red.500" 
                 onClick={onDelete}
-                color="red.600"
               >
-                מחיקה
+                מחק
               </MenuItem>
             </MenuList>
           </Menu>
@@ -331,46 +347,61 @@ function ProjectCard({ project, formatDate, getStatusColor, onDelete }: ProjectC
       </CardHeader>
       
       <CardBody py={2}>
-        <VStack spacing={3} align="stretch">
-          <Box>
-            <Flex justifyContent="space-between" mb={1}>
-              <Text fontSize="sm">התקדמות</Text>
-              <Text fontSize="sm" fontWeight="bold">{loading ? '...' : `${progress}%`}</Text>
-            </Flex>
-            <Progress value={progress} size="sm" colorScheme="primary" borderRadius="full" />
-          </Box>
-          
-          <Text fontSize="sm" noOfLines={2}>
-            {project.owner ? `בעלים: ${project.owner}` : 'אין פרטי בעלים'}
-          </Text>
-          
-          <Text fontSize="sm" noOfLines={2}>
-            {project.entrepreneur ? `יזם: ${project.entrepreneur}` : 'אין פרטי יזם'}
-          </Text>
-          
-          <Flex justifyContent="space-between">
-            <HStack spacing={2}>
-              <FiClock />
-              <Text fontSize="sm">תאריך יעד:</Text>
-            </HStack>
-            <Text fontSize="sm" fontWeight="bold">{formatDate(project.planned_end_date)}</Text>
+        <VStack align="stretch" spacing={2}>
+          <Flex justify="space-between">
+            <Text fontSize={{ base: 'xs', md: 'sm' }} color="gray.600">יזם:</Text>
+            <Text fontSize={{ base: 'xs', md: 'sm' }} fontWeight="medium">{project.entrepreneur || 'לא הוגדר'}</Text>
           </Flex>
           
-          <Text fontSize="sm">
-            {loading ? 'טוען נתונים...' : `${tasksInfo.completed} מתוך ${tasksInfo.total} משימות הושלמו`}
-          </Text>
+          <Flex justify="space-between">
+            <Text fontSize={{ base: 'xs', md: 'sm' }} color="gray.600">סטטוס:</Text>
+            <Badge colorScheme={getStatusColor(project.status || '')}>
+              {getStatusText(project.status || '')}
+            </Badge>
+          </Flex>
+          
+          <Flex justify="space-between">
+            <Text fontSize={{ base: 'xs', md: 'sm' }} color="gray.600">תאריך יעד:</Text>
+            <Text fontSize={{ base: 'xs', md: 'sm' }}>{formatDate(project.planned_end_date)}</Text>
+          </Flex>
+          
+          <Box>
+            <Flex justify="space-between" mb={1}>
+              <Text fontSize={{ base: 'xs', md: 'sm' }} color="gray.600">התקדמות:</Text>
+              <Text fontSize={{ base: 'xs', md: 'sm' }}>{project.progress || 0}%</Text>
+            </Flex>
+            <Progress 
+              value={project.progress || 0} 
+              size="sm" 
+              colorScheme="primary" 
+              borderRadius="full"
+            />
+          </Box>
+          
+          {loading ? (
+            <Flex justify="center" py={2}>
+              <Spinner size="sm" />
+            </Flex>
+          ) : (
+            <Flex justify="space-between">
+              <Text fontSize={{ base: 'xs', md: 'sm' }} color="gray.600">משימות:</Text>
+              <Text fontSize={{ base: 'xs', md: 'sm' }}>
+                {completedTaskCount}/{taskCount}
+              </Text>
+            </Flex>
+          )}
         </VStack>
       </CardBody>
       
-      <CardFooter pt={0}>
+      <CardFooter pt={2} pb={3}>
         <Button 
-          as={Link}
-          href={`/dashboard/projects/${project.id}`}
-          variant="outline" 
+          variant="ghost" 
+          colorScheme="primary" 
           size="sm" 
           width="full"
+          onClick={() => router.push(`/dashboard/projects/${project.id}`)}
         >
-          צפייה בפרויקט
+          צפה בפרויקט
         </Button>
       </CardFooter>
     </Card>

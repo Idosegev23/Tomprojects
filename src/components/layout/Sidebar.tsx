@@ -21,16 +21,20 @@ type NavItemProps = {
   children: React.ReactNode;
 };
 
-export default function Sidebar() {
+interface SidebarProps {
+  isMobile?: boolean;
+}
+
+export default function Sidebar({ isMobile = false }: SidebarProps) {
   const pathname = usePathname();
   
   return (
     <Box
       as="nav"
-      w="240px"
+      w={isMobile ? "full" : { base: "full", md: "240px" }}
       h="full"
       bg="white"
-      borderRight="1px"
+      borderRight={!isMobile ? "1px" : "0"}
       borderColor="gray.200"
       py={5}
     >

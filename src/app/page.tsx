@@ -59,31 +59,38 @@ export default function Home() {
   
   return (
     <Box as="main">
-      <Container maxW="container.xl" py={10}>
-        <VStack spacing={8} align="center" textAlign="center">
+      <Container maxW="container.xl" py={{ base: 6, md: 10 }}>
+        <VStack spacing={{ base: 5, md: 8 }} align="center" textAlign="center">
           {isAuthenticated ? (
             // תצוגה למשתמשים מחוברים
             <>
-              <Heading as="h1" size="2xl">
+              <Heading as="h1" size={{ base: "xl", md: "2xl" }}>
                 שלום, {displayName}
               </Heading>
-              <Text fontSize="xl" maxW="container.md">
+              <Text fontSize={{ base: "md", md: "xl" }} maxW="container.md">
                 ברוך הבא למערכת ניהול הפרויקטים והמשימות של המשרד הראשי
               </Text>
               
-              <Flex gap={4} mt={8}>
+              <Flex 
+                gap={{ base: 2, md: 4 }} 
+                mt={{ base: 4, md: 8 }}
+                direction={{ base: isMobile ? "column" : "row", md: "row" }}
+                w={{ base: "100%", md: "auto" }}
+              >
                 <Button 
-                  size="lg" 
+                  size={{ base: "md", md: "lg" }} 
                   colorScheme="primary" 
                   onClick={() => router.push('/dashboard')}
+                  w={{ base: isMobile ? "100%" : "auto", md: "auto" }}
                 >
                   לדאשבורד שלי
                 </Button>
                 <Button 
                   as={Link}
                   href="/dashboard/projects" 
-                  size="lg" 
+                  size={{ base: "md", md: "lg" }} 
                   variant="outline"
+                  w={{ base: isMobile ? "100%" : "auto", md: "auto" }}
                 >
                   לפרויקטים שלי
                 </Button>
@@ -92,26 +99,33 @@ export default function Home() {
           ) : (
             // תצוגה למשתמשים לא מחוברים
             <>
-              <Heading as="h1" size="2xl">
+              <Heading as="h1" size={{ base: "xl", md: "2xl" }}>
                 פורטל ניהול פרויקטים
               </Heading>
-              <Text fontSize="xl" maxW="container.md">
+              <Text fontSize={{ base: "md", md: "xl" }} maxW="container.md">
                 מערכת מתקדמת לניהול פרויקטים, משימות ומעקב אחר התקדמות עבור המשרד הראשי
               </Text>
               
-              <Flex gap={4} mt={8}>
+              <Flex 
+                gap={{ base: 2, md: 4 }} 
+                mt={{ base: 4, md: 8 }}
+                direction={{ base: isMobile ? "column" : "row", md: "row" }}
+                w={{ base: "100%", md: "auto" }}
+              >
                 <Button 
-                  size="lg" 
+                  size={{ base: "md", md: "lg" }} 
                   colorScheme="primary" 
                   onClick={() => router.push('/auth/login')}
+                  w={{ base: isMobile ? "100%" : "auto", md: "auto" }}
                 >
                   התחברות
                 </Button>
                 <Button 
                   as={Link}
                   href="/auth/register" 
-                  size="lg" 
+                  size={{ base: "md", md: "lg" }} 
                   variant="outline"
+                  w={{ base: isMobile ? "100%" : "auto", md: "auto" }}
                 >
                   הרשמה
                 </Button>
@@ -120,26 +134,26 @@ export default function Home() {
           )}
           
           {/* תכונות המערכת */}
-          <Box w="full" mt={16}>
-            <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={8}>
+          <Box w="full" mt={{ base: 10, md: 16 }}>
+            <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={{ base: 4, md: 8 }}>
               {features.map((feature, i) => (
                 <Card key={i}>
-                  <CardBody>
-                    <VStack spacing={4} align="center" textAlign="center">
+                  <CardBody p={{ base: 4, md: 6 }}>
+                    <VStack spacing={{ base: 3, md: 4 }} align="center" textAlign="center">
                       <Flex
-                        w="60px"
-                        h="60px"
+                        w={{ base: "50px", md: "60px" }}
+                        h={{ base: "50px", md: "60px" }}
                         bg={`${feature.color}20`}
                         color={feature.color}
                         rounded="full"
                         align="center"
                         justify="center"
-                        mb={2}
+                        mb={{ base: 1, md: 2 }}
                       >
-                        <Icon as={feature.icon} boxSize={8} />
+                        <Icon as={feature.icon} boxSize={{ base: 6, md: 8 }} />
                       </Flex>
-                      <Heading size="md">{feature.title}</Heading>
-                      <Text>{feature.description}</Text>
+                      <Heading size={{ base: "sm", md: "md" }}>{feature.title}</Heading>
+                      <Text fontSize={{ base: "sm", md: "md" }}>{feature.description}</Text>
                     </VStack>
                   </CardBody>
                 </Card>

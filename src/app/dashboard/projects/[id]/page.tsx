@@ -30,6 +30,7 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
+  useBreakpointValue,
 } from '@chakra-ui/react';
 import { 
   FiArrowLeft, 
@@ -82,6 +83,8 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   const router = useRouter();
   const toast = useToast();
   const { user } = useAuthContext();
+  const isMobile = useBreakpointValue({ base: true, md: false });
+  const isTablet = useBreakpointValue({ base: true, lg: false });
   
   // טעינת נתוני הפרויקט
   useEffect(() => {
@@ -425,7 +428,13 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       {/* כותרת הפרויקט ומידע בסיסי */}
       {project && (
         <Box mb={6}>
-          <Flex justify="space-between" align="center" mb={4}>
+          <Flex 
+            direction={{ base: 'column', md: 'row' }} 
+            justify="space-between" 
+            align={{ base: 'flex-start', md: 'center' }} 
+            mb={4} 
+            gap={3}
+          >
             <HStack>
               <IconButton
                 aria-label="חזור לרשימת הפרויקטים"
@@ -433,43 +442,85 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                 onClick={() => router.push('/dashboard/projects')}
                 variant="ghost"
               />
-              <Heading size="lg">{project.name}</Heading>
+              <Heading size={{ base: 'md', md: 'lg' }}>{project.name}</Heading>
               <Badge colorScheme={getStatusColor(project.status)} fontSize="md" px={2} py={1}>
                 {project.status}
               </Badge>
             </HStack>
-            <HStack>
-              <Button
-                leftIcon={<FiRefreshCw />}
-                size="sm"
-                colorScheme="blue"
-                onClick={handleSyncTasks}
-                isLoading={loading}
-              >
-                סנכרון משימות
-              </Button>
-              <Button
-                leftIcon={<FiEdit />}
-                size="sm"
-                onClick={() => router.push(`/dashboard/projects/${id}/edit`)}
-              >
-                ערוך פרויקט
-              </Button>
-              <Button
-                leftIcon={<FiTrash2 />}
-                size="sm"
-                colorScheme="red"
-                variant="outline"
-                onClick={handleDeleteProject}
-              >
-                מחק פרויקט
-              </Button>
-            </HStack>
+            
+            {isMobile ? (
+              <Menu>
+                <MenuButton 
+                  as={IconButton} 
+                  icon={<FiMoreVertical />} 
+                  variant="outline"
+                  aria-label="פעולות נוספות"
+                />
+                <MenuList>
+                  <MenuItem 
+                    icon={<FiRefreshCw />} 
+                    onClick={handleSyncTasks} 
+                    isDisabled={loading}
+                  >
+                    סנכרון משימות
+                  </MenuItem>
+                  <MenuItem 
+                    icon={<FiEdit />} 
+                    onClick={() => router.push(`/dashboard/projects/${id}/edit`)}
+                  >
+                    ערוך פרויקט
+                  </MenuItem>
+                  <MenuItem 
+                    icon={<FiTrash2 />} 
+                    onClick={handleDeleteProject}
+                    color="red.500"
+                  >
+                    מחק פרויקט
+                  </MenuItem>
+                </MenuList>
+              </Menu>
+            ) : (
+              <HStack>
+                <Button
+                  leftIcon={<FiRefreshCw />}
+                  size="sm"
+                  colorScheme="blue"
+                  onClick={handleSyncTasks}
+                  isLoading={loading}
+                >
+                  סנכרון משימות
+                </Button>
+                <Button
+                  leftIcon={<FiEdit />}
+                  size="sm"
+                  onClick={() => router.push(`/dashboard/projects/${id}/edit`)}
+                >
+                  ערוך פרויקט
+                </Button>
+                <Button
+                  leftIcon={<FiTrash2 />}
+                  size="sm"
+                  colorScheme="red"
+                  variant="outline"
+                  onClick={handleDeleteProject}
+                >
+                  מחק פרויקט
+                </Button>
+              </HStack>
+            )}
           </Flex>
           
           <Text mb={2}>{project.name}</Text>
           
-          <Grid templateColumns="repeat(4, 1fr)" gap={4} mb={4}>
+          <Grid 
+            templateColumns={{ 
+              base: 'repeat(1, 1fr)', 
+              sm: 'repeat(2, 1fr)', 
+              md: 'repeat(4, 1fr)' 
+            }} 
+            gap={4} 
+            mb={4}
+          >
             <GridItem>
               <Card>
                 <CardBody>
@@ -516,8 +567,14 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       )}
       
       {/* טאבים לתצוגות שונות */}
-      <Tabs index={tabIndex} onChange={setTabIndex} variant="enclosed" mb={4}>
-        <TabList>
+      <Tabs 
+        index={tabIndex} 
+        onChange={setTabIndex} 
+        variant="enclosed" 
+        mb={4}
+        isLazy
+      >
+        <TabList overflowX="auto" overflowY="hidden" pb={2}>
           <Tab><HStack><FiList /><Text>רשימה</Text></HStack></Tab>
           <Tab><HStack><FiColumns /><Text>קנבן</Text></HStack></Tab>
           <Tab><HStack><FiCalendar /><Text>גאנט</Text></HStack></Tab>
@@ -528,18 +585,26 @@ export default function ProjectPage({ params }: ProjectPageProps) {
           {/* תצוגת רשימה */}
           <TabPanel>
             <Box>
-              <Heading size="md" mb={4}>רשימת משימות</Heading>
-              <Button
-                leftIcon={<FiPlus />}
-                colorScheme="blue"
+              <Flex 
+                direction={{ base: 'column', md: 'row' }} 
+                justify="space-between" 
+                align={{ base: 'flex-start', md: 'center' }} 
                 mb={4}
-                onClick={() => {
-                  setSelectedTask(null);
-                  setIsTaskModalOpen(true);
-                }}
+                gap={2}
               >
-                משימה חדשה
-              </Button>
+                <Heading size={{ base: 'sm', md: 'md' }} mb={{ base: 2, md: 0 }}>רשימת משימות</Heading>
+                <Button
+                  leftIcon={<FiPlus />}
+                  colorScheme="blue"
+                  size={{ base: 'sm', md: 'md' }}
+                  onClick={() => {
+                    setSelectedTask(null);
+                    setIsTaskModalOpen(true);
+                  }}
+                >
+                  משימה חדשה
+                </Button>
+              </Flex>
               {tasks.length > 0 ? (
                 <TaskList 
                   projectId={id}
@@ -555,33 +620,39 @@ export default function ProjectPage({ params }: ProjectPageProps) {
           
           {/* תצוגת קנבן */}
           <TabPanel>
-            <TaskKanban 
-              tasks={tasks} 
-              stages={stages}
-              onEditTask={handleEditTask}
-              onDeleteTask={handleDeleteTask}
-              onStatusChange={handleStatusChange}
-              onStageChange={handleStageChange}
-            />
+            <Box overflowX="auto">
+              <TaskKanban 
+                tasks={tasks} 
+                stages={stages}
+                onEditTask={handleEditTask}
+                onDeleteTask={handleDeleteTask}
+                onStatusChange={handleStatusChange}
+                onStageChange={handleStageChange}
+              />
+            </Box>
           </TabPanel>
           
           {/* תצוגת גאנט */}
           <TabPanel>
-            <TaskGantt 
-              tasks={tasks} 
-              onTaskDrop={handleTaskDrop}
-            />
+            <Box overflowX="auto">
+              <TaskGantt 
+                tasks={tasks} 
+                onTaskDrop={handleTaskDrop}
+              />
+            </Box>
           </TabPanel>
           
           {/* תצוגת עץ */}
           <TabPanel>
             {tasks.length > 0 ? (
-              <TaskTree 
-                tasks={tasks} 
-                projectId={id}
-                onEditTask={handleEditTask}
-                onDeleteTask={handleDeleteTask}
-              />
+              <Box overflowX="auto">
+                <TaskTree 
+                  tasks={tasks} 
+                  projectId={id}
+                  onEditTask={handleEditTask}
+                  onDeleteTask={handleDeleteTask}
+                />
+              </Box>
             ) : (
               <Text>אין משימות בפרויקט זה</Text>
             )}

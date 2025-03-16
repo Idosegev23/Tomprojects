@@ -19,6 +19,7 @@ import {
   IconButton,
   Container,
   Flex,
+  useBreakpointValue,
 } from '@chakra-ui/react';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 import { useAuthContext } from '@/components/auth/AuthProvider';
@@ -35,10 +36,10 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const toast = useToast();
   
-  // קבלת כתובת החזרה מהפרמטרים (אם קיימת)
   const returnUrl = searchParams.get('returnUrl');
   
-  // אם המשתמש כבר מחובר, הפנה אותו לדאשבורד
+  const isMobile = useBreakpointValue({ base: true, md: false });
+  
   useEffect(() => {
     if (isAuthenticated) {
       const redirectTo = returnUrl ? decodeURIComponent(returnUrl) : '/dashboard';
@@ -83,7 +84,6 @@ export default function LoginPage() {
         position: 'top-right',
       });
       
-      // הפניה בחזרה לדף הקודם או לדאשבורד
       const redirectTo = returnUrl ? decodeURIComponent(returnUrl) : '/dashboard';
       router.push(redirectTo);
     } catch (error) {
@@ -102,11 +102,11 @@ export default function LoginPage() {
   
   return (
     <Box minH="100vh" bg="gray.50">
-      <Container maxW="md" pt={{ base: 20, md: 32 }} pb={10}>
-        <VStack spacing={8} w="full">
-          <VStack spacing={3} textAlign="center">
-            <Heading>התחברות</Heading>
-            <Text color="gray.600">התחבר למערכת ניהול המשימות</Text>
+      <Container maxW={{ base: "95%", sm: "md" }} pt={{ base: 10, md: 32 }} pb={10}>
+        <VStack spacing={{ base: 5, md: 8 }} w="full">
+          <VStack spacing={{ base: 2, md: 3 }} textAlign="center">
+            <Heading size={{ base: "lg", md: "xl" }}>התחברות</Heading>
+            <Text color="gray.600" fontSize={{ base: "sm", md: "md" }}>התחבר למערכת ניהול המשימות</Text>
           </VStack>
           
           <Box
@@ -114,25 +114,26 @@ export default function LoginPage() {
             bg="white"
             boxShadow="md"
             rounded="lg"
-            p={8}
+            p={{ base: 5, md: 8 }}
           >
             <form onSubmit={handleSubmit}>
-              <VStack spacing={5}>
+              <VStack spacing={{ base: 4, md: 5 }}>
                 <FormControl isInvalid={!!errors.email}>
-                  <FormLabel htmlFor="email">אימייל</FormLabel>
+                  <FormLabel htmlFor="email" fontSize={{ base: "sm", md: "md" }}>אימייל</FormLabel>
                   <Input
                     id="email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="הזן את האימייל שלך"
+                    size={{ base: "sm", md: "md" }}
                   />
-                  <FormErrorMessage>{errors.email}</FormErrorMessage>
+                  <FormErrorMessage fontSize={{ base: "xs", md: "sm" }}>{errors.email}</FormErrorMessage>
                 </FormControl>
                 
                 <FormControl isInvalid={!!errors.password}>
-                  <FormLabel htmlFor="password">סיסמה</FormLabel>
-                  <InputGroup>
+                  <FormLabel htmlFor="password" fontSize={{ base: "sm", md: "md" }}>סיסמה</FormLabel>
+                  <InputGroup size={{ base: "sm", md: "md" }}>
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
@@ -150,12 +151,12 @@ export default function LoginPage() {
                       />
                     </InputRightElement>
                   </InputGroup>
-                  <FormErrorMessage>{errors.password}</FormErrorMessage>
+                  <FormErrorMessage fontSize={{ base: "xs", md: "sm" }}>{errors.password}</FormErrorMessage>
                 </FormControl>
                 
                 <Box w="full" textAlign="right">
                   <Link href="/auth/forgot-password">
-                    <Text color="primary.600" fontSize="sm">
+                    <Text color="primary.600" fontSize={{ base: "xs", md: "sm" }}>
                       שכחת סיסמה?
                     </Text>
                   </Link>
@@ -165,7 +166,7 @@ export default function LoginPage() {
                   type="submit"
                   w="full"
                   colorScheme="primary"
-                  size="lg"
+                  size={{ base: "md", md: "lg" }}
                   isLoading={isLoading}
                 >
                   התחברות
@@ -174,7 +175,7 @@ export default function LoginPage() {
             </form>
           </Box>
           
-          <Flex>
+          <Flex fontSize={{ base: "sm", md: "md" }}>
             <Text>אין לך חשבון?</Text>
             <Link href="/auth/register">
               <Text color="primary.600" fontWeight="bold" mr={2}>

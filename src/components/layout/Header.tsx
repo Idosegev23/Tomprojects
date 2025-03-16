@@ -15,15 +15,23 @@ import {
   HStack,
   useColorMode,
   Button,
+  useBreakpointValue,
 } from '@chakra-ui/react';
-import { FiBell, FiUser, FiSettings, FiLogOut, FiMoon, FiSun, FiLogIn } from 'react-icons/fi';
+import { FiBell, FiUser, FiSettings, FiLogOut, FiMoon, FiSun, FiLogIn, FiMenu } from 'react-icons/fi';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 import { useRouter } from 'next/navigation';
 
-export default function Header() {
+interface HeaderProps {
+  onMenuClick?: () => void;
+  showMenuButton?: boolean;
+}
+
+export default function Header({ onMenuClick, showMenuButton = false }: HeaderProps) {
   const { colorMode, toggleColorMode } = useColorMode();
   const { user, signOut, isAuthenticated } = useAuthContext();
   const router = useRouter();
+  
+  const headingSize = useBreakpointValue({ base: 'sm', md: 'md' });
   
   const handleLogin = () => {
     router.push('/auth/login');
@@ -54,16 +62,28 @@ export default function Header() {
     <Box 
       as="header" 
       py={2} 
-      px={4} 
+      px={{ base: 2, md: 4 }} 
       bg="white" 
       boxShadow="sm"
       borderBottom="1px"
       borderColor="gray.200"
     >
       <Flex justify="space-between" align="center">
-        <Heading size="md">פורטל המשרד הראשי</Heading>
+        <Flex align="center">
+          {showMenuButton && (
+            <IconButton
+              aria-label="פתח תפריט"
+              icon={<FiMenu />}
+              onClick={onMenuClick}
+              variant="ghost"
+              size="md"
+              mr={2}
+            />
+          )}
+          <Heading size={headingSize} noOfLines={1}>פורטל המשרד הראשי</Heading>
+        </Flex>
         
-        <HStack spacing={2}>
+        <HStack spacing={{ base: 1, md: 2 }}>
           <IconButton
             aria-label="מצב כהה/בהיר"
             icon={colorMode === 'light' ? <FiMoon /> : <FiSun />}
@@ -78,6 +98,7 @@ export default function Header() {
               icon={<FiBell />}
               variant="ghost"
               size="md"
+              display={{ base: 'none', sm: 'flex' }}
             />
           )}
           
@@ -109,6 +130,7 @@ export default function Header() {
               variant="outline"
               size="sm"
               onClick={handleLogin}
+              display={{ base: 'none', sm: 'flex' }}
             >
               התחברות
             </Button>

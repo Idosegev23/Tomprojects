@@ -23,6 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogBody,
   AlertDialogFooter,
+  useBreakpointValue,
 } from '@chakra-ui/react';
 import { 
   FiEdit, 
@@ -59,6 +60,8 @@ export default function TaskPage() {
   const cancelRef = React.useRef<HTMLButtonElement>(null);
   
   const taskId = params.id as string;
+  
+  const isMobile = useBreakpointValue({ base: true, md: false });
   
   // טעינת נתוני המשימה
   useEffect(() => {
@@ -319,23 +322,31 @@ export default function TaskPage() {
   }
   
   return (
-    <Container maxW="container.md" py={8}>
-      <Flex justifyContent="space-between" alignItems="center" mb={6}>
+    <Container maxW="container.md" py={{ base: 4, md: 8 }}>
+      <Flex 
+        justifyContent="space-between" 
+        alignItems={{ base: 'flex-start', md: 'center' }} 
+        mb={6}
+        direction={{ base: 'column', md: 'row' }}
+        gap={{ base: 4, md: 0 }}
+      >
         <Button 
           variant="outline" 
           rightIcon={<FiChevronRight />} 
           onClick={handleBack}
+          size={{ base: 'sm', md: 'md' }}
         >
           חזרה
         </Button>
         
         {isOwner && (
-          <HStack>
+          <HStack spacing={{ base: 2, md: 4 }}>
             <Button
               leftIcon={<FiEdit />}
               onClick={() => router.push(`/dashboard/tasks/${taskId}/edit`)}
               colorScheme="primary"
               variant="outline"
+              size={{ base: 'sm', md: 'md' }}
             >
               עריכה
             </Button>
@@ -344,6 +355,7 @@ export default function TaskPage() {
               onClick={onOpen}
               colorScheme="red"
               variant="outline"
+              size={{ base: 'sm', md: 'md' }}
             >
               מחיקה
             </Button>
@@ -352,7 +364,7 @@ export default function TaskPage() {
       </Flex>
       
       <Box mb={8}>
-        <HStack spacing={2} mb={2}>
+        <HStack spacing={2} mb={2} flexWrap="wrap">
           <Badge colorScheme={getPriorityColor(task.priority)} fontSize="0.8em" px={2} py={1}>
             {task.priority}
           </Badge>
@@ -366,7 +378,7 @@ export default function TaskPage() {
           )}
         </HStack>
         
-        <Heading size="xl" mb={4}>
+        <Heading size={{ base: 'lg', md: 'xl' }} mb={4}>
           {task.title}
         </Heading>
         
@@ -382,7 +394,7 @@ export default function TaskPage() {
         
         <Divider my={4} />
         
-        <VStack align="stretch" spacing={6}>
+        <VStack align="stretch" spacing={{ base: 4, md: 6 }}>
           {/* תיאור המשימה */}
           <Box>
             <Text fontWeight="bold" mb={2}>תיאור:</Text>
@@ -404,9 +416,13 @@ export default function TaskPage() {
           {/* פרטי משימה */}
           <Box>
             <Text fontWeight="bold" mb={2}>פרטי משימה:</Text>
-            <Box p={4} borderWidth="1px" borderRadius="md">
-              <HStack spacing={6} flexWrap="wrap" gap={4}>
-                <VStack align="start" minW="150px">
+            <Box p={{ base: 3, md: 4 }} borderWidth="1px" borderRadius="md">
+              <Flex 
+                direction={{ base: 'column', md: 'row' }} 
+                gap={{ base: 4, md: 6 }} 
+                flexWrap="wrap"
+              >
+                <VStack align="start" minW={{ base: '100%', md: '150px' }}>
                   <Text color="gray.600" fontSize="sm">
                     <FiFlag style={{ display: 'inline', marginLeft: '5px' }} />
                     עדיפות:
@@ -416,7 +432,7 @@ export default function TaskPage() {
                   </Badge>
                 </VStack>
                 
-                <VStack align="start" minW="150px">
+                <VStack align="start" minW={{ base: '100%', md: '150px' }}>
                   <Text color="gray.600" fontSize="sm">
                     <FiCheckSquare style={{ display: 'inline', marginLeft: '5px' }} />
                     סטטוס:
@@ -435,7 +451,7 @@ export default function TaskPage() {
                   </HStack>
                 </VStack>
                 
-                <VStack align="start" minW="150px">
+                <VStack align="start" minW={{ base: '100%', md: '150px' }}>
                   <Text color="gray.600" fontSize="sm">
                     <FiCalendar style={{ display: 'inline', marginLeft: '5px' }} />
                     תאריך יעד:
@@ -449,7 +465,7 @@ export default function TaskPage() {
                   </Text>
                 </VStack>
                 
-                <VStack align="start" minW="150px">
+                <VStack align="start" minW={{ base: '100%', md: '150px' }}>
                   <Text color="gray.600" fontSize="sm">
                     <FiClock style={{ display: 'inline', marginLeft: '5px' }} />
                     נוצר בתאריך:
@@ -458,7 +474,7 @@ export default function TaskPage() {
                     {formatDate(task.created_at)}
                   </Text>
                 </VStack>
-              </HStack>
+              </Flex>
             </Box>
           </Box>
           
@@ -468,6 +484,7 @@ export default function TaskPage() {
                 colorScheme="primary"
                 onClick={() => router.push(`/dashboard/tasks/${taskId}/edit`)}
                 leftIcon={<FiEdit />}
+                size={{ base: 'sm', md: 'md' }}
               >
                 ערוך משימה
               </Button>
@@ -481,9 +498,10 @@ export default function TaskPage() {
         isOpen={isOpen}
         leastDestructiveRef={cancelRef}
         onClose={onClose}
+        isCentered
       >
         <AlertDialogOverlay>
-          <AlertDialogContent>
+          <AlertDialogContent mx={{ base: 4, md: 0 }}>
             <AlertDialogHeader fontSize="lg" fontWeight="bold">
               מחיקת משימה
             </AlertDialogHeader>
