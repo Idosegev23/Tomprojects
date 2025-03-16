@@ -44,7 +44,7 @@ AS $$
     information_schema.columns
   WHERE 
     table_schema = 'public' AND
-    table_name = table_name
+    information_schema.columns.table_name = $1
   ORDER BY 
     ordinal_position;
 $$;

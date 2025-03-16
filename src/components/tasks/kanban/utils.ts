@@ -104,12 +104,12 @@ export const groupTasksByStatus = (tasks: Task[], statuses: string[]): Record<st
   
   // מיון המשימות לפי סטטוס
   tasks.forEach(task => {
-    const status = task.status.toLowerCase();
+    const status = task.status || 'todo';
     if (grouped[status]) {
       grouped[status].push(task);
     } else {
-      // אם הסטטוס לא קיים, נוסיף אותו לקבוצת ברירת המחדל
-      grouped['todo'].push(task);
+      // אם הסטטוס לא קיים, נוסיף אותו
+      grouped[status] = [task];
     }
   });
   
@@ -125,17 +125,42 @@ export const groupTasksByStage = (tasks: Task[], stageIds: string[]): Record<str
     grouped[stageId] = [];
   });
   
-  // מערך למשימות ללא שלב
-  grouped['unassigned'] = [];
-  
   // מיון המשימות לפי שלב
   tasks.forEach(task => {
-    if (task.stage_id && grouped[task.stage_id]) {
-      grouped[task.stage_id].push(task);
-    } else {
-      // אם אין שלב או השלב לא קיים, נוסיף למשימות ללא שלב
-      grouped['unassigned'].push(task);
+    const stageId = task.stage_id;
+    if (stageId) {
+      if (grouped[stageId]) {
+        grouped[stageId].push(task);
+      } else {
+        // אם השלב לא קיים, נוסיף אותו
+        grouped[stageId] = [task];
+      }
     }
+  });
+  
+  return grouped;
+};
+
+// פונקציה לקיבוץ משימות לפי קטגוריה
+export const groupTasksByCategory = (tasks: Task[]): Record<string, Task[]> => {
+  const grouped: Record<string, Task[]> = {};
+  const categories = new Set<string>();
+  
+  // איסוף כל הקטגוריות הקיימות
+  tasks.forEach(task => {
+    const category = task.category || 'ללא קטגוריה';
+    categories.add(category);
+  });
+  
+  // יצירת מערך ריק לכל קטגוריה
+  categories.forEach(category => {
+    grouped[category] = [];
+  });
+  
+  // מיון המשימות לפי קטגוריה
+  tasks.forEach(task => {
+    const category = task.category || 'ללא קטגוריה';
+    grouped[category].push(task);
   });
   
   return grouped;

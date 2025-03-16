@@ -40,8 +40,9 @@ import {
   Heading,
 } from '@chakra-ui/react';
 import { AddIcon, DeleteIcon, ChevronDownIcon, ChevronRightIcon, EditIcon } from '@chakra-ui/icons';
-import { Task } from '@/types/supabase';
+import { Task, Stage } from '@/types/supabase';
 import taskService from '@/lib/services/taskService';
+import stageService from '@/lib/services/stageService';
 
 interface TaskEditModalProps {
   isOpen: boolean;
@@ -71,6 +72,8 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     estimated_hours: 0,
     project_id: projectId,
     parent_task_id: null,
+    stage_id: null,
+    category: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -81,6 +84,8 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [expandedSubtasks, setExpandedSubtasks] = useState<Record<string, boolean>>({});
   const [activeTab, setActiveTab] = useState(0);
+  const [milestones, setMilestones] = useState<Stage[]>([]);
+  const [loadingMilestones, setLoadingMilestones] = useState(false);
   
   const toast = useToast();
   
@@ -111,6 +116,8 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         estimated_hours: 0,
         project_id: projectId,
         parent_task_id: null,
+        stage_id: null,
+        category: '',
       });
       setIsSubtask(false);
       setSubtasks([]);
@@ -129,7 +136,35 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     };
     
     loadParentTasks();
-  }, [task, projectId, isEditMode]);
+    
+    // טעינת מילסטונים (שלבים) של הפרויקט
+    const loadMilestones = async () => {
+      if (!projectId) return;
+      
+      try {
+        setLoadingMilestones(true);
+        const milestonesData = await stageService.getProjectStages(projectId);
+        setMilestones(milestonesData);
+        
+        // בחירת מילסטון ברירת מחדל אם יש מילסטונים ואין מילסטון נבחר
+        if (milestonesData.length > 0 && !formData.stage_id) {
+          setFormData(prev => ({ ...prev, stage_id: milestonesData[0].id }));
+        }
+      } catch (error) {
+        console.error('Error loading stages:', error);
+        toast({
+          title: 'שגיאה בטעינת שלבי הפרויקט',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+      } finally {
+        setLoadingMilestones(false);
+      }
+    };
+    
+    loadMilestones();
+  }, [task, projectId, isEditMode, toast]);
   
   // טעינת תתי-משימות
   const loadSubtasks = async (taskId: string) => {
@@ -194,6 +229,10 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     
     if (isSubtask && !formData.parent_task_id) {
       newErrors.parent_task_id = 'יש לבחור משימת אב';
+    }
+    
+    if (!formData.stage_id && milestones.length > 0) {
+      newErrors.stage_id = 'יש לבחור שלב בפרויקט';
     }
     
     if (formData.start_date && formData.due_date && new Date(formData.start_date) > new Date(formData.due_date)) {
@@ -279,6 +318,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         priority: formData.priority,
         project_id: projectId,
         parent_task_id: task.id,
+        stage_id: formData.stage_id,
       };
       
       const savedSubtask = await taskService.createTask(newSubtask as any);
@@ -489,6 +529,36 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                       placeholder="הזן תיאור מפורט למשימה"
                       rows={3}
                     />
+                  </FormControl>
+                  
+                  {/* מילסטון (שלב) */}
+                  <FormControl isRequired={milestones.length > 0} isInvalid={!!errors.stage_id}>
+                    <FormLabel>שלב בפרויקט</FormLabel>
+                    <Select
+                      name="stage_id"
+                      value={formData.stage_id || ''}
+                      onChange={handleChange}
+                      placeholder={loadingMilestones ? "טוען שלבים..." : milestones.length === 0 ? "אין שלבים זמינים" : "בחר שלב בפרויקט"}
+                      isDisabled={loadingMilestones || milestones.length === 0}
+                    >
+                      {milestones.map(milestone => (
+                        <option key={milestone.id} value={milestone.id}>{milestone.title}</option>
+                      ))}
+                    </Select>
+                    <FormErrorMessage>{errors.stage_id}</FormErrorMessage>
+                  </FormControl>
+                  
+                  <FormControl>
+                    <FormLabel>קטגוריה</FormLabel>
+                    <Select name="category" value={formData.category || ''} onChange={handleChange}>
+                      <option value="">ללא קטגוריה</option>
+                      <option value="פיתוח">פיתוח</option>
+                      <option value="עיצוב">עיצוב</option>
+                      <option value="תוכן">תוכן</option>
+                      <option value="שיווק">שיווק</option>
+                      <option value="תשתיות">תשתיות</option>
+                      <option value="אחר">אחר</option>
+                    </Select>
                   </FormControl>
                   
                   <Flex gap={4} direction={{ base: 'column', md: 'row' }}>

@@ -11,7 +11,8 @@ import {
   FiCalendar, 
   FiPieChart, 
   FiSettings, 
-  FiUsers 
+  FiUsers, 
+  FiFlag 
 } from 'react-icons/fi';
 
 type NavItemProps = {
@@ -58,6 +59,22 @@ export default function Sidebar() {
           active={pathname?.startsWith('/dashboard/tasks')}
         >
           משימות
+        </NavItem>
+        
+        <NavItem 
+          href="/dashboard/entrepreneurs" 
+          icon={FiUsers}
+          active={pathname?.startsWith('/dashboard/entrepreneurs')}
+        >
+          יזמים
+        </NavItem>
+        
+        <NavItem 
+          href="/dashboard/milestones" 
+          icon={FiFlag}
+          active={pathname?.startsWith('/dashboard/milestones')}
+        >
+          שלבי פרויקט
         </NavItem>
         
         <NavItem 

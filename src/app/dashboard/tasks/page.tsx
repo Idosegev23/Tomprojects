@@ -55,6 +55,12 @@ export default function Tasks() {
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [selectedPriority, setSelectedPriority] = useState<string>('');
+  const [selectedEntrepreneur, setSelectedEntrepreneur] = useState<string>('');
+  const [entrepreneurs, setEntrepreneurs] = useState<string[]>([]);
+  
+  // הוספת מצב למיון
+  const [sortBy, setSortBy] = useState<string>('');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -82,6 +88,16 @@ export default function Tasks() {
       try {
         const projectsData = await projectService.getProjects();
         setProjects(projectsData);
+        
+        // חילוץ רשימת היזמים הייחודיים
+        const uniqueEntrepreneurs = Array.from(
+          new Set(
+            projectsData
+              .map(project => project.entrepreneur)
+              .filter(entrepreneur => entrepreneur !== null && entrepreneur !== '') as string[]
+          )
+        );
+        setEntrepreneurs(uniqueEntrepreneurs);
       } catch (err) {
         console.error('שגיאה בטעינת פרויקטים:', err);
         toast({
@@ -119,8 +135,21 @@ export default function Tasks() {
         // סינון לפי עדיפות אם צריך (מבוצע בצד הלקוח כי אין פילטר לזה בשרת)
         let filteredTasks = tasksData;
         if (selectedPriority) {
-          filteredTasks = tasksData.filter(task => 
+          filteredTasks = filteredTasks.filter(task => 
             task.priority.toLowerCase() === selectedPriority.toLowerCase()
+          );
+        }
+        
+        // סינון לפי יזם אם צריך (מבוצע בצד הלקוח)
+        if (selectedEntrepreneur) {
+          // מציאת פרויקטים של היזם הנבחר
+          const entrepreneurProjectIds = projects
+            .filter(project => project.entrepreneur === selectedEntrepreneur)
+            .map(project => project.id);
+          
+          // סינון משימות שהן חלק מהפרויקטים של היזם
+          filteredTasks = filteredTasks.filter(task => 
+            entrepreneurProjectIds.includes(task.project_id)
           );
         }
         
@@ -143,7 +172,7 @@ export default function Tasks() {
     };
     
     fetchTasks();
-  }, [selectedProject, selectedStatus, selectedPriority, toast]);
+  }, [selectedProject, selectedStatus, selectedPriority, selectedEntrepreneur, projects, toast]);
   
   // מחיקת משימה
   const handleDeleteTask = async (taskId: string) => {
@@ -247,6 +276,56 @@ export default function Tasks() {
     (task.description && task.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
   
+  // מיון המשימות לפי הקריטריון שנבחר
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
+    // אם אין מיון, החזר את הסדר המקורי
+    if (!sortBy) return 0;
+    
+    // מיון לפי הקריטריון שנבחר
+    switch (sortBy) {
+      case 'due_date': // מיון לפי תאריך יעד
+        if (!a.due_date && !b.due_date) return 0;
+        if (!a.due_date) return sortDirection === 'asc' ? 1 : -1;
+        if (!b.due_date) return sortDirection === 'asc' ? -1 : 1;
+        return sortDirection === 'asc' 
+          ? new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+          : new Date(b.due_date).getTime() - new Date(a.due_date).getTime();
+      
+      case 'priority': // מיון לפי עדיפות
+        const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1 };
+        const aPriority = priorityOrder[a.priority.toLowerCase() as keyof typeof priorityOrder] || 0;
+        const bPriority = priorityOrder[b.priority.toLowerCase() as keyof typeof priorityOrder] || 0;
+        return sortDirection === 'asc' ? aPriority - bPriority : bPriority - aPriority;
+      
+      case 'estimated_hours': // מיון לפי זמן לביצוע
+        const aHours = a.estimated_hours || 0;
+        const bHours = b.estimated_hours || 0;
+        return sortDirection === 'asc' ? aHours - bHours : bHours - aHours;
+      
+      case 'late': // מיון לפי איחורים
+        const aIsLate = a.due_date && new Date(a.due_date) < new Date() && a.status !== 'done';
+        const bIsLate = b.due_date && new Date(b.due_date) < new Date() && b.status !== 'done';
+        
+        if (aIsLate === bIsLate) {
+          // אם שניהם באיחור או שניהם לא, מיין לפי תאריך היעד
+          if (!a.due_date && !b.due_date) return 0;
+          if (!a.due_date) return sortDirection === 'asc' ? 1 : -1;
+          if (!b.due_date) return sortDirection === 'asc' ? -1 : 1;
+          return sortDirection === 'asc'
+            ? new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+            : new Date(b.due_date).getTime() - new Date(a.due_date).getTime();
+        }
+        
+        // אם אחד באיחור והשני לא, הצג את המאחרים קודם
+        return sortDirection === 'asc'
+          ? (aIsLate ? -1 : 1)
+          : (aIsLate ? 1 : -1);
+      
+      default:
+        return 0;
+    }
+  });
+  
   // קבלת צבע לפי עדיפות
   const getPriorityColor = (priority: string) => {
     switch (priority.toLowerCase()) {
@@ -294,6 +373,15 @@ export default function Tasks() {
     { value: 'low', label: 'נמוכה' },
   ];
   
+  // אפשרויות מיון
+  const sortOptions = [
+    { value: '', label: 'ללא מיון' },
+    { value: 'due_date', label: 'תאריך יעד' },
+    { value: 'priority', label: 'עדיפות' },
+    { value: 'estimated_hours', label: 'זמן לביצוע' },
+    { value: 'late', label: 'איחורים' },
+  ];
+  
   return (
     <Box>
       <Flex justifyContent="space-between" alignItems="center" mb={6}>
@@ -307,8 +395,8 @@ export default function Tasks() {
         </Button>
       </Flex>
       
-      <Flex mb={6} gap={2} flexWrap="wrap">
-        <InputGroup maxW={{ base: "100%", md: "300px" }}>
+      <Flex direction={{ base: 'column', md: 'row' }} mb={6} gap={4} wrap="wrap">
+        <InputGroup maxW={{ base: '100%', md: '300px' }}>
           <InputLeftElement pointerEvents="none">
             <FiSearch color="gray.300" />
           </InputLeftElement>
@@ -320,21 +408,38 @@ export default function Tasks() {
         </InputGroup>
         
         <Select 
-          placeholder="כל הפרויקטים" 
-          maxW={{ base: "100%", md: "200px" }}
+          placeholder="סנן לפי פרויקט" 
           value={selectedProject}
           onChange={(e) => setSelectedProject(e.target.value)}
+          maxW={{ base: '100%', md: '200px' }}
         >
+          <option value="">כל הפרויקטים</option>
           {projects.map(project => (
-            <option key={project.id} value={project.id}>{project.name}</option>
+            <option key={project.id} value={project.id}>
+              {project.name}
+            </option>
           ))}
         </Select>
         
-        <Select
-          placeholder="סטטוס"
+        <Select 
+          placeholder="סנן לפי יזם" 
+          value={selectedEntrepreneur}
+          onChange={(e) => setSelectedEntrepreneur(e.target.value)}
+          maxW={{ base: '100%', md: '200px' }}
+        >
+          <option value="">כל היזמים</option>
+          {entrepreneurs.map(entrepreneur => (
+            <option key={entrepreneur} value={entrepreneur}>
+              {entrepreneur}
+            </option>
+          ))}
+        </Select>
+        
+        <Select 
+          placeholder="סנן לפי סטטוס" 
           value={selectedStatus}
           onChange={(e) => setSelectedStatus(e.target.value)}
-          bg="white"
+          maxW={{ base: '100%', md: '200px' }}
         >
           {statusOptions.map(option => (
             <option key={option.value} value={option.value}>{option.label}</option>
@@ -351,6 +456,30 @@ export default function Tasks() {
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </Select>
+        
+        {/* הוספת אפשרויות מיון */}
+        <Flex gap={2} maxW={{ base: '100%', md: '300px' }}>
+          <Select 
+            placeholder="מיין לפי" 
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            maxW={{ base: '100%', md: '160px' }}
+          >
+            {sortOptions.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </Select>
+          
+          <Select 
+            value={sortDirection}
+            onChange={(e) => setSortDirection(e.target.value as 'asc' | 'desc')}
+            maxW={{ base: '100%', md: '120px' }}
+            isDisabled={!sortBy}
+          >
+            <option value="asc">עולה</option>
+            <option value="desc">יורד</option>
+          </Select>
+        </Flex>
       </Flex>
       
       <Tabs variant="enclosed" onChange={(index) => setActiveTab(index)}>
@@ -382,10 +511,10 @@ export default function Tasks() {
                   נסה שוב
                 </Button>
               </Flex>
-            ) : filteredTasks.length === 0 ? (
+            ) : sortedTasks.length === 0 ? (
               <Flex direction="column" alignItems="center" justifyContent="center" my={10} textAlign="center">
                 <Text fontSize="lg">לא נמצאו משימות</Text>
-                {searchQuery || selectedProject || selectedStatus || selectedPriority ? (
+                {searchQuery || selectedProject || selectedStatus || selectedPriority || selectedEntrepreneur ? (
                   <Text>נסה לשנות את הפילטרים</Text>
                 ) : (
                   <Button 
@@ -400,7 +529,7 @@ export default function Tasks() {
               </Flex>
             ) : (
               <VStack spacing={2} align="stretch">
-                {filteredTasks.map(task => (
+                {sortedTasks.map(task => (
                   <TaskItem 
                     key={task.id} 
                     task={task} 
@@ -414,9 +543,9 @@ export default function Tasks() {
                   />
                 ))}
                 
-                {filteredTasks.length > 0 && (
+                {sortedTasks.length > 0 && (
                   <Text textAlign="center" color="gray.500" py={4}>
-                    סה"כ: {filteredTasks.length} משימות
+                    סה"כ: {sortedTasks.length} משימות
                   </Text>
                 )}
               </VStack>

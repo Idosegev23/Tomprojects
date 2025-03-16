@@ -88,6 +88,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
           description: projectData.description,
           status: projectData.status,
           planned_end_date: projectData.planned_end_date,
+          entrepreneur: projectData.entrepreneur,
         });
         
         // טעינת השלבים של הפרויקט
@@ -436,6 +437,17 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                 placeholder="הזן שם פרויקט"
               />
               <FormErrorMessage>{errors.title}</FormErrorMessage>
+            </FormControl>
+            
+            <FormControl>
+              <FormLabel htmlFor="entrepreneur">יזם</FormLabel>
+              <Input
+                id="entrepreneur"
+                name="entrepreneur"
+                value={project.entrepreneur || ''}
+                onChange={handleChange}
+                placeholder="הזן שם היזם"
+              />
             </FormControl>
             
             <FormControl>

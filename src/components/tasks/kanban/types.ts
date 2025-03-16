@@ -40,8 +40,8 @@ export interface TaskCardProps {
 
 // טיפוס לכותרת הקנבן
 export interface TaskKanbanHeaderProps {
-  viewMode: 'status' | 'stage';
-  setViewMode: (mode: 'status' | 'stage') => void;
+  viewMode: 'status' | 'stage' | 'category';
+  setViewMode: (mode: 'status' | 'stage' | 'category') => void;
   hasStages: boolean;
 }
 

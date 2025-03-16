@@ -33,13 +33,16 @@ export default function NewTask() {
     description: '',
     project_id: '',
     stage_id: '',
+    milestone_id: '',
     priority: 'medium',
     status: 'todo',
     due_date: formatDateForInput(addDays(new Date(), 7)),
+    category: '',
   });
   
   const [projects, setProjects] = useState<Project[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
+  const [milestones, setMilestones] = useState<Stage[]>([]);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [loading, setLoading] = useState<boolean>(false);
   const [projectsLoading, setProjectsLoading] = useState<boolean>(true);
@@ -76,6 +79,8 @@ export default function NewTask() {
           setTask(prev => ({ ...prev, project_id: projectsData[0].id }));
           // טעינת השלבים של הפרויקט הראשון
           fetchStages(projectsData[0].id);
+          // טעינת המילסטונים של הפרויקט הראשון
+          fetchMilestones(projectsData[0].id);
         }
       } catch (err) {
         console.error('שגיאה בטעינת פרויקטים:', err);
@@ -120,10 +125,37 @@ export default function NewTask() {
     }
   };
   
-  // עדכון שלבים כאשר משתנה הפרויקט שנבחר
+  // פונקציה לטעינת מילסטונים של פרויקט
+  const fetchMilestones = async (projectId: string) => {
+    if (!projectId) return;
+    
+    try {
+      const milestonesData = await stageService.getProjectStages(projectId);
+      setMilestones(milestonesData);
+      
+      // בחירת מילסטון ברירת מחדל אם יש מילסטונים
+      if (milestonesData.length > 0) {
+        setTask(prev => ({ ...prev, milestone_id: milestonesData[0].id }));
+      } else {
+        setTask(prev => ({ ...prev, milestone_id: '' }));
+      }
+    } catch (err) {
+      console.error('שגיאה בטעינת שלבים:', err);
+      toast({
+        title: 'שגיאה בטעינת שלבי הפרויקט',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+        position: 'top-right',
+      });
+    }
+  };
+  
+  // עדכון שלבים ומילסטונים כאשר משתנה הפרויקט שנבחר
   useEffect(() => {
     if (task.project_id) {
       fetchStages(task.project_id);
+      fetchMilestones(task.project_id);
     }
   }, [task.project_id]);
   
@@ -160,6 +192,10 @@ export default function NewTask() {
       newErrors.stage_id = 'יש לבחור שלב בפרויקט';
     }
     
+    if (!task.milestone_id && milestones.length > 0) {
+      newErrors.milestone_id = 'יש לבחור שלב בפרויקט';
+    }
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -175,7 +211,13 @@ export default function NewTask() {
     setLoading(true);
     
     try {
-      const createdTask = await taskService.createTask(task);
+      // עדכון שדה ה-stage_id לפי המילסטון שנבחר
+      const taskToSubmit = {
+        ...task,
+        stage_id: task.milestone_id
+      };
+      
+      const createdTask = await taskService.createTask(taskToSubmit);
       
       toast({
         title: 'המשימה נוצרה בהצלחה',
@@ -272,21 +314,21 @@ export default function NewTask() {
               )}
             </FormControl>
             
-            {/* שלב בפרויקט */}
-            <FormControl isRequired={stages.length > 0} isInvalid={!!errors.stage_id} flex={1}>
-              <FormLabel>שלב</FormLabel>
+            {/* מילסטון (שלב) */}
+            <FormControl isRequired={milestones.length > 0} isInvalid={!!errors.milestone_id} flex={1}>
+              <FormLabel>שלב בפרויקט</FormLabel>
               <Select
-                name="stage_id"
-                value={task.stage_id}
+                name="milestone_id"
+                value={task.milestone_id}
                 onChange={handleChange}
-                placeholder={stages.length === 0 ? "אין שלבים זמינים" : "בחר שלב"}
-                isDisabled={!task.project_id || stages.length === 0}
+                placeholder={milestones.length === 0 ? "אין שלבים זמינים" : "בחר שלב בפרויקט"}
+                isDisabled={!task.project_id || milestones.length === 0}
               >
-                {stages.map(stage => (
-                  <option key={stage.id} value={stage.id}>{stage.title}</option>
+                {milestones.map(milestone => (
+                  <option key={milestone.id} value={milestone.id}>{milestone.title}</option>
                 ))}
               </Select>
-              {errors.stage_id && <FormErrorMessage>{errors.stage_id}</FormErrorMessage>}
+              {errors.milestone_id && <FormErrorMessage>{errors.milestone_id}</FormErrorMessage>}
             </FormControl>
           </HStack>
           
@@ -315,11 +357,30 @@ export default function NewTask() {
               >
                 <option value="todo">לביצוע</option>
                 <option value="in_progress">בתהליך</option>
-                <option value="review">בבדיקה</option>
                 <option value="done">הושלם</option>
               </Select>
             </FormControl>
-            
+          </HStack>
+          
+          {/* קטגוריה */}
+          <FormControl>
+            <FormLabel>קטגוריה</FormLabel>
+            <Select
+              name="category"
+              value={task.category}
+              onChange={handleChange}
+            >
+              <option value="">ללא קטגוריה</option>
+              <option value="פיתוח">פיתוח</option>
+              <option value="עיצוב">עיצוב</option>
+              <option value="תוכן">תוכן</option>
+              <option value="שיווק">שיווק</option>
+              <option value="תשתיות">תשתיות</option>
+              <option value="אחר">אחר</option>
+            </Select>
+          </FormControl>
+          
+          <HStack spacing={6} align="flex-start">
             {/* תאריך יעד */}
             <FormControl flex={1}>
               <FormLabel>תאריך יעד</FormLabel>

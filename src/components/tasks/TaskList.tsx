@@ -38,6 +38,7 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [priorityFilter, setPriorityFilter] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -125,7 +126,10 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
     // סינון לפי עדיפות
     const matchesPriority = !priorityFilter || task.priority === priorityFilter;
     
-    return matchesSearch && matchesStatus && matchesPriority;
+    // סינון לפי קטגוריה
+    const matchesCategory = !categoryFilter || task.category === categoryFilter;
+    
+    return matchesSearch && matchesStatus && matchesPriority && matchesCategory;
   });
   
   // פונקציה לקבלת צבע לפי סטטוס
@@ -305,9 +309,24 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
           onChange={(e) => setPriorityFilter(e.target.value)}
           width={{ base: "100%", md: "200px" }}
         >
-          <option value="high">גבוהה</option>
-          <option value="medium">בינונית</option>
           <option value="low">נמוכה</option>
+          <option value="medium">בינונית</option>
+          <option value="high">גבוהה</option>
+        </Select>
+        
+        <Select
+          placeholder="סנן לפי קטגוריה"
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          width={{ base: "100%", md: "200px" }}
+        >
+          <option value="">הכל</option>
+          <option value="פיתוח">פיתוח</option>
+          <option value="עיצוב">עיצוב</option>
+          <option value="תוכן">תוכן</option>
+          <option value="שיווק">שיווק</option>
+          <option value="תשתיות">תשתיות</option>
+          <option value="אחר">אחר</option>
         </Select>
       </Flex>
       

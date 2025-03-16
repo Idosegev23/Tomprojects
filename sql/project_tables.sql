@@ -1,7 +1,7 @@
 -- פונקציות SQL ליצירת טבלאות ספציפיות לפרויקטים
 
 -- פונקציה לבדיקה אם טבלה קיימת
-CREATE OR REPLACE FUNCTION check_table_exists(table_name text)
+CREATE OR REPLACE FUNCTION check_table_exists(table_name_param text)
 RETURNS boolean AS $$
 DECLARE
   exists_val boolean;
@@ -9,7 +9,7 @@ BEGIN
   SELECT EXISTS (
     SELECT FROM information_schema.tables 
     WHERE table_schema = 'public'
-    AND table_name = $1
+    AND table_name = table_name_param
   ) INTO exists_val;
   
   RETURN exists_val;
@@ -289,4 +289,23 @@ BEGIN
   NEW.updated_at = now();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql; 
+$$ LANGUAGE plpgsql;
+
+-- פונקציה לקבלת כל המשימות מהטבלה הספציפית של הפרויקט במבנה היררכי
+CREATE OR REPLACE FUNCTION get_tasks_tree(project_id uuid)
+RETURNS SETOF tasks AS $$
+DECLARE
+  table_name text := 'project_' || project_id::text || '_tasks';
+BEGIN
+  -- בדיקה אם הטבלה קיימת
+  IF check_table_exists(table_name) THEN
+    -- החזרת כל המשימות מהטבלה הספציפית
+    RETURN QUERY EXECUTE format('
+      SELECT * FROM %I ORDER BY hierarchical_number
+    ', table_name);
+  ELSE
+    -- אם הטבלה לא קיימת, נחזיר את המשימות מהטבלה הראשית
+    RETURN QUERY SELECT * FROM tasks WHERE project_id = $1 ORDER BY hierarchical_number;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER; 

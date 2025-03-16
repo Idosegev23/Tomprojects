@@ -58,11 +58,13 @@ export default function NewProject() {
     description?: string;
     status: string;
     due_date?: string;
+    entrepreneur?: string;
   }>({
     name: '',
     description: '',
     status: 'active', // סטטוס ברירת מחדל
     due_date: '',
+    entrepreneur: '',
   });
   
   const [errors, setErrors] = useState<{
@@ -381,6 +383,7 @@ export default function NewProject() {
         status: project.status,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        entrepreneur: project.entrepreneur || null,
       };
       
       // אם יש תאריך יעד, נוסיף אותו
@@ -419,8 +422,11 @@ export default function NewProject() {
             position: 'top-right',
           });
         }
-      } else if (showCustomTaskSelection && selectedTaskIds.length > 0 && stages.length > 0) {
-        // אם המשתמש בחר משימות מותאמות אישית
+      }
+      
+      // אם המשתמש בחר משימות מותאמות אישית, נוסיף אותן בנוסף
+      // רק אם לא בחר להשתמש במשימות ברירת מחדל או אם בחר במפורש להוסיף גם משימות מותאמות אישית
+      if (selectedTaskIds.length > 0 && stages.length > 0) {
         try {
           // שכפול המשימות שנבחרו לפרויקט החדש
           const clonedTasks = await taskService.cloneTasksToProject(selectedTaskIds, createdProject.id, stages[0].id);
@@ -571,7 +577,7 @@ export default function NewProject() {
         
         <Box as="form" onSubmit={handleSubmit}>
           <VStack spacing={6} align="stretch">
-            <FormControl isInvalid={!!errors.name}>
+            <FormControl isRequired isInvalid={!!errors.name}>
               <FormLabel htmlFor="name">שם הפרויקט</FormLabel>
               <Input
                 id="name"
@@ -584,14 +590,25 @@ export default function NewProject() {
             </FormControl>
             
             <FormControl>
+              <FormLabel htmlFor="entrepreneur">יזם</FormLabel>
+              <Input
+                id="entrepreneur"
+                name="entrepreneur"
+                value={project.entrepreneur || ''}
+                onChange={handleChange}
+                placeholder="הזן שם היזם"
+              />
+            </FormControl>
+            
+            <FormControl>
               <FormLabel htmlFor="description">תיאור</FormLabel>
               <Textarea
                 id="description"
                 name="description"
                 value={project.description || ''}
                 onChange={handleChange}
-                placeholder="הזן תיאור פרויקט (לא חובה)"
-                minH="120px"
+                placeholder="תיאור הפרויקט"
+                rows={3}
               />
             </FormControl>
             
@@ -637,20 +654,20 @@ export default function NewProject() {
                 <TabPanel p={4}>
                   <FormControl display="flex" alignItems="center" mb={4}>
                     <FormLabel htmlFor="use-default-tasks" mb="0">
-                      צור משימות ברירת מחדל לפרויקט נדל"ן
+                      השתמש במשימות ברירת מחדל
                     </FormLabel>
                     <Switch
                       id="use-default-tasks"
                       isChecked={useDefaultTasks}
-                      onChange={(e) => {
-                        setUseDefaultTasks(e.target.checked);
-                        if (e.target.checked) {
-                          setShowCustomTaskSelection(false);
-                        }
-                      }}
+                      onChange={(e) => setUseDefaultTasks(e.target.checked)}
                       colorScheme="primary"
                     />
                   </FormControl>
+                  
+                  <Text fontSize="sm" color="blue.600" mb={4}>
+                    <Box as={InfoIcon} display="inline" mr={1} />
+                    ניתן לבחור גם משימות מותאמות אישית בלשונית "משימות מותאמות אישית" בנוסף למשימות ברירת המחדל.
+                  </Text>
                   
                   {useDefaultTasks && (
                     <Box p={4} bg="gray.50" borderRadius="md" mt={4}>
@@ -914,13 +931,15 @@ export default function NewProject() {
                       isChecked={showCustomTaskSelection}
                       onChange={(e) => {
                         setShowCustomTaskSelection(e.target.checked);
-                        if (e.target.checked) {
-                          setUseDefaultTasks(false);
-                        }
                       }}
                       colorScheme="primary"
                     />
                   </FormControl>
+                  
+                  <Text fontSize="sm" color="blue.600" mb={4}>
+                    <Box as={InfoIcon} display="inline" mr={1} />
+                    ניתן לבחור משימות מותאמות אישית בנוסף למשימות ברירת המחדל. המשימות שתבחר יתווספו לפרויקט החדש.
+                  </Text>
                   
                   {showCustomTaskSelection && (
                     <Box p={4} bg="gray.50" borderRadius="md" mt={4}>

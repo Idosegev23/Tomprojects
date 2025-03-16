@@ -3,7 +3,7 @@ import { Task, NewTask, UpdateTask } from '@/types/supabase';
 
 export const taskService = {
   // קריאת כל המשימות
-  async getTasks(filters?: { projectId?: string, status?: string }): Promise<Task[]> {
+  async getTasks(filters?: { projectId?: string, status?: string, category?: string }): Promise<Task[]> {
     let query = supabase
       .from('tasks')
       .select('*')
@@ -17,6 +17,11 @@ export const taskService = {
     // הוספת סינון לפי סטטוס אם צריך
     if (filters?.status) {
       query = query.eq('status', filters.status);
+    }
+    
+    // הוספת סינון לפי קטגוריה אם צריך
+    if (filters?.category) {
+      query = query.eq('category', filters.category);
     }
     
     const { data, error } = await query;
@@ -381,6 +386,23 @@ export const taskService = {
       throw new Error(error.message);
     }
     
+    // סנכרון המשימות לטבלה הספציפית של הפרויקט
+    if (data && data.length > 0) {
+      try {
+        for (const task of data) {
+          // קריאה לפונקציה SQL להעתקת המשימה לטבלה הספציפית של הפרויקט
+          await supabase.rpc('copy_task_to_project_table', {
+            task_id: task.id,
+            project_id: projectId
+          });
+        }
+        console.log(`${data.length} tasks assigned and synced to project-specific table for project ${projectId}`);
+      } catch (syncError) {
+        console.error(`Error syncing tasks to project-specific table for project ${projectId}:`, syncError);
+        // נמשיך גם אם יש שגיאה בסנכרון
+      }
+    }
+    
     return data || [];
   },
   
@@ -401,8 +423,31 @@ export const taskService = {
       return [];
     }
     
+    // בדיקה אם המשימות כבר קיימות בפרויקט
+    const { data: existingTasks, error: existingError } = await supabase
+      .from('tasks')
+      .select('original_task_id')
+      .eq('project_id', projectId)
+      .in('original_task_id', taskIds);
+    
+    if (existingError) {
+      console.error('Error checking existing tasks:', existingError);
+      // נמשיך למרות השגיאה
+    }
+    
+    // יצירת מערך של מזהי משימות מקוריות שכבר קיימות בפרויקט
+    const existingOriginalTaskIds = new Set(existingTasks?.map(task => task.original_task_id) || []);
+    
+    // סינון המשימות המקוריות כך שנשכפל רק משימות שעדיין לא קיימות בפרויקט
+    const tasksToClone = originalTasks.filter(task => !existingOriginalTaskIds.has(task.id));
+    
+    if (tasksToClone.length === 0) {
+      console.log(`All selected tasks already exist in project ${projectId}`);
+      return [];
+    }
+    
     // יצירת עותקים של המשימות עם מזהים חדשים ושיוך לפרויקט החדש
-    const clonedTasks = originalTasks.map(task => {
+    const clonedTasks = tasksToClone.map(task => {
       const newTask = {
         ...task,
         id: crypto.randomUUID(),
@@ -421,6 +466,11 @@ export const taskService = {
       return newTask;
     });
     
+    // אם אין משימות לשכפול, נחזיר מערך ריק
+    if (clonedTasks.length === 0) {
+      return [];
+    }
+    
     // הוספת המשימות המשוכפלות לטבלה הראשית
     const { data, error } = await supabase
       .from('tasks')
@@ -432,9 +482,22 @@ export const taskService = {
       throw new Error(error.message);
     }
     
-    // כרגע לא נוסיף את המשימות לטבלה הייחודית של הפרויקט
-    // כיוון שהפונקציות SQL הנדרשות לא קיימות במסד הנתונים
-    console.log(`Note: Adding cloned tasks to project-specific table for project ${projectId} is currently disabled.`);
+    // סנכרון המשימות המשוכפלות לטבלה הספציפית של הפרויקט
+    if (data && data.length > 0) {
+      try {
+        for (const task of data) {
+          // קריאה לפונקציה SQL להעתקת המשימה לטבלה הספציפית של הפרויקט
+          await supabase.rpc('copy_task_to_project_table', {
+            task_id: task.id,
+            project_id: projectId
+          });
+        }
+        console.log(`${data.length} cloned tasks synced to project-specific table for project ${projectId}`);
+      } catch (syncError) {
+        console.error(`Error syncing cloned tasks to project-specific table for project ${projectId}:`, syncError);
+        // נמשיך גם אם יש שגיאה בסנכרון
+      }
+    }
     
     return data || [];
   },
@@ -668,6 +731,21 @@ export const taskService = {
   
   // יצירת משימות ברירת מחדל לפרויקט נדל"ן חדש
   async createDefaultTasksForRealEstateProject(projectId: string, stageId: string): Promise<Task[]> {
+    // בדיקה אם כבר יש משימות בפרויקט
+    const { data: existingTasks, error: existingError } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('project_id', projectId)
+      .limit(10);
+    
+    if (existingError) {
+      console.error(`Error checking existing tasks for project ${projectId}:`, existingError);
+      // נמשיך למרות השגיאה
+    } else if (existingTasks && existingTasks.length > 0) {
+      console.log(`Project ${projectId} already has tasks, skipping default task creation`);
+      return existingTasks;
+    }
+    
     // קבלת השלבים של הפרויקט
     const { data: stages, error: stagesError } = await supabase
       .from('stages')
@@ -889,9 +967,22 @@ export const taskService = {
       throw new Error(error.message);
     }
     
-    // כרגע לא נוסיף את המשימות לטבלה הייחודית של הפרויקט
-    // כיוון שהפונקציות SQL הנדרשות לא קיימות במסד הנתונים
-    console.log(`Note: Adding tasks to project-specific table for project ${projectId} is currently disabled.`);
+    // סנכרון המשימות לטבלה הספציפית של הפרויקט
+    if (data && data.length > 0) {
+      try {
+        for (const task of data) {
+          // קריאה לפונקציה SQL להעתקת המשימה לטבלה הספציפית של הפרויקט
+          await supabase.rpc('copy_task_to_project_table', {
+            task_id: task.id,
+            project_id: projectId
+          });
+        }
+        console.log(`${data.length} default tasks synced to project-specific table for project ${projectId}`);
+      } catch (syncError) {
+        console.error(`Error syncing default tasks to project-specific table for project ${projectId}:`, syncError);
+        // נמשיך גם אם יש שגיאה בסנכרון
+      }
+    }
     
     return data || [];
   },
@@ -985,6 +1076,21 @@ export const taskService = {
     // עדכון כל תתי המשימות של המשימה הזו
     await this.updateSubtaskHierarchicalNumbers(taskId);
     
+    // סנכרון המשימה המעודכנת לטבלה הספציפית של הפרויקט
+    if (updatedTask.project_id) {
+      try {
+        // קריאה לפונקציה SQL לעדכון המשימה בטבלה הספציפית של הפרויקט
+        await supabase.rpc('update_task_in_project_table', {
+          task_id: updatedTask.id,
+          project_id: updatedTask.project_id
+        });
+        console.log(`Task hierarchy updated and synced to project-specific table for project ${updatedTask.project_id}`);
+      } catch (syncError) {
+        console.error(`Error syncing updated task hierarchy to project-specific table for project ${updatedTask.project_id}:`, syncError);
+        // נמשיך גם אם יש שגיאה בסנכרון
+      }
+    }
+    
     return updatedTask;
   },
   
@@ -1005,6 +1111,20 @@ export const taskService = {
       
       // עדכון רקורסיבי של תתי-המשימות של תת-המשימה
       await this.updateSubtaskHierarchicalNumbers(subtask.id);
+      
+      // סנכרון תת-המשימה המעודכנת לטבלה הספציפית של הפרויקט
+      if (subtask.project_id) {
+        try {
+          // קריאה לפונקציה SQL לעדכון המשימה בטבלה הספציפית של הפרויקט
+          await supabase.rpc('update_task_in_project_table', {
+            task_id: subtask.id,
+            project_id: subtask.project_id
+          });
+        } catch (syncError) {
+          console.error(`Error syncing updated subtask to project-specific table for project ${subtask.project_id}:`, syncError);
+          // נמשיך גם אם יש שגיאה בסנכרון
+        }
+      }
     }
   },
 
@@ -1050,18 +1170,34 @@ export const taskService = {
   async getProjectSpecificTasks(projectId: string): Promise<Task[]> {
     try {
       // קריאה לפונקציה SQL לקבלת המשימות מהטבלה הספציפית של הפרויקט
-      const { data: projectTasks, error: projectTasksError } = await supabase.rpc('get_project_tasks', {
-        project_id: projectId
-      });
-      
-      if (projectTasksError) {
-        console.error(`Error fetching tasks from project-specific table for project ${projectId}:`, projectTasksError);
-        throw new Error(projectTasksError.message);
+      try {
+        const { data: projectTasks, error: projectTasksError } = await supabase.rpc('get_tasks_tree', {
+          project_id: projectId
+        });
+        
+        if (!projectTasksError && projectTasks) {
+          console.log(`Retrieved ${projectTasks.length} tasks from get_tasks_tree for project ${projectId}`);
+          return projectTasks;
+        }
+      } catch (treeError) {
+        console.error(`Error calling get_tasks_tree for project ${projectId}:`, treeError);
+        // נמשיך לנסות את get_project_tasks
       }
       
-      return projectTasks || [];
-    } catch (err) {
-      console.error(`Error in getProjectSpecificTasks for project ${projectId}:`, err);
+      // ננסה להשתמש בפונקציה get_project_tasks
+      try {
+        const { data: projectTasks, error: projectTasksError } = await supabase.rpc('get_project_tasks', {
+          project_id: projectId
+        });
+        
+        if (!projectTasksError && projectTasks) {
+          console.log(`Retrieved ${projectTasks.length} tasks from project-specific table for project ${projectId}`);
+          return projectTasks;
+        }
+      } catch (projectTableError) {
+        console.error(`Error fetching tasks from project-specific table for project ${projectId}:`, projectTableError);
+        // נמשיך לקריאה מהטבלה הראשית אם יש שגיאה בקריאה מהטבלה הספציפית
+      }
       
       // אם יש שגיאה, ננסה לקרוא מהטבלה הראשית
       console.log(`Falling back to main tasks table for project ${projectId}`);
@@ -1073,11 +1209,14 @@ export const taskService = {
         .order('hierarchical_number', { ascending: true });
       
       if (error) {
-        console.error(`Error fetching tasks for project ${projectId} from main table:`, error);
+        console.error(`Error fetching tasks from main table for project ${projectId}:`, error);
         throw new Error(error.message);
       }
       
       return data || [];
+    } catch (err) {
+      console.error(`Error in getProjectSpecificTasks for project ${projectId}:`, err);
+      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה');
     }
   },
   

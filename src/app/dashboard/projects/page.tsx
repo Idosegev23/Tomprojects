@@ -26,6 +26,7 @@ import {
   HStack,
   Spinner,
   useToast,
+  Select,
 } from '@chakra-ui/react';
 import { FiPlus, FiSearch, FiMoreVertical, FiEdit, FiTrash2, FiClock, FiAlertCircle } from 'react-icons/fi';
 import Link from 'next/link';
@@ -38,6 +39,8 @@ export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filterByEntrepreneur, setFilterByEntrepreneur] = useState<string | null>(null);
+  const [entrepreneurs, setEntrepreneurs] = useState<string[]>([]);
   
   const router = useRouter();
   const toast = useToast();
@@ -49,6 +52,16 @@ export default function Projects() {
         setLoading(true);
         const data = await projectService.getProjects();
         setProjects(data);
+        
+        // חילוץ רשימת היזמים הייחודיים
+        const uniqueEntrepreneurs = Array.from(
+          new Set(
+            data
+              .map(project => project.entrepreneur)
+              .filter(entrepreneur => entrepreneur !== null && entrepreneur !== '') as string[]
+          )
+        );
+        setEntrepreneurs(uniqueEntrepreneurs);
       } catch (err) {
         console.error('שגיאה בטעינת פרויקטים:', err);
         setError('אירעה שגיאה בטעינת הפרויקטים. אנא נסה שוב מאוחר יותר.');
@@ -103,9 +116,16 @@ export default function Projects() {
   };
   
   // סינון פרויקטים לפי חיפוש
-  const filteredProjects = projects.filter(project => 
-    project.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProjects = projects.filter(project => {
+    const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (project.description && project.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (project.owner && project.owner.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (project.entrepreneur && project.entrepreneur.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    const matchesEntrepreneur = !filterByEntrepreneur || project.entrepreneur === filterByEntrepreneur;
+    
+    return matchesSearch && matchesEntrepreneur;
+  });
   
   // פונקציה שמחזירה צבע לפי סטטוס
   const getStatusColor = (status: string) => {
@@ -148,18 +168,43 @@ export default function Projects() {
         </Button>
       </Flex>
       
-      <Flex mb={6} gap={2}>
-        <InputGroup maxW="300px">
-          <InputLeftElement pointerEvents="none">
-            <FiSearch color="gray.300" />
-          </InputLeftElement>
-          <Input 
-            placeholder="חיפוש פרויקטים..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </InputGroup>
-      </Flex>
+      <Box mb={6}>
+        <Flex direction={{ base: 'column', md: 'row' }} mb={4} gap={4}>
+          <InputGroup maxW={{ base: '100%', md: '400px' }}>
+            <InputLeftElement pointerEvents="none">
+              <FiSearch color="gray.300" />
+            </InputLeftElement>
+            <Input
+              placeholder="חיפוש פרויקטים..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </InputGroup>
+          
+          <Select 
+            placeholder="סנן לפי יזם" 
+            maxW={{ base: '100%', md: '250px' }}
+            value={filterByEntrepreneur || ''}
+            onChange={(e) => setFilterByEntrepreneur(e.target.value || null)}
+          >
+            <option value="">כל היזמים</option>
+            {entrepreneurs.map(entrepreneur => (
+              <option key={entrepreneur} value={entrepreneur}>
+                {entrepreneur}
+              </option>
+            ))}
+          </Select>
+          
+          <Button
+            leftIcon={<FiPlus />}
+            colorScheme="primary"
+            onClick={() => router.push('/dashboard/projects/new')}
+            ml="auto"
+          >
+            פרויקט חדש
+          </Button>
+        </Flex>
+      </Box>
       
       {loading ? (
         <Flex justifyContent="center" my={10}>
@@ -297,6 +342,10 @@ function ProjectCard({ project, formatDate, getStatusColor, onDelete }: ProjectC
           
           <Text fontSize="sm" noOfLines={2}>
             {project.owner ? `בעלים: ${project.owner}` : 'אין פרטי בעלים'}
+          </Text>
+          
+          <Text fontSize="sm" noOfLines={2}>
+            {project.entrepreneur ? `יזם: ${project.entrepreneur}` : 'אין פרטי יזם'}
           </Text>
           
           <Flex justifyContent="space-between">

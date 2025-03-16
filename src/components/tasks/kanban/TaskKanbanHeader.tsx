@@ -10,7 +10,7 @@ import {
   Button,
   Kbd,
 } from '@chakra-ui/react';
-import { FiFilter, FiTag, FiClock } from 'react-icons/fi';
+import { FiFilter, FiTag, FiClock, FiLayers } from 'react-icons/fi';
 import { TaskKanbanHeaderProps } from './types';
 
 const TaskKanbanHeader: React.FC<TaskKanbanHeaderProps> = ({
@@ -38,6 +38,13 @@ const TaskKanbanHeader: React.FC<TaskKanbanHeaderProps> = ({
                 leftIcon={<FiClock />}
               >
                 לפי שלבים
+              </Button>
+              <Button
+                colorScheme={viewMode === 'category' ? 'blue' : 'gray'}
+                onClick={() => setViewMode('category')}
+                leftIcon={<FiLayers />}
+              >
+                לפי קטגוריה
               </Button>
             </ButtonGroup>
           )}

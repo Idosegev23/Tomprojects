@@ -26,6 +26,7 @@ export interface Database {
           priority: string
           progress: number
           description: string | null
+          entrepreneur: string | null
         }
         Insert: {
           id?: string
@@ -43,6 +44,7 @@ export interface Database {
           priority?: string
           progress?: number
           description?: string | null
+          entrepreneur?: string | null
         }
         Update: {
           id?: string
@@ -60,6 +62,7 @@ export interface Database {
           priority?: string
           progress?: number
           description?: string | null
+          entrepreneur?: string | null
         }
       }
       stages: {

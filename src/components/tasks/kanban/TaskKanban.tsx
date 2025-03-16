@@ -6,11 +6,12 @@ import {
   Spinner,
   useToast,
   Portal,
+  Text,
 } from '@chakra-ui/react';
 import { motion } from 'framer-motion';
 import { Task, Stage, Project } from '@/types/supabase';
 import { TaskKanbanProps, statuses, statusLabels } from './types';
-import { getStatusColor, groupTasksByStatus, groupTasksByStage } from './utils';
+import { getStatusColor, groupTasksByStatus, groupTasksByStage, groupTasksByCategory } from './utils';
 import { TaskKanbanHeader } from './';
 import KanbanColumn from './KanbanColumn';
 
@@ -28,12 +29,13 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
 }) => {
   const [groupedTasks, setGroupedTasks] = useState<Record<string, Task[]>>({});
   const [groupedByStage, setGroupedByStage] = useState<Record<string, Task[]>>({});
+  const [groupedByCategory, setGroupedByCategory] = useState<Record<string, Task[]>>({});
   const [loading, setLoading] = useState(true);
   const [draggingTask, setDraggingTask] = useState<Task | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [collapsedColumns, setCollapsedColumns] = useState<Record<string, boolean>>({});
-  const [viewMode, setViewMode] = useState<'status' | 'stage'>('status');
+  const [viewMode, setViewMode] = useState<'status' | 'stage' | 'category'>('status');
   const [ghostCardPosition, setGhostCardPosition] = useState({ x: 0, y: 0 });
   const [showGhostCard, setShowGhostCard] = useState(false);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -47,7 +49,7 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
     return project ? project.name : projectId;
   };
   
-  // קבוצות המשימות לפי סטטוס ושלב
+  // קבוצות המשימות לפי סטטוס, שלב וקטגוריה
   useEffect(() => {
     // קיבוץ לפי סטטוס
     const grouped = groupTasksByStatus(tasks, statuses);
@@ -59,6 +61,10 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
       const groupedStages = groupTasksByStage(tasks, stageIds);
       setGroupedByStage(groupedStages);
     }
+    
+    // קיבוץ לפי קטגוריה
+    const groupedCategories = groupTasksByCategory(tasks);
+    setGroupedByCategory(groupedCategories);
     
     setLoading(false);
   }, [tasks, stages]);
@@ -128,96 +134,70 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
     });
   };
   
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>, columnId: string) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
     e.preventDefault();
     
     // קבלת מזהה המשימה מנתוני הגרירה
     const taskId = e.dataTransfer.getData('text/plain');
+    if (!taskId || !draggingTask) return;
     
-    if (viewMode === 'status') {
-      // המרת הסטטוס לאותיות קטנות
-      let normalizedColumnId = columnId.toLowerCase();
-      
-      // הגדרת הסטטוסים המותרים בדיוק כפי שהם מוגדרים בבסיס הנתונים
-      const validDatabaseStatuses = ['todo', 'in_progress', 'review', 'done'];
-      
-      // וידוא שהסטטוס תקין ותואם לאילוצים בבסיס הנתונים
-      // בדיקה אם הערך קיים ברשימת הסטטוסים המותרים
-      const validStatus = validDatabaseStatuses.includes(normalizedColumnId);
-      
-      if (!validStatus) {
-        // אם הסטטוס לא תקין, ננסה למפות אותו לערך תקין
-        if (normalizedColumnId === 'לביצוע' || normalizedColumnId === 'to do' || normalizedColumnId === 'todo') {
-          normalizedColumnId = 'todo';
-        } else if (normalizedColumnId === 'בתהליך' || normalizedColumnId === 'in progress' || normalizedColumnId === 'in_progress') {
-          normalizedColumnId = 'in_progress';
-        } else if (normalizedColumnId === 'בבדיקה' || normalizedColumnId === 'in review' || normalizedColumnId === 'review') {
-          normalizedColumnId = 'review';
-        } else if (normalizedColumnId === 'הושלם' || normalizedColumnId === 'completed' || normalizedColumnId === 'done') {
-          normalizedColumnId = 'done';
-        } else {
-          // אם לא הצלחנו למפות, נציג שגיאה
+    // איפוס מצב הגרירה
+    setDragOverColumn(null);
+    setDragOverStage(null);
+    setShowGhostCard(false);
+    
+    try {
+      if (viewMode === 'status') {
+        // עדכון סטטוס המשימה
+        if (draggingTask.status !== targetId) {
+          if (onStatusChange) {
+            await onStatusChange(taskId, targetId);
+          }
+          
           toast({
-            title: 'שגיאה בעדכון סטטוס',
-            description: `הסטטוס "${normalizedColumnId}" אינו תקין. יש להשתמש באחד מהסטטוסים המוגדרים: ${validDatabaseStatuses.join(', ')}`,
-            status: 'error',
-            duration: 3000,
+            title: 'סטטוס המשימה עודכן',
+            status: 'success',
+            duration: 2000,
             isClosable: true,
-            position: 'top-right',
           });
-          return;
+        }
+      } else if (viewMode === 'stage') {
+        // עדכון שלב המשימה
+        if (draggingTask.stage_id !== targetId) {
+          if (onStageChange) {
+            await onStageChange(taskId, targetId);
+          }
+          
+          toast({
+            title: 'שלב המשימה עודכן',
+            status: 'success',
+            duration: 2000,
+            isClosable: true,
+          });
         }
       }
-      
-      // עדכון סטטוס המשימה
-      if (taskId && onStatusChange && draggingTask?.status !== normalizedColumnId) {
-        onStatusChange(taskId, normalizedColumnId);
-      
-        // הצגת הודעה למשתמש
-        toast({
-          title: 'סטטוס המשימה עודכן',
-          description: `המשימה עודכנה לסטטוס: ${statusLabels[normalizedColumnId] || normalizedColumnId}`,
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-          position: 'top-right',
-        });
-      }
-    } else {
-      // עדכון שלב המשימה
-      if (taskId && onStageChange && draggingTask?.stage_id !== columnId) {
-        onStageChange(taskId, columnId);
-        
-        // מציאת שם השלב להצגה בהודעה
-        const stageName = columnId === 'unassigned' 
-          ? 'ללא שלב' 
-          : stages.find(stage => stage.id === columnId)?.title || columnId;
-        
-        // הצגת הודעה למשתמש
-        toast({
-          title: 'שלב המשימה עודכן',
-          description: `המשימה הועברה לשלב: ${stageName}`,
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-          position: 'top-right',
-        });
-      }
+      // לא ניתן לשנות קטגוריה בגרירה, לכן אין טיפול למצב 'category'
+    } catch (error) {
+      console.error('Error updating task:', error);
+      toast({
+        title: 'שגיאה בעדכון המשימה',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
     }
-    
-    handleDragEnd();
   };
   
-  // עדכון כרטיס הרפאים שעוקב אחרי העכבר
-  useEffect(() => {
-    if (!showGhostCard) return;
-    
-    const handleMouseMove = (e: MouseEvent) => {
+  // פונקציה לטיפול בתזוזת העכבר בזמן גרירה
+  const handleMouseMove = (e: MouseEvent) => {
+    if (showGhostCard) {
       setGhostCardPosition({ x: e.clientX, y: e.clientY });
-    };
-    
+    }
+  };
+  
+  // הוספת מאזין לתזוזת העכבר
+  useEffect(() => {
     window.addEventListener('mousemove', handleMouseMove);
-    
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
     };
@@ -226,10 +206,42 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
   // תצוגת טעינה
   if (loading) {
     return (
-      <Flex justify="center" align="center" h="200px">
-        <Spinner size="xl" thickness="4px" speed="0.65s" color="blue.500" />
+      <Flex justify="center" align="center" p={8}>
+        <Spinner size="xl" />
       </Flex>
     );
+  }
+  
+  // הכנת הנתונים לתצוגה לפי מצב התצוגה הנבחר
+  let columns: { id: string; title: string; tasks: Task[]; color: string }[] = [];
+  
+  if (viewMode === 'status') {
+    // תצוגה לפי סטטוס
+    columns = Object.keys(groupedTasks).map(status => ({
+      id: status,
+      title: statusLabels[status] || status,
+      tasks: groupedTasks[status] || [],
+      color: getStatusColor(status),
+    }));
+  } else if (viewMode === 'stage') {
+    // תצוגה לפי שלב
+    columns = Object.keys(groupedByStage).map(stageId => {
+      const stage = stages.find(s => s.id === stageId);
+      return {
+        id: stageId,
+        title: stage ? stage.title : 'לא משויך',
+        tasks: groupedByStage[stageId] || [],
+        color: 'blue',
+      };
+    });
+  } else if (viewMode === 'category') {
+    // תצוגה לפי קטגוריה
+    columns = Object.keys(groupedByCategory).map(category => ({
+      id: category,
+      title: category || 'ללא קטגוריה',
+      tasks: groupedByCategory[category] || [],
+      color: 'purple',
+    }));
   }
   
   // הוספת אנימציה לפעימה

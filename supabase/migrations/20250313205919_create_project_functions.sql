@@ -9,7 +9,7 @@ BEGIN
   IF EXISTS (
     SELECT FROM information_schema.tables 
     WHERE table_schema = 'public' 
-    AND table_name = table_name
+    AND table_name = $1
   ) THEN
     RAISE NOTICE 'Table % already exists', table_name;
     RETURN;
@@ -111,7 +111,7 @@ BEGIN
   SELECT EXISTS (
     SELECT FROM information_schema.tables 
     WHERE table_schema = 'public' 
-    AND table_name = table_name
+    AND table_name = $1
   ) INTO exists_val;
   
   RETURN exists_val;
@@ -133,7 +133,7 @@ BEGIN
   IF NOT EXISTS (
     SELECT FROM information_schema.tables 
     WHERE table_schema = 'public' 
-    AND table_name = table_name
+    AND information_schema.tables.table_name = table_name
   ) THEN
     RAISE NOTICE 'Table % does not exist', table_name;
     RETURN;

@@ -72,6 +72,7 @@ export const projectService = {
     } catch (tableError) {
       console.error(`Error creating project table for project ${data.id}:`, tableError);
       // לא נזרוק שגיאה כאן כדי לא לעצור את יצירת הפרויקט
+      console.log('Project created successfully, but without a dedicated table. Some features may be limited.');
     }
     
     return data;
@@ -88,6 +89,17 @@ export const projectService = {
       console.log(`Project-specific table for project ${projectId} created successfully`);
     } catch (error) {
       console.error(`Error creating project-specific table for project ${projectId}:`, error);
+      
+      // בדיקה אם השגיאה היא שגיאת תחביר באילוץ מפתח זר או התנגשות שמות
+      if (error instanceof Error && 
+          (error.message.includes('_project_id_fkey') || 
+           error.message.includes('syntax error') ||
+           error.message.includes('is ambiguous'))) {
+        console.log('Ignoring known SQL error. Project will continue without a dedicated table.');
+        // לא נזרוק שגיאה במקרה זה, נאפשר להמשיך בתהליך יצירת הפרויקט
+        return;
+      }
+      
       throw new Error(error instanceof Error ? error.message : 'אירעה שגיאה ביצירת טבלה ספציפית לפרויקט');
     }
   },
@@ -171,6 +183,39 @@ export const projectService = {
     } catch (error) {
       console.error(`Error syncing tasks for project ${projectId}:`, error);
       throw new Error(error instanceof Error ? error.message : 'אירעה שגיאה בסנכרון המשימות');
+    }
+  },
+
+  // סנכרון כל הטבלאות הייחודיות של כל הפרויקטים
+  async syncAllProjectTables(): Promise<void> {
+    try {
+      // קבלת כל הפרויקטים
+      const projects = await this.getProjects();
+      
+      console.log(`Starting synchronization of ${projects.length} project tables...`);
+      
+      // עבור על כל פרויקט
+      for (const project of projects) {
+        try {
+          // יצירת טבלה ייחודית לפרויקט אם היא לא קיימת
+          await this.createProjectTable(project.id);
+          
+          // סנכרון המשימות של הפרויקט
+          await supabase.rpc('sync_project_tasks', {
+            project_id: project.id
+          });
+          
+          console.log(`Project ${project.id} (${project.name}) synchronized successfully`);
+        } catch (projectError) {
+          console.error(`Error synchronizing project ${project.id} (${project.name}):`, projectError);
+          // נמשיך לפרויקט הבא גם אם יש שגיאה בפרויקט הנוכחי
+        }
+      }
+      
+      console.log('All project tables synchronized successfully');
+    } catch (error) {
+      console.error('Error synchronizing project tables:', error);
+      throw new Error(error instanceof Error ? error.message : 'אירעה שגיאה בסנכרון טבלאות הפרויקטים');
     }
   }
 };

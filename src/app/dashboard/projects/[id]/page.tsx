@@ -498,6 +498,14 @@ export default function ProjectPage({ params }: ProjectPageProps) {
             <GridItem>
               <Card>
                 <CardBody>
+                  <Text fontWeight="bold" mb={1}>יזם</Text>
+                  <Text>{project.entrepreneur || 'לא הוגדר'}</Text>
+                </CardBody>
+              </Card>
+            </GridItem>
+            <GridItem>
+              <Card>
+                <CardBody>
                   <Text fontWeight="bold" mb={1}>משימות</Text>
                   <Text>{tasks.length}</Text>
                 </CardBody>
