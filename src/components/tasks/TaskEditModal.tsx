@@ -74,6 +74,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     parent_task_id: null,
     stage_id: null,
     category: '',
+    is_global_template: false,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -119,6 +120,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         parent_task_id: null,
         stage_id: null,
         category: '',
+        is_global_template: false,
       });
       setIsSubtask(false);
       setSubtasks([]);
@@ -218,6 +220,12 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
       // אם זו לא תת-משימה, מאפסים את משימת האב
       setFormData(prev => ({ ...prev, parent_task_id: null }));
     }
+  };
+  
+  // טיפול בשינוי הצגה ברשימה הכללית
+  const handleGlobalTemplateToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const isChecked = e.target.checked;
+    setFormData(prev => ({ ...prev, is_global_template: isChecked }));
   };
   
   // פונקציה לוולידציה של הטופס
@@ -529,6 +537,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
             <TabList mb="1em">
               <Tab>פרטי משימה</Tab>
               {isEditMode && <Tab>תתי-משימות</Tab>}
+              <Tab>הגדרות נוספות</Tab>
             </TabList>
             
             <TabPanels>
@@ -651,7 +660,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                             >
                               {milestones.map(stage => (
                                 <option key={stage.id} value={stage.id}>
-                                  {stage.name}
+                                  {stage.title}
                                 </option>
                               ))}
                             </Select>
@@ -777,6 +786,47 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                   </VStack>
                 </TabPanel>
               )}
+              
+              {/* לשונית הגדרות נוספות */}
+              <TabPanel p={0}>
+                <VStack spacing={4} align="stretch">
+                  {/* אפשרות להוספה לרשימה הכללית */}
+                  {projectId && !isEditMode && (
+                    <FormControl mt={4}>
+                      <HStack justify="space-between">
+                        <FormLabel fontSize="md" mb={0}>הוסף גם לרשימת המשימות הכללית</FormLabel>
+                        <Switch
+                          colorScheme="blue"
+                          size="md"
+                          isChecked={formData.is_global_template || false}
+                          onChange={handleGlobalTemplateToggle}
+                        />
+                      </HStack>
+                      <Text fontSize="sm" color="gray.600" mt={1}>
+                        אפשרות זו תאפשר לך להשתמש במשימה זו גם בפרויקטים עתידיים
+                      </Text>
+                    </FormControl>
+                  )}
+                  
+                  {/* קטגוריה */}
+                  <FormControl mt={4}>
+                    <FormLabel>קטגוריה</FormLabel>
+                    <Select
+                      name="category"
+                      value={formData.category || ''}
+                      onChange={handleChange}
+                      placeholder="בחר קטגוריה"
+                    >
+                      <option value="פיתוח">פיתוח</option>
+                      <option value="עיצוב">עיצוב</option>
+                      <option value="תוכן">תוכן</option>
+                      <option value="שיווק">שיווק</option>
+                      <option value="תשתיות">תשתיות</option>
+                      <option value="אחר">אחר</option>
+                    </Select>
+                  </FormControl>
+                </VStack>
+              </TabPanel>
             </TabPanels>
           </Tabs>
         </ModalBody>

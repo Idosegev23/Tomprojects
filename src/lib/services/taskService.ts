@@ -12,6 +12,10 @@ export const taskService = {
     // הוספת סינון לפי פרויקט אם צריך
     if (filters?.projectId) {
       query = query.eq('project_id', filters.projectId);
+    } else {
+      // אם לא מסננים לפי פרויקט, נסנן החוצה משימות ספציפיות לפרויקט
+      // ונציג רק משימות גלובליות או משימות עם is_global_template=true
+      query = query.or('project_id.is.null,is_global_template.eq.true');
     }
     
     // הוספת סינון לפי סטטוס אם צריך
@@ -66,6 +70,11 @@ export const taskService = {
         // אחרת, נחשב את המספר ההיררכי הבא כמשימת שורש
         task.hierarchical_number = await this.getNextRootHierarchicalNumber(task.project_id);
       }
+    }
+    
+    // אם המשימה היא ללא פרויקט, היא אוטומטית גלובלית
+    if (!task.project_id && task.is_global_template === undefined) {
+      task.is_global_template = true;
     }
     
     const { data, error } = await supabase
@@ -455,7 +464,8 @@ export const taskService = {
         stage_id: stageId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        original_task_id: task.id // שמירת המזהה המקורי
+        original_task_id: task.id, // שמירת המזהה המקורי
+        is_global_template: false // לא להוסיף לרשימה הכללית, כי זו משימה ספציפית לפרויקט
       };
       
       // אם יש מספר היררכי, נאפס אותו כדי שייקבע מחדש

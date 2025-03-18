@@ -150,6 +150,8 @@ export interface Database {
           hierarchical_number: string | null
           parent_task_id: string | null
           is_template: boolean | null
+          is_global_template: boolean | null
+          original_task_id: string | null
         }
         Insert: {
           id?: string
@@ -177,6 +179,8 @@ export interface Database {
           hierarchical_number?: string | null
           parent_task_id?: string | null
           is_template?: boolean | null
+          is_global_template?: boolean | null
+          original_task_id?: string | null
         }
         Update: {
           id?: string
@@ -204,6 +208,8 @@ export interface Database {
           hierarchical_number?: string | null
           parent_task_id?: string | null
           is_template?: boolean | null
+          is_global_template?: boolean | null
+          original_task_id?: string | null
         }
       }
     }
