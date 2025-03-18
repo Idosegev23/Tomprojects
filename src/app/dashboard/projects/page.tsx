@@ -319,7 +319,7 @@ function ProjectCard({ project, formatDate, getStatusColor, getStatusText, onDel
             {project.name}
           </Heading>
           
-          <Menu>
+          <Menu closeOnSelect={true}>
             <MenuButton
               as={IconButton}
               icon={<FiMoreVertical />}

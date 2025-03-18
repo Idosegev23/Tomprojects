@@ -9,6 +9,32 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      entrepreneurs: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          contact_info: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          contact_info?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          contact_info?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
       projects: {
         Row: {
           id: string
@@ -27,6 +53,7 @@ export interface Database {
           progress: number
           description: string | null
           entrepreneur: string | null
+          entrepreneur_id: string | null
         }
         Insert: {
           id?: string
@@ -45,6 +72,7 @@ export interface Database {
           progress?: number
           description?: string | null
           entrepreneur?: string | null
+          entrepreneur_id?: string | null
         }
         Update: {
           id?: string
@@ -63,6 +91,7 @@ export interface Database {
           progress?: number
           description?: string | null
           entrepreneur?: string | null
+          entrepreneur_id?: string | null
         }
       }
       stages: {
@@ -191,6 +220,10 @@ export interface Database {
 }
 
 // טיפוסים נוספים למערכת
+export type Entrepreneur = Database['public']['Tables']['entrepreneurs']['Row']
+export type NewEntrepreneur = Database['public']['Tables']['entrepreneurs']['Insert']
+export type UpdateEntrepreneur = Database['public']['Tables']['entrepreneurs']['Update']
+
 export type Project = Database['public']['Tables']['projects']['Row']
 export type NewProject = Database['public']['Tables']['projects']['Insert']
 export type UpdateProject = Database['public']['Tables']['projects']['Update']

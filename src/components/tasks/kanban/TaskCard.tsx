@@ -180,7 +180,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
           </HStack>
         </VStack>
         
-        <Menu>
+        <Text fontSize="xs" color="gray.500">{task.id.substring(0, 8)}</Text>
+        
+        <Menu closeOnSelect={true}>
           <MenuButton
             as={IconButton}
             aria-label="אפשרויות"

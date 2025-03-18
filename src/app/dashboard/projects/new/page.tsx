@@ -42,14 +42,22 @@ import {
   GridItem,
   Collapse,
   Icon,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton,
 } from '@chakra-ui/react';
 import { useRouter } from 'next/navigation';
-import { FiSave, FiArrowRight, FiSearch, FiCalendar, FiFilter, FiTag, FiPlus, FiTrash2 } from 'react-icons/fi';
+import { FiSave, FiArrowRight, FiSearch, FiCalendar, FiFilter, FiTag, FiPlus, FiTrash2, FiX, FiCheck } from 'react-icons/fi';
 import { InfoIcon } from '@chakra-ui/icons';
 import projectService from '@/lib/services/projectService';
 import stageService from '@/lib/services/stageService';
 import taskService from '@/lib/services/taskService';
-import type { NewProject, Task, NewTask } from '@/types/supabase';
+import entrepreneurService from '@/lib/services/entrepreneurService';
+import type { NewProject, Task, NewTask, Entrepreneur } from '@/types/supabase';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 
 export default function NewProject() {
@@ -58,13 +66,13 @@ export default function NewProject() {
     description?: string;
     status: string;
     due_date?: string;
-    entrepreneur?: string;
+    entrepreneur_id?: string;
   }>({
     name: '',
     description: '',
     status: 'active', // סטטוס ברירת מחדל
     due_date: '',
-    entrepreneur: '',
+    entrepreneur_id: '',
   });
   
   const [errors, setErrors] = useState<{
@@ -108,6 +116,11 @@ export default function NewProject() {
   const router = useRouter();
   const toast = useToast();
   
+  const [entrepreneurs, setEntrepreneurs] = useState<Entrepreneur[]>([]);
+  const [loadingEntrepreneurs, setLoadingEntrepreneurs] = useState(false);
+  const [newEntrepreneurName, setNewEntrepreneurName] = useState('');
+  const { isOpen: isEntrepreneurModalOpen, onOpen: openEntrepreneurModal, onClose: closeEntrepreneurModal } = useDisclosure();
+  
   // טעינת כל המשימות הזמינות כתבניות
   useEffect(() => {
     const loadAllTaskTemplates = async () => {
@@ -130,6 +143,29 @@ export default function NewProject() {
     };
     
     loadAllTaskTemplates();
+  }, [toast]);
+  
+  // טעינת יזמים בעת טעינת הדף
+  useEffect(() => {
+    const fetchEntrepreneurs = async () => {
+      try {
+        setLoadingEntrepreneurs(true);
+        const data = await entrepreneurService.getEntrepreneurs();
+        setEntrepreneurs(data);
+      } catch (error) {
+        console.error('שגיאה בטעינת יזמים:', error);
+        toast({
+          title: 'שגיאה בטעינת יזמים',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+      } finally {
+        setLoadingEntrepreneurs(false);
+      }
+    };
+    
+    fetchEntrepreneurs();
   }, [toast]);
   
   // סינון משימות לפי חיפוש וסינונים פעילים
@@ -383,7 +419,7 @@ export default function NewProject() {
         status: project.status,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        entrepreneur: project.entrepreneur || null,
+        entrepreneur_id: project.entrepreneur_id || null,
       };
       
       // אם יש תאריך יעד, נוסיף אותו
@@ -566,6 +602,51 @@ export default function NewProject() {
     return createdTasks;
   };
   
+  // הוספת יזם חדש
+  const handleAddNewEntrepreneur = async () => {
+    if (!newEntrepreneurName.trim()) {
+      toast({
+        title: 'שגיאה',
+        description: 'שם היזם לא יכול להיות ריק',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    try {
+      const newEntrepreneur = await entrepreneurService.createEntrepreneur({
+        name: newEntrepreneurName.trim()
+      });
+      
+      setEntrepreneurs([...entrepreneurs, newEntrepreneur]);
+      setProject({
+        ...project,
+        entrepreneur_id: newEntrepreneur.id
+      });
+      
+      toast({
+        title: 'יזם נוסף בהצלחה',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+      
+      setNewEntrepreneurName('');
+      closeEntrepreneurModal();
+    } catch (error) {
+      console.error('שגיאה בהוספת יזם:', error);
+      toast({
+        title: 'שגיאה בהוספת יזם',
+        description: 'אירעה שגיאה בהוספת היזם החדש',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+  
   return (
     <Container maxW="container.md" py={6}>
       <VStack spacing={8} align="stretch">
@@ -590,14 +671,30 @@ export default function NewProject() {
             </FormControl>
             
             <FormControl>
-              <FormLabel htmlFor="entrepreneur">יזם</FormLabel>
-              <Input
-                id="entrepreneur"
-                name="entrepreneur"
-                value={project.entrepreneur || ''}
-                onChange={handleChange}
-                placeholder="הזן שם היזם"
-              />
+              <FormLabel htmlFor="entrepreneur_id">יזם</FormLabel>
+              <Flex>
+                <Select
+                  id="entrepreneur_id"
+                  name="entrepreneur_id"
+                  value={project.entrepreneur_id || ''}
+                  onChange={handleChange}
+                  placeholder="בחר יזם"
+                  mr={2}
+                >
+                  {entrepreneurs.map((entrepreneur) => (
+                    <option key={entrepreneur.id} value={entrepreneur.id}>
+                      {entrepreneur.name}
+                    </option>
+                  ))}
+                </Select>
+                <Button
+                  leftIcon={<FiPlus />}
+                  onClick={openEntrepreneurModal}
+                  isLoading={loadingEntrepreneurs}
+                >
+                  יזם חדש
+                </Button>
+              </Flex>
             </FormControl>
             
             <FormControl>
@@ -1102,6 +1199,33 @@ export default function NewProject() {
           </VStack>
         </Box>
       </VStack>
+      
+      {/* מודל להוספת יזם חדש */}
+      <Modal isOpen={isEntrepreneurModalOpen} onClose={closeEntrepreneurModal}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>הוספת יזם חדש</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <FormControl isRequired>
+              <FormLabel>שם היזם</FormLabel>
+              <Input
+                value={newEntrepreneurName}
+                onChange={(e) => setNewEntrepreneurName(e.target.value)}
+                placeholder="הכנס שם יזם"
+              />
+            </FormControl>
+          </ModalBody>
+          <ModalFooter>
+            <Button colorScheme="blue" mr={3} onClick={handleAddNewEntrepreneur}>
+              הוסף
+            </Button>
+            <Button variant="ghost" onClick={closeEntrepreneurModal}>
+              ביטול
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Container>
   );
 } 

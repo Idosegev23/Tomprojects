@@ -23,6 +23,7 @@ import { FiPlus, FiFilter, FiEdit, FiTrash2, FiCalendar, FiMoreVertical } from '
 import { Task } from '@/types/supabase';
 import taskService from '@/lib/services/taskService';
 import TaskEditModal from '@/components/tasks/TaskEditModal';
+import QuickAddTask from '@/components/tasks/QuickAddTask';
 
 interface TaskListProps {
   projectId: string;
@@ -75,6 +76,24 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
   const handleCreateTask = () => {
     setSelectedTask(null);
     setIsTaskModalOpen(true);
+  };
+  
+  // פונקציה להתייחסות למשימה שנוצרה
+  const handleTaskCreated = (task: Task) => {
+    // הוספת המשימה החדשה לרשימה המקומית
+    setTasks([task, ...tasks]);
+    
+    // שליחת עדכון להורה
+    if (onTaskCreated) {
+      onTaskCreated(task);
+    }
+    
+    toast({
+      title: 'המשימה נוצרה בהצלחה',
+      status: 'success',
+      duration: 3000,
+      isClosable: true,
+    });
   };
   
   // פונקציה לפתיחת מודל עריכת משימה
@@ -282,6 +301,9 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
         </HStack>
       </Flex>
       
+      {/* הוספת משימה מהירה */}
+      <QuickAddTask projectId={projectId} onTaskCreated={handleTaskCreated} />
+      
       {/* סינון וחיפוש */}
       <Flex mb={4} gap={2} wrap="wrap">
         <Input
@@ -442,16 +464,22 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
       )}
       
       {/* מודל יצירה/עריכת משימה */}
-      {isTaskModalOpen && (
-        <TaskEditModal
-          isOpen={isTaskModalOpen}
-          onClose={() => setIsTaskModalOpen(false)}
-          task={selectedTask}
-          projectId={projectId}
-          onTaskCreated={onTaskCreated}
-          onTaskUpdated={onTaskUpdated}
-        />
-      )}
+      <TaskEditModal
+        isOpen={isTaskModalOpen}
+        onClose={() => setIsTaskModalOpen(false)}
+        task={selectedTask}
+        projectId={projectId}
+        onTaskCreated={handleTaskCreated}
+        onTaskUpdated={(updatedTask) => {
+          // עדכון המשימה ברשימה המקומית
+          setTasks(tasks.map(task => task.id === updatedTask.id ? updatedTask : task));
+          
+          // שליחת עדכון להורה
+          if (onTaskUpdated) {
+            onTaskUpdated(updatedTask);
+          }
+        }}
+      />
     </Box>
   );
 };

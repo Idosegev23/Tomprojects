@@ -103,7 +103,7 @@ export default function Header({ onMenuClick, showMenuButton = false }: HeaderPr
           )}
           
           {isAuthenticated ? (
-            <Menu>
+            <Menu closeOnSelect={true}>
               <MenuButton
                 as={IconButton}
                 icon={<FiUser />}

@@ -39,7 +39,7 @@ import {
   Center,
   Heading,
 } from '@chakra-ui/react';
-import { AddIcon, DeleteIcon, ChevronDownIcon, ChevronRightIcon, EditIcon } from '@chakra-ui/icons';
+import { AddIcon, DeleteIcon, ChevronDownIcon, ChevronRightIcon, EditIcon, ChevronUpIcon } from '@chakra-ui/icons';
 import { Task, Stage } from '@/types/supabase';
 import taskService from '@/lib/services/taskService';
 import stageService from '@/lib/services/stageService';
@@ -86,6 +86,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   const [activeTab, setActiveTab] = useState(0);
   const [milestones, setMilestones] = useState<Stage[]>([]);
   const [loadingMilestones, setLoadingMilestones] = useState(false);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   
   const toast = useToast();
   
@@ -219,7 +220,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     }
   };
   
-  // וולידציה של הטופס
+  // פונקציה לוולידציה של הטופס
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     
@@ -229,10 +230,6 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     
     if (isSubtask && !formData.parent_task_id) {
       newErrors.parent_task_id = 'יש לבחור משימת אב';
-    }
-    
-    if (!formData.stage_id && milestones.length > 0) {
-      newErrors.stage_id = 'יש לבחור שלב בפרויקט';
     }
     
     if (formData.start_date && formData.due_date && new Date(formData.start_date) > new Date(formData.due_date)) {
@@ -473,11 +470,20 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   // פונקציה עזר לקבלת צבע לפי סטטוס
   const getStatusColor = (status: string): string => {
     switch (status.toLowerCase()) {
-      case 'todo': return 'gray';
-      case 'in_progress': return 'blue';
-      case 'review': return 'orange';
-      case 'done': return 'green';
-      default: return 'gray';
+      case 'todo':
+      case 'לביצוע':
+        return 'gray.300';
+      case 'in_progress':
+      case 'בתהליך':
+        return 'blue.500';
+      case 'review':
+      case 'לבדיקה':
+        return 'orange.400';
+      case 'done':
+      case 'הושלם':
+        return 'green.500';
+      default:
+        return 'gray.400';
     }
   };
   
@@ -491,7 +497,26 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
       default: return status;
     }
   };
-  
+
+  const getPriorityColor = (priority: string): string => {
+    switch (priority.toLowerCase()) {
+      case 'high':
+      case 'גבוהה':
+        return 'red.500';
+      case 'medium':
+      case 'בינונית':
+        return 'orange.400';
+      case 'low':
+      case 'נמוכה':
+        return 'green.400';
+      case 'urgent':
+      case 'דחופה':
+        return 'purple.500';
+      default:
+        return 'gray.400';
+    }
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="xl">
       <ModalOverlay />
@@ -509,6 +534,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
             <TabPanels>
               <TabPanel p={0}>
                 <VStack spacing={4} align="stretch">
+                  {/* שדות חובה בראש הטופס */}
                   <FormControl isRequired isInvalid={!!errors.title}>
                     <FormLabel>כותרת</FormLabel>
                     <Input
@@ -516,6 +542,8 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                       value={formData.title || ''}
                       onChange={handleChange}
                       placeholder="הזן כותרת למשימה"
+                      size="lg"
+                      autoFocus
                     />
                     <FormErrorMessage>{errors.title}</FormErrorMessage>
                   </FormControl>
@@ -531,40 +559,18 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                     />
                   </FormControl>
                   
-                  {/* מילסטון (שלב) */}
-                  <FormControl isRequired={milestones.length > 0} isInvalid={!!errors.stage_id}>
-                    <FormLabel>שלב בפרויקט</FormLabel>
-                    <Select
-                      name="stage_id"
-                      value={formData.stage_id || ''}
-                      onChange={handleChange}
-                      placeholder={loadingMilestones ? "טוען שלבים..." : milestones.length === 0 ? "אין שלבים זמינים" : "בחר שלב בפרויקט"}
-                      isDisabled={loadingMilestones || milestones.length === 0}
-                    >
-                      {milestones.map(milestone => (
-                        <option key={milestone.id} value={milestone.id}>{milestone.title}</option>
-                      ))}
-                    </Select>
-                    <FormErrorMessage>{errors.stage_id}</FormErrorMessage>
-                  </FormControl>
-                  
-                  <FormControl>
-                    <FormLabel>קטגוריה</FormLabel>
-                    <Select name="category" value={formData.category || ''} onChange={handleChange}>
-                      <option value="">ללא קטגוריה</option>
-                      <option value="פיתוח">פיתוח</option>
-                      <option value="עיצוב">עיצוב</option>
-                      <option value="תוכן">תוכן</option>
-                      <option value="שיווק">שיווק</option>
-                      <option value="תשתיות">תשתיות</option>
-                      <option value="אחר">אחר</option>
-                    </Select>
-                  </FormControl>
-                  
+                  {/* סטטוס ועדיפות בשורה אחת */}
                   <Flex gap={4} direction={{ base: 'column', md: 'row' }}>
                     <FormControl flex="1">
                       <FormLabel>סטטוס</FormLabel>
-                      <Select name="status" value={formData.status || 'todo'} onChange={handleChange}>
+                      <Select 
+                        name="status" 
+                        value={formData.status || 'todo'} 
+                        onChange={handleChange}
+                        bg={getStatusColor(formData.status || 'todo')}
+                        color={formData.status === 'todo' ? 'black' : 'white'}
+                        fontWeight="medium"
+                      >
                         <option value="todo">לביצוע</option>
                         <option value="in_progress">בתהליך</option>
                         <option value="review">בבדיקה</option>
@@ -574,7 +580,14 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                     
                     <FormControl flex="1">
                       <FormLabel>עדיפות</FormLabel>
-                      <Select name="priority" value={formData.priority || 'medium'} onChange={handleChange}>
+                      <Select 
+                        name="priority" 
+                        value={formData.priority || 'medium'} 
+                        onChange={handleChange}
+                        bg={getPriorityColor(formData.priority || 'medium')}
+                        color={formData.priority === 'low' ? 'black' : 'white'}
+                        fontWeight="medium"
+                      >
                         <option value="low">נמוכה</option>
                         <option value="medium">בינונית</option>
                         <option value="high">גבוהה</option>
@@ -583,6 +596,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                     </FormControl>
                   </Flex>
                   
+                  {/* תאריכים */}
                   <Flex gap={4} direction={{ base: 'column', md: 'row' }}>
                     <FormControl flex="1">
                       <FormLabel>תאריך התחלה</FormLabel>
@@ -606,49 +620,109 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                     </FormControl>
                   </Flex>
                   
-                  <FormControl>
-                    <FormLabel>שעות מוערכות</FormLabel>
-                    <Input
-                      name="estimated_hours"
-                      type="number"
-                      value={formData.estimated_hours || 0}
-                      onChange={handleNumberChange}
-                      min={0}
-                      step={0.5}
-                    />
-                  </FormControl>
-                  
-                  <Divider my={2} />
-                  
-                  <FormControl display="flex" alignItems="center">
-                    <FormLabel htmlFor="is-subtask" mb="0">
-                      זוהי תת-משימה
-                    </FormLabel>
-                    <Switch
-                      id="is-subtask"
-                      isChecked={isSubtask}
-                      onChange={handleSubtaskToggle}
-                    />
-                  </FormControl>
-                  
-                  <Collapse in={isSubtask} animateOpacity>
-                    <FormControl isInvalid={!!errors.parent_task_id}>
-                      <FormLabel>משימת אב</FormLabel>
-                      <Select
-                        name="parent_task_id"
-                        value={formData.parent_task_id || ''}
-                        onChange={handleChange}
-                        placeholder="בחר משימת אב"
+                  {/* מידע נוסף - מקופל בברירת מחדל */}
+                  <Box>
+                    <Flex justify="center" mt={2} mb={2}>
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+                        rightIcon={isAdvancedOpen ? <ChevronUpIcon /> : <ChevronDownIcon />}
                       >
-                        {parentTasks.map(pt => (
-                          <option key={pt.id} value={pt.id}>
-                            {pt.hierarchical_number ? `${pt.hierarchical_number} - ` : ''}{pt.title}
-                          </option>
-                        ))}
-                      </Select>
-                      <FormErrorMessage>{errors.parent_task_id}</FormErrorMessage>
-                    </FormControl>
-                  </Collapse>
+                        {isAdvancedOpen ? 'הסתר שדות נוספים' : 'הצג שדות נוספים'}
+                      </Button>
+                    </Flex>
+                    
+                    <Collapse in={isAdvancedOpen} animateOpacity>
+                      <VStack spacing={4} align="stretch">
+                        {/* מילסטון (שלב) */}
+                        {loadingMilestones ? (
+                          <Flex justify="center" p={4}>
+                            <Spinner size="sm" />
+                          </Flex>
+                        ) : milestones.length > 0 ? (
+                          <FormControl isInvalid={!!errors.stage_id}>
+                            <FormLabel>שלב בפרויקט</FormLabel>
+                            <Select
+                              name="stage_id"
+                              value={formData.stage_id || ''}
+                              onChange={handleChange}
+                              placeholder="בחר שלב בפרויקט"
+                            >
+                              {milestones.map(stage => (
+                                <option key={stage.id} value={stage.id}>
+                                  {stage.name}
+                                </option>
+                              ))}
+                            </Select>
+                            <FormErrorMessage>{errors.stage_id}</FormErrorMessage>
+                          </FormControl>
+                        ) : null}
+                        
+                        {/* קטגוריה */}
+                        <FormControl>
+                          <FormLabel>קטגוריה</FormLabel>
+                          <Select
+                            name="category"
+                            value={formData.category || ''}
+                            onChange={handleChange}
+                            placeholder="בחר קטגוריה"
+                          >
+                            <option value="פיתוח">פיתוח</option>
+                            <option value="עיצוב">עיצוב</option>
+                            <option value="תוכן">תוכן</option>
+                            <option value="שיווק">שיווק</option>
+                            <option value="תשתיות">תשתיות</option>
+                            <option value="אחר">אחר</option>
+                          </Select>
+                        </FormControl>
+                        
+                        <FormControl>
+                          <FormLabel>שעות מוערכות</FormLabel>
+                          <Input
+                            name="estimated_hours"
+                            type="number"
+                            value={formData.estimated_hours || 0}
+                            onChange={handleNumberChange}
+                            min={0}
+                            step={0.5}
+                          />
+                        </FormControl>
+                        
+                        {/* הגדרת תת-משימה */}
+                        <FormControl display="flex" alignItems="center">
+                          <FormLabel htmlFor="is-subtask" mb="0">
+                            זוהי תת-משימה
+                          </FormLabel>
+                          <Switch
+                            id="is-subtask"
+                            isChecked={isSubtask}
+                            onChange={handleSubtaskToggle}
+                          />
+                        </FormControl>
+                        
+                        {/* בחירת משימת אב */}
+                        {isSubtask && (
+                          <FormControl isInvalid={!!errors.parent_task_id}>
+                            <FormLabel>משימת אב</FormLabel>
+                            <Select
+                              name="parent_task_id"
+                              value={formData.parent_task_id || ''}
+                              onChange={handleChange}
+                              placeholder="בחר משימת אב"
+                            >
+                              {parentTasks.map(parentTask => (
+                                <option key={parentTask.id} value={parentTask.id}>
+                                  {parentTask.title}
+                                </option>
+                              ))}
+                            </Select>
+                            <FormErrorMessage>{errors.parent_task_id}</FormErrorMessage>
+                          </FormControl>
+                        )}
+                      </VStack>
+                    </Collapse>
+                  </Box>
                 </VStack>
               </TabPanel>
               
@@ -670,6 +744,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                         value={newSubtaskTitle}
                         onChange={(e) => setNewSubtaskTitle(e.target.value)}
                         flex="1"
+                        autoFocus={activeTab === 1}
                       />
                       <Button
                         leftIcon={<AddIcon />}
@@ -715,7 +790,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
             onClick={handleSubmit}
             isLoading={loading}
           >
-            {isEditMode ? 'עדכן' : 'צור'}
+            {isEditMode ? 'שמור שינויים' : 'צור משימה'}
           </Button>
         </ModalFooter>
       </ModalContent>

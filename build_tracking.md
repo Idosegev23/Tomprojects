@@ -194,6 +194,13 @@
     "data_type": "text",
     "is_nullable": "YES",
     "column_default": null
+  },
+  {
+    "table_name": "projects",
+    "column_name": "entrepreneur_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
   }
 ]
 ```
@@ -416,6 +423,54 @@
     "data_type": "uuid",
     "is_nullable": "YES",
     "column_default": null
+  }
+]
+```
+
+#### entrepreneurs
+```json
+[
+  {
+    "table_name": "entrepreneurs",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "uuid_generate_v4()"
+  },
+  {
+    "table_name": "entrepreneurs",
+    "column_name": "name",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "entrepreneurs",
+    "column_name": "description",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "entrepreneurs",
+    "column_name": "contact_info",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "entrepreneurs",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "entrepreneurs",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": "now()"
   }
 ]
 ```

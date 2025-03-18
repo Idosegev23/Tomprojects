@@ -29,13 +29,22 @@ import {
   Icon,
   IconButton,
   HStack,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton,
+  useDisclosure,
 } from '@chakra-ui/react';
 import { useRouter } from 'next/navigation';
 import { FiSave, FiArrowRight, FiPlus, FiTrash2, FiArrowUp, FiArrowDown } from 'react-icons/fi';
 import projectService from '@/lib/services/projectService';
 import stageService from '@/lib/services/stageService';
 import taskService from '@/lib/services/taskService';
-import { Project, UpdateProject, Stage, UpdateStage } from '@/types/supabase';
+import entrepreneurService from '@/lib/services/entrepreneurService';
+import { Project, UpdateProject, Stage, UpdateStage, Entrepreneur } from '@/types/supabase';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 
 type ProjectEditPageProps = {
@@ -46,90 +55,84 @@ type ProjectEditPageProps = {
 
 export default function ProjectEditPage({ params }: ProjectEditPageProps) {
   const { id } = params;
-  const [originalProject, setOriginalProject] = useState<Project | null>(null);
-  const [project, setProject] = useState<Partial<UpdateProject>>({});
+  const [project, setProject] = useState<Project | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
-  const [newStageName, setNewStageName] = useState<string>('');
-  
   const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  
   const [errors, setErrors] = useState<{
     title?: string;
     status?: string;
   }>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newStage, setNewStage] = useState('');
+  const [entrepreneurs, setEntrepreneurs] = useState<Entrepreneur[]>([]);
+  const [loadingEntrepreneurs, setLoadingEntrepreneurs] = useState(false);
+  const [newEntrepreneurName, setNewEntrepreneurName] = useState('');
+  const { isOpen: isEntrepreneurModalOpen, onOpen: openEntrepreneurModal, onClose: closeEntrepreneurModal } = useDisclosure();
   
-  const { user } = useAuthContext();
   const router = useRouter();
   const toast = useToast();
   
-  // טעינת פרטי הפרויקט
+  // טעינת נתונים
   useEffect(() => {
-    // אם המזהה הוא "new", נפנה את המשתמש לדף יצירת פרויקט חדש
-    if (id === 'new') {
-      router.push('/dashboard/projects/new');
-      return;
-    }
-    
-    const fetchProjectData = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
         
         // טעינת פרטי הפרויקט
         const projectData = await projectService.getProjectById(id);
         if (!projectData) {
-          setError('הפרויקט לא נמצא');
+          toast({
+            title: 'שגיאה',
+            description: 'הפרויקט לא נמצא',
+            status: 'error',
+            duration: 5000,
+            isClosable: true,
+          });
+          router.push('/dashboard/projects');
           return;
         }
-        setOriginalProject(projectData);
-        setProject({
-          name: projectData.name,
-          description: projectData.description,
-          status: projectData.status,
-          planned_end_date: projectData.planned_end_date,
-          entrepreneur: projectData.entrepreneur,
-        });
+        setProject(projectData);
         
         // טעינת השלבים של הפרויקט
         const stagesData = await stageService.getProjectStages(id);
         setStages(stagesData);
-      } catch (err) {
-        console.error('שגיאה בטעינת פרטי הפרויקט:', err);
-        setError('אירעה שגיאה בטעינת פרטי הפרויקט');
         
+        // טעינת יזמים
+        const entrepreneursData = await entrepreneurService.getEntrepreneurs();
+        setEntrepreneurs(entrepreneursData);
+      } catch (error) {
+        console.error('שגיאה בטעינת נתונים:', error);
         toast({
           title: 'שגיאה בטעינת נתונים',
-          description: err instanceof Error ? err.message : 'אירעה שגיאה בלתי צפויה',
+          description: error instanceof Error ? error.message : 'אירעה שגיאה לא ידועה',
           status: 'error',
           duration: 5000,
           isClosable: true,
-          position: 'top-right',
         });
       } finally {
         setLoading(false);
       }
     };
     
-    fetchProjectData();
-  }, [id, toast]);
+    fetchData();
+  }, [id, router, toast]);
   
   // בדיקת הרשאות - רק הבעלים יכול לערוך
   useEffect(() => {
-    if (originalProject && user && originalProject.owner !== user.email) {
+    if (project && user && project.owner !== user.email) {
       setError('אין לך הרשאות לערוך פרויקט זה');
       router.push(`/dashboard/projects/${id}`);
     }
-  }, [originalProject, user, id, router]);
+  }, [project, user, id, router]);
   
   const validateForm = () => {
     const newErrors: { title?: string; status?: string } = {};
     
-    if (!project.name?.trim()) {
+    if (!project?.name?.trim()) {
       newErrors.title = 'שם הפרויקט הוא שדה חובה';
     }
     
-    if (!project.status) {
+    if (!project?.status) {
       newErrors.status = 'יש לבחור סטטוס';
     }
     
@@ -145,21 +148,29 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) {
+    if (!validateForm() || !project) {
       return;
     }
     
     try {
       setIsSubmitting(true);
       
-      // עדכון תאריך העדכון
-      const updatedProject: UpdateProject = {
-        ...project,
+      // הכנת אובייקט העדכון
+      const updateData: UpdateProject = {
+        name: project.name,
+        status: project.status,
+        description: project.description,
         updated_at: new Date().toISOString(),
+        entrepreneur_id: project.entrepreneur_id,
       };
       
+      // אם יש תאריך יעד, נוסיף אותו
+      if (project.planned_end_date) {
+        updateData.planned_end_date = project.planned_end_date;
+      }
+      
       // שליחה לשרת
-      await projectService.updateProject(id, updatedProject);
+      await projectService.updateProject(id, updateData);
       
       toast({
         title: 'הפרויקט עודכן בהצלחה',
@@ -189,7 +200,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
   
   // הוספת שלב חדש
   const handleAddStage = async () => {
-    if (!newStageName.trim()) {
+    if (!newStage.trim()) {
       toast({
         title: 'שם שלב ריק',
         description: 'יש להזין שם לשלב החדש',
@@ -207,7 +218,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
       // יצירת שלב חדש
       const newStage = await stageService.createStage({
         project_id: id,
-        title: newStageName,
+        title: newStage,
         order: maxOrder,
       });
       
@@ -215,7 +226,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
       setStages([...stages, newStage]);
       
       // איפוס שדה הקלט
-      setNewStageName('');
+      setNewStage('');
       
       toast({
         title: 'השלב נוצר בהצלחה',
@@ -374,6 +385,54 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
     }
   };
   
+  // הוספת יזם חדש
+  const handleAddNewEntrepreneur = async () => {
+    if (!newEntrepreneurName.trim()) {
+      toast({
+        title: 'שגיאה',
+        description: 'שם היזם לא יכול להיות ריק',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    try {
+      const newEntrepreneur = await entrepreneurService.createEntrepreneur({
+        name: newEntrepreneurName.trim()
+      });
+      
+      setEntrepreneurs([...entrepreneurs, newEntrepreneur]);
+      
+      if (project) {
+        setProject({
+          ...project,
+          entrepreneur_id: newEntrepreneur.id
+        });
+      }
+      
+      toast({
+        title: 'יזם נוסף בהצלחה',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+      
+      setNewEntrepreneurName('');
+      closeEntrepreneurModal();
+    } catch (error) {
+      console.error('שגיאה בהוספת יזם:', error);
+      toast({
+        title: 'שגיאה בהוספת יזם',
+        description: 'אירעה שגיאה בהוספת היזם החדש',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+  
   if (loading) {
     return (
       <Flex justify="center" align="center" minH="60vh">
@@ -382,7 +441,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
     );
   }
   
-  if (error || !originalProject) {
+  if (error || !project) {
     return (
       <Alert
         status="error"
@@ -440,14 +499,30 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
             </FormControl>
             
             <FormControl>
-              <FormLabel htmlFor="entrepreneur">יזם</FormLabel>
-              <Input
-                id="entrepreneur"
-                name="entrepreneur"
-                value={project.entrepreneur || ''}
-                onChange={handleChange}
-                placeholder="הזן שם היזם"
-              />
+              <FormLabel htmlFor="entrepreneur_id">יזם</FormLabel>
+              <Flex>
+                <Select
+                  id="entrepreneur_id"
+                  name="entrepreneur_id"
+                  value={project?.entrepreneur_id || ''}
+                  onChange={handleChange}
+                  placeholder="בחר יזם"
+                  mr={2}
+                >
+                  {entrepreneurs.map((entrepreneur) => (
+                    <option key={entrepreneur.id} value={entrepreneur.id}>
+                      {entrepreneur.name}
+                    </option>
+                  ))}
+                </Select>
+                <Button
+                  leftIcon={<FiPlus />}
+                  onClick={openEntrepreneurModal}
+                  isLoading={loadingEntrepreneurs}
+                >
+                  יזם חדש
+                </Button>
+              </Flex>
             </FormControl>
             
             <FormControl>
@@ -573,8 +648,8 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                   <FormLabel>הוסף שלב חדש</FormLabel>
                   <Flex>
                     <Input
-                      value={newStageName}
-                      onChange={(e) => setNewStageName(e.target.value)}
+                      value={newStage}
+                      onChange={(e) => setNewStage(e.target.value)}
                       placeholder="שם השלב החדש"
                       mr={2}
                     />
@@ -593,6 +668,33 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
           </Card>
         </Box>
       </SimpleGrid>
+      
+      {/* מודל להוספת יזם חדש */}
+      <Modal isOpen={isEntrepreneurModalOpen} onClose={closeEntrepreneurModal}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>הוספת יזם חדש</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <FormControl isRequired>
+              <FormLabel>שם היזם</FormLabel>
+              <Input
+                value={newEntrepreneurName}
+                onChange={(e) => setNewEntrepreneurName(e.target.value)}
+                placeholder="הכנס שם יזם"
+              />
+            </FormControl>
+          </ModalBody>
+          <ModalFooter>
+            <Button colorScheme="blue" mr={3} onClick={handleAddNewEntrepreneur}>
+              הוסף
+            </Button>
+            <Button variant="ghost" onClick={closeEntrepreneurModal}>
+              ביטול
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Container>
   );
 } 

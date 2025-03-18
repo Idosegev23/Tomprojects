@@ -38,21 +38,28 @@ import {
   Input,
   FormControl,
   FormLabel,
-  useToast
+  useToast,
+  Divider,
+  Textarea
 } from '@chakra-ui/react';
 import { FiFolder, FiCheckSquare, FiUser, FiPlus, FiEdit, FiTrash2 } from 'react-icons/fi';
 import NextLink from 'next/link';
 import projectService from '@/lib/services/projectService';
-import taskService from '@/lib/services/taskService';
-import { Project, Task } from '@/types/supabase';
+import entrepreneurService from '@/lib/services/entrepreneurService';
+import { Project, Entrepreneur } from '@/types/supabase';
 
 export default function EntrepreneursPage() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [entrepreneurs, setEntrepreneurs] = useState<string[]>([]);
+  const [entrepreneurs, setEntrepreneurs] = useState<Entrepreneur[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedEntrepreneur, setSelectedEntrepreneur] = useState<string | null>(null);
+  const [selectedEntrepreneur, setSelectedEntrepreneur] = useState<Entrepreneur | null>(null);
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const [newEntrepreneur, setNewEntrepreneur] = useState('');
+  const [newEntrepreneur, setNewEntrepreneur] = useState({
+    name: '',
+    description: '',
+    contact_info: ''
+  });
+  const [isEditing, setIsEditing] = useState(false);
   const toast = useToast();
 
   // טעינת נתונים
@@ -65,16 +72,9 @@ export default function EntrepreneursPage() {
         const projectsData = await projectService.getProjects();
         setProjects(projectsData);
         
-        // חילוץ רשימת היזמים הייחודיים
-        const uniqueEntrepreneurs = Array.from(
-          new Set(
-            projectsData
-              .map(project => project.entrepreneur)
-              .filter(entrepreneur => entrepreneur !== null && entrepreneur !== '') as string[]
-          )
-        ).sort();
-        
-        setEntrepreneurs(uniqueEntrepreneurs);
+        // טעינת יזמים מהטבלה החדשה
+        const entrepreneursData = await entrepreneurService.getEntrepreneurs();
+        setEntrepreneurs(entrepreneursData);
       } catch (error) {
         console.error('שגיאה בטעינת נתונים:', error);
       } finally {
@@ -86,8 +86,8 @@ export default function EntrepreneursPage() {
   }, []);
 
   // פונקציה לקבלת פרויקטים של יזם ספציפי
-  const getProjectsByEntrepreneur = (entrepreneur: string) => {
-    return projects.filter(project => project.entrepreneur === entrepreneur);
+  const getProjectsByEntrepreneur = (entrepreneurId: string) => {
+    return projects.filter(project => project.entrepreneur_id === entrepreneurId);
   };
 
   // פונקציה לקבלת צבע לפי סטטוס
@@ -118,9 +118,31 @@ export default function EntrepreneursPage() {
     }
   };
 
-  // הוספת יזם חדש
-  const handleAddEntrepreneur = () => {
-    if (!newEntrepreneur.trim()) {
+  // פתיחת מודל להוספת יזם חדש
+  const openAddEntrepreneurModal = () => {
+    setIsEditing(false);
+    setNewEntrepreneur({
+      name: '',
+      description: '',
+      contact_info: ''
+    });
+    onOpen();
+  };
+
+  // פתיחת מודל לעריכת יזם קיים
+  const openEditEntrepreneurModal = (entrepreneur: Entrepreneur) => {
+    setIsEditing(true);
+    setNewEntrepreneur({
+      name: entrepreneur.name,
+      description: entrepreneur.description || '',
+      contact_info: entrepreneur.contact_info || ''
+    });
+    onOpen();
+  };
+
+  // הוספת או עדכון יזם
+  const handleSaveEntrepreneur = async () => {
+    if (!newEntrepreneur.name.trim()) {
       toast({
         title: "שגיאה",
         description: "שם היזם לא יכול להיות ריק",
@@ -131,30 +153,112 @@ export default function EntrepreneursPage() {
       return;
     }
 
-    // בדיקה אם היזם כבר קיים
-    if (entrepreneurs.includes(newEntrepreneur.trim())) {
+    try {
+      if (isEditing && selectedEntrepreneur) {
+        // עדכון יזם קיים
+        const updatedEntrepreneur = await entrepreneurService.updateEntrepreneur(
+          selectedEntrepreneur.id,
+          newEntrepreneur
+        );
+        
+        // עדכון הרשימה המקומית
+        setEntrepreneurs(entrepreneurs.map(e => 
+          e.id === updatedEntrepreneur.id ? updatedEntrepreneur : e
+        ));
+        
+        toast({
+          title: "יזם עודכן בהצלחה",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+      } else {
+        // בדיקה אם היזם כבר קיים
+        const existingEntrepreneur = entrepreneurs.find(e => 
+          e.name.toLowerCase() === newEntrepreneur.name.trim().toLowerCase()
+        );
+        
+        if (existingEntrepreneur) {
+          toast({
+            title: "שגיאה",
+            description: "יזם בשם זה כבר קיים במערכת",
+            status: "error",
+            duration: 3000,
+            isClosable: true,
+          });
+          return;
+        }
+        
+        // הוספת יזם חדש
+        const createdEntrepreneur = await entrepreneurService.createEntrepreneur(newEntrepreneur);
+        
+        // עדכון הרשימה המקומית
+        setEntrepreneurs([...entrepreneurs, createdEntrepreneur].sort((a, b) => 
+          a.name.localeCompare(b.name)
+        ));
+        
+        toast({
+          title: "יזם נוסף בהצלחה",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+      
+      // סגירת המודל וניקוי הטופס
+      onClose();
+      setNewEntrepreneur({
+        name: '',
+        description: '',
+        contact_info: ''
+      });
+    } catch (error) {
+      console.error('שגיאה בשמירת יזם:', error);
       toast({
         title: "שגיאה",
-        description: "יזם בשם זה כבר קיים במערכת",
+        description: "אירעה שגיאה בשמירת היזם",
         status: "error",
         duration: 3000,
         isClosable: true,
       });
-      return;
     }
+  };
 
-    // הוספת היזם לרשימה
-    setEntrepreneurs([...entrepreneurs, newEntrepreneur.trim()].sort());
-    setNewEntrepreneur('');
-    onClose();
+  // מחיקת יזם
+  const handleDeleteEntrepreneur = async (entrepreneur: Entrepreneur) => {
+    if (confirm(`האם אתה בטוח שברצונך למחוק את היזם "${entrepreneur.name}"?`)) {
+      try {
+        await entrepreneurService.deleteEntrepreneur(entrepreneur.id);
+        
+        // עדכון הרשימה המקומית
+        setEntrepreneurs(entrepreneurs.filter(e => e.id !== entrepreneur.id));
+        
+        toast({
+          title: "יזם נמחק בהצלחה",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+      } catch (error) {
+        console.error('שגיאה במחיקת יזם:', error);
+        toast({
+          title: "שגיאה",
+          description: "אירעה שגיאה במחיקת היזם",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    }
+  };
 
-    toast({
-      title: "יזם נוסף בהצלחה",
-      description: `היזם ${newEntrepreneur.trim()} נוסף למערכת`,
-      status: "success",
-      duration: 3000,
-      isClosable: true,
-    });
+  // טיפול בשינוי בשדות הטופס
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setNewEntrepreneur(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   if (loading) {
@@ -169,7 +273,7 @@ export default function EntrepreneursPage() {
     <Box>
       <Flex justifyContent="space-between" alignItems="center" mb={6}>
         <Heading>יזמים</Heading>
-        <Button leftIcon={<FiPlus />} colorScheme="blue" onClick={onOpen}>
+        <Button leftIcon={<FiPlus />} colorScheme="blue" onClick={openAddEntrepreneurModal}>
           הוסף יזם
         </Button>
       </Flex>
@@ -183,17 +287,43 @@ export default function EntrepreneursPage() {
       ) : (
         <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={5}>
           {entrepreneurs.map(entrepreneur => {
-            const entrepreneurProjects = getProjectsByEntrepreneur(entrepreneur);
+            const entrepreneurProjects = getProjectsByEntrepreneur(entrepreneur.id);
             const activeProjects = entrepreneurProjects.filter(p => p.status === 'active').length;
             const completedProjects = entrepreneurProjects.filter(p => p.status === 'completed').length;
             
             return (
-              <Card key={entrepreneur} cursor="pointer" onClick={() => setSelectedEntrepreneur(entrepreneur)}>
+              <Card key={entrepreneur.id} position="relative">
                 <CardHeader>
                   <Flex justifyContent="space-between" alignItems="center">
-                    <Heading size="md">{entrepreneur}</Heading>
-                    <Icon as={FiUser} boxSize="24px" color="blue.500" />
+                    <Heading size="md" cursor="pointer" onClick={() => setSelectedEntrepreneur(entrepreneur)}>
+                      {entrepreneur.name}
+                    </Heading>
+                    <Flex>
+                      <Icon 
+                        as={FiEdit} 
+                        boxSize="20px" 
+                        color="blue.500" 
+                        cursor="pointer" 
+                        mr={2}
+                        onClick={() => {
+                          setSelectedEntrepreneur(entrepreneur);
+                          openEditEntrepreneurModal(entrepreneur);
+                        }}
+                      />
+                      <Icon 
+                        as={FiTrash2} 
+                        boxSize="20px" 
+                        color="red.500" 
+                        cursor="pointer"
+                        onClick={() => handleDeleteEntrepreneur(entrepreneur)}
+                      />
+                    </Flex>
                   </Flex>
+                  {entrepreneur.description && (
+                    <Text fontSize="sm" mt={2} color="gray.600">
+                      {entrepreneur.description}
+                    </Text>
+                  )}
                 </CardHeader>
                 <CardBody>
                   <SimpleGrid columns={2} spacing={4}>
@@ -206,6 +336,11 @@ export default function EntrepreneursPage() {
                       <StatNumber>{completedProjects}</StatNumber>
                     </Stat>
                   </SimpleGrid>
+                  {entrepreneur.contact_info && (
+                    <Text fontSize="sm" mt={2}>
+                      <strong>פרטי קשר:</strong> {entrepreneur.contact_info}
+                    </Text>
+                  )}
                   <Button 
                     mt={4} 
                     size="sm" 
@@ -213,7 +348,7 @@ export default function EntrepreneursPage() {
                     colorScheme="blue" 
                     variant="outline"
                     as={NextLink}
-                    href={`/dashboard?entrepreneur=${encodeURIComponent(entrepreneur)}`}
+                    href={`/dashboard?entrepreneur=${encodeURIComponent(entrepreneur.id)}`}
                   >
                     צפה בדשבורד
                   </Button>
@@ -224,25 +359,47 @@ export default function EntrepreneursPage() {
         </SimpleGrid>
       )}
 
-      {/* מודל להוספת יזם חדש */}
+      {/* מודל להוספת/עריכת יזם */}
       <Modal isOpen={isOpen} onClose={onClose}>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>הוספת יזם חדש</ModalHeader>
+          <ModalHeader>{isEditing ? 'עריכת יזם' : 'הוספת יזם חדש'}</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            <FormControl>
+            <FormControl isRequired mb={4}>
               <FormLabel>שם היזם</FormLabel>
               <Input 
-                value={newEntrepreneur} 
-                onChange={(e) => setNewEntrepreneur(e.target.value)}
+                name="name"
+                value={newEntrepreneur.name} 
+                onChange={handleInputChange}
                 placeholder="הכנס שם יזם" 
+              />
+            </FormControl>
+            
+            <FormControl mb={4}>
+              <FormLabel>תיאור</FormLabel>
+              <Textarea 
+                name="description"
+                value={newEntrepreneur.description} 
+                onChange={handleInputChange}
+                placeholder="תיאור היזם (לא חובה)" 
+                rows={3}
+              />
+            </FormControl>
+            
+            <FormControl>
+              <FormLabel>פרטי קשר</FormLabel>
+              <Input 
+                name="contact_info"
+                value={newEntrepreneur.contact_info} 
+                onChange={handleInputChange}
+                placeholder="פרטי קשר (לא חובה)" 
               />
             </FormControl>
           </ModalBody>
           <ModalFooter>
-            <Button colorScheme="blue" mr={3} onClick={handleAddEntrepreneur}>
-              הוסף
+            <Button colorScheme="blue" mr={3} onClick={handleSaveEntrepreneur}>
+              {isEditing ? 'עדכן' : 'הוסף'}
             </Button>
             <Button variant="ghost" onClick={onClose}>ביטול</Button>
           </ModalFooter>
@@ -251,14 +408,34 @@ export default function EntrepreneursPage() {
 
       {/* מודל לצפייה בפרטי יזם */}
       {selectedEntrepreneur && (
-        <Modal isOpen={!!selectedEntrepreneur} onClose={() => setSelectedEntrepreneur(null)} size="xl">
+        <Modal 
+          isOpen={!!selectedEntrepreneur && !isEditing} 
+          onClose={() => setSelectedEntrepreneur(null)} 
+          size="xl"
+        >
           <ModalOverlay />
           <ModalContent>
-            <ModalHeader>פרטי יזם: {selectedEntrepreneur}</ModalHeader>
+            <ModalHeader>פרטי יזם: {selectedEntrepreneur.name}</ModalHeader>
             <ModalCloseButton />
             <ModalBody>
+              {selectedEntrepreneur.description && (
+                <>
+                  <Heading size="sm" mb={2}>תיאור</Heading>
+                  <Text mb={4}>{selectedEntrepreneur.description}</Text>
+                  <Divider mb={4} />
+                </>
+              )}
+              
+              {selectedEntrepreneur.contact_info && (
+                <>
+                  <Heading size="sm" mb={2}>פרטי קשר</Heading>
+                  <Text mb={4}>{selectedEntrepreneur.contact_info}</Text>
+                  <Divider mb={4} />
+                </>
+              )}
+              
               <Heading size="md" mb={4}>פרויקטים של היזם</Heading>
-              {getProjectsByEntrepreneur(selectedEntrepreneur).length === 0 ? (
+              {getProjectsByEntrepreneur(selectedEntrepreneur.id).length === 0 ? (
                 <Text>אין פרויקטים ליזם זה</Text>
               ) : (
                 <Table variant="simple" size="sm">
@@ -271,7 +448,7 @@ export default function EntrepreneursPage() {
                     </Tr>
                   </Thead>
                   <Tbody>
-                    {getProjectsByEntrepreneur(selectedEntrepreneur).map(project => (
+                    {getProjectsByEntrepreneur(selectedEntrepreneur.id).map(project => (
                       <Tr key={project.id}>
                         <Td>
                           <Link as={NextLink} href={`/dashboard/projects/${project.id}`} color="blue.500">

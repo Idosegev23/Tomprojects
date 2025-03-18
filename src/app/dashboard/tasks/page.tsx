@@ -679,7 +679,7 @@ function TaskItem({
             variant="ghost"
             onClick={onEdit}
           />
-          <Menu>
+          <Menu closeOnSelect={true}>
             <MenuButton
               as={IconButton}
               icon={<FiMoreVertical />}

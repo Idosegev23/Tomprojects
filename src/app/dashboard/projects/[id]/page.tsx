@@ -449,7 +449,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
             </HStack>
             
             {isMobile ? (
-              <Menu>
+              <Menu closeOnSelect={true}>
                 <MenuButton 
                   as={IconButton} 
                   icon={<FiMoreVertical />} 
