@@ -39,7 +39,7 @@ import {
   useDisclosure,
 } from '@chakra-ui/react';
 import { useRouter } from 'next/navigation';
-import { FiSave, FiArrowRight, FiPlus, FiTrash2, FiArrowUp, FiArrowDown } from 'react-icons/fi';
+import { FiSave, FiArrowRight, FiPlus, FiTrash2, FiArrowUp, FiArrowDown, FiEdit } from 'react-icons/fi';
 import projectService from '@/lib/services/projectService';
 import stageService from '@/lib/services/stageService';
 import taskService from '@/lib/services/taskService';
@@ -70,7 +70,10 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
   // מודלים נפרדים
   const { isOpen: isEntrepreneurModalOpen, onOpen: openEntrepreneurModal, onClose: closeEntrepreneurModal } = useDisclosure();
   const { isOpen: isDeleteStageModalOpen, onOpen: openDeleteStageModal, onClose: closeDeleteStageModal } = useDisclosure();
+  const { isOpen: isEditStageModalOpen, onOpen: openEditStageModal, onClose: closeEditStageModal } = useDisclosure();
   const [stageToDelete, setStageToDelete] = useState<string | null>(null);
+  const [stageToEdit, setStageToEdit] = useState<Stage | null>(null);
+  const [editedStageName, setEditedStageName] = useState('');
   const [loadingEntrepreneurs, setLoadingEntrepreneurs] = useState(false);
   const [newEntrepreneurName, setNewEntrepreneurName] = useState('');
 
@@ -270,6 +273,59 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
       toast({
         title: 'שגיאה במחיקת שלב',
         description: error instanceof Error ? error.message : 'אירעה שגיאה לא ידועה',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+  
+  // פתיחת מודל עריכת שלב
+  const handleOpenEditStageModal = (stage: Stage) => {
+    setStageToEdit(stage);
+    setEditedStageName(stage.title);
+    openEditStageModal();
+  };
+  
+  // עריכת שלב
+  const handleUpdateStage = async () => {
+    if (!stageToEdit) return;
+    if (!editedStageName.trim()) {
+      toast({
+        title: 'שם שלב ריק',
+        description: 'יש להזין שם לשלב',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    
+    try {
+      const updatedStage = await stageService.updateStage(stageToEdit.id, {
+        title: editedStageName,
+        updated_at: new Date().toISOString()
+      });
+      
+      // עדכון הרשימה המקומית
+      setStages(stages.map(s => s.id === updatedStage.id ? updatedStage : s));
+      
+      // סגירת המודל
+      closeEditStageModal();
+      
+      toast({
+        title: 'השלב עודכן בהצלחה',
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+        position: 'top-right',
+      });
+    } catch (error) {
+      console.error('שגיאה בעדכון שלב:', error);
+      
+      toast({
+        title: 'שגיאה בעדכון שלב',
+        description: error instanceof Error ? error.message : 'אירעה שגיאה בלתי צפויה',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -611,6 +667,13 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                         <Text fontWeight="medium">{stage.title}</Text>
                         <HStack>
                           <IconButton
+                            aria-label="ערוך שלב"
+                            icon={<FiEdit />}
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleOpenEditStageModal(stage)}
+                          />
+                          <IconButton
                             aria-label="העלה שלב"
                             icon={<FiArrowUp />}
                             size="sm"
@@ -723,6 +786,37 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
               מחק
             </Button>
             <Button variant="ghost" onClick={closeDeleteStageModal}>
+              ביטול
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+      
+      {/* מודל לעריכת שלב */}
+      <Modal isOpen={isEditStageModalOpen} onClose={closeEditStageModal}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>עריכת שלב</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <FormControl>
+              <FormLabel>שם השלב</FormLabel>
+              <Input
+                value={editedStageName}
+                onChange={(e) => setEditedStageName(e.target.value)}
+                placeholder="הכנס שם שלב"
+              />
+            </FormControl>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              colorScheme="blue"
+              mr={3}
+              onClick={handleUpdateStage}
+            >
+              שמור
+            </Button>
+            <Button variant="ghost" onClick={closeEditStageModal}>
               ביטול
             </Button>
           </ModalFooter>

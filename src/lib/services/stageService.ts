@@ -91,34 +91,92 @@ export const stageService = {
       { 
         id: crypto.randomUUID(),
         project_id: projectId, 
-        title: 'לביצוע', 
-        description: 'משימות שיש לבצע',
+        title: 'היכרות', 
+        description: 'שלב ההיכרות עם הפרויקט',
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        order: 1
       },
       { 
         id: crypto.randomUUID(),
         project_id: projectId, 
-        title: 'בתהליך', 
-        description: 'משימות שנמצאות בתהליך ביצוע',
+        title: 'איסוף חומר קיים', 
+        description: 'איסוף כל החומר הקיים הרלוונטי לפרויקט',
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        order: 2
       },
       { 
         id: crypto.randomUUID(),
         project_id: projectId, 
-        title: 'לבדיקה', 
-        description: 'משימות שהושלמו וממתינות לבדיקה',
+        title: 'השלמות', 
+        description: 'השלמת החומרים החסרים',
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        order: 3
       },
       { 
         id: crypto.randomUUID(),
         project_id: projectId, 
-        title: 'הושלם', 
-        description: 'משימות שהושלמו',
+        title: 'הערות', 
+        description: 'הוספת הערות וסיכום ביניים',
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        order: 4
+      },
+      { 
+        id: crypto.randomUUID(),
+        project_id: projectId, 
+        title: 'יישור קו', 
+        description: 'יישור קו ואיחוד הנתונים',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        order: 5
+      },
+      { 
+        id: crypto.randomUUID(),
+        project_id: projectId, 
+        title: 'עלייה לאוויר (פריסייל)', 
+        description: 'הכנה לקראת פריסייל',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        order: 6
+      },
+      { 
+        id: crypto.randomUUID(),
+        project_id: projectId, 
+        title: 'איסוף נתונים ועדכון', 
+        description: 'איסוף נתונים ועדכונים לפרויקט',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        order: 7
+      },
+      { 
+        id: crypto.randomUUID(),
+        project_id: projectId, 
+        title: 'המשך מכירות', 
+        description: 'המשך תהליך המכירות',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        order: 8
+      },
+      { 
+        id: crypto.randomUUID(),
+        project_id: projectId, 
+        title: 'תוך כדי בניה', 
+        description: 'התנהלות במהלך הבניה',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        order: 9
+      },
+      { 
+        id: crypto.randomUUID(),
+        project_id: projectId, 
+        title: 'מסירות', 
+        description: 'מסירת הדירות ללקוחות',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        order: 10
       }
     ];
     

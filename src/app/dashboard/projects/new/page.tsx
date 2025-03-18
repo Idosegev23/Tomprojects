@@ -378,8 +378,8 @@ export default function NewProject() {
       
       // הצגת הודעת הצלחה
       toast({
-        title: 'המשימה נוצרה בהצלחה',
-        description: 'המשימה נוספה לרשימת המשימות הנבחרות',
+        title: 'תבנית המשימה נוצרה בהצלחה',
+        description: 'תבנית המשימה נוספה לרשימת התבניות הנבחרות',
         status: 'success',
         duration: 3000,
         isClosable: true,
@@ -390,9 +390,9 @@ export default function NewProject() {
       setAvailableTasks(prev => [...prev, createdTask]);
       
     } catch (err) {
-      console.error('שגיאה ביצירת משימה מותאמת אישית:', err);
+      console.error('שגיאה ביצירת תבנית משימה מותאמת אישית:', err);
       toast({
-        title: 'שגיאה ביצירת משימה',
+        title: 'שגיאה ביצירת תבנית משימה',
         description: err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה',
         status: 'error',
         duration: 5000,
@@ -739,19 +739,19 @@ export default function NewProject() {
             
             <Divider />
             
-            <Heading size="md">משימות</Heading>
+            <Heading size="md">תבניות משימות</Heading>
             
             <Tabs variant="enclosed" colorScheme="primary">
               <TabList>
-                <Tab>משימות ברירת מחדל</Tab>
-                <Tab>הוספת משימות מותאמות אישית</Tab>
+                <Tab>תבניות משימות ברירת מחדל</Tab>
+                <Tab>הוספת תבניות משימות מותאמות אישית</Tab>
               </TabList>
               
               <TabPanels>
                 <TabPanel p={4}>
                   <FormControl display="flex" alignItems="center" mb={4}>
                     <FormLabel htmlFor="use-default-tasks" mb="0">
-                      השתמש במשימות ברירת מחדל
+                      השתמש בתבניות משימות ברירת מחדל
                     </FormLabel>
                     <Switch
                       id="use-default-tasks"
@@ -763,13 +763,13 @@ export default function NewProject() {
                   
                   <Text fontSize="sm" color="blue.600" mb={4}>
                     <Box as={InfoIcon} display="inline" mr={1} />
-                    ניתן לבחור גם משימות מותאמות אישית בלשונית "משימות מותאמות אישית" בנוסף למשימות ברירת המחדל.
+                    ניתן לבחור גם תבניות משימות מותאמות אישית בלשונית "תבניות משימות מותאמות אישית" בנוסף לתבניות ברירת המחדל.
                   </Text>
                   
                   {useDefaultTasks && (
                     <Box p={4} bg="gray.50" borderRadius="md" mt={4}>
                       <Text fontSize="sm" color="gray.600">
-                        הפרויקט ייווצר עם משימות ברירת מחדל לפרויקט נדל"ן, כולל:
+                        הפרויקט ייווצר עם תבניות משימות ברירת מחדל לפרויקט נדל"ן, כולל:
                       </Text>
                       <Text fontSize="sm" mt={2}>
                         • איתור ורכישת קרקע
@@ -793,11 +793,11 @@ export default function NewProject() {
                   
                   <Box>
                     <Text fontSize="md" fontWeight="bold" mb={2}>
-                      בחר משימות קיימות לשיוך לפרויקט:
+                      בחר תבניות משימות לשיוך לפרויקט:
                     </Text>
                     <Text fontSize="sm" color="blue.600" mb={4}>
                       <Box as={InfoIcon} display="inline" mr={1} />
-                      המשימות שתבחר ישוכפלו לפרויקט החדש. המשימות המקוריות יישארו ללא שינוי במאגר המשימות.
+                      תבניות המשימות שתבחר ישוכפלו לפרויקט החדש. תוכל לבחור מבין התבניות הקיימות או ליצור תבניות חדשות.
                     </Text>
                     
                     <InputGroup mb={4}>
@@ -805,7 +805,7 @@ export default function NewProject() {
                         <FiSearch color="gray.300" />
                       </InputLeftElement>
                       <Input 
-                        placeholder="חיפוש משימות..." 
+                        placeholder="חיפוש תבניות משימות..." 
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         bg="white"
@@ -846,11 +846,11 @@ export default function NewProject() {
                     ) : filteredTasks.length === 0 ? (
                       <Box textAlign="center" py={4}>
                         <Text mb={4}>
-                          {searchTerm || activeFilters.length > 0 ? 'לא נמצאו משימות התואמות את החיפוש' : 'אין משימות זמינות לבחירה'}
+                          {searchTerm || activeFilters.length > 0 ? 'לא נמצאו תבניות משימות התואמות את החיפוש' : 'אין תבניות משימות זמינות לבחירה'}
                         </Text>
                         <Text fontSize="sm" color="blue.600" mb={4}>
                           <Box as={InfoIcon} display="inline" mr={1} />
-                          ניתן ליצור משימות חדשות בטאב "הוספת משימות מותאמות אישית"
+                          ניתן ליצור תבניות משימות חדשות בטאב "הוספת משימות מותאמות אישית"
                         </Text>
                         <Button
                           colorScheme="primary"
@@ -859,21 +859,21 @@ export default function NewProject() {
                             try {
                               setLoadingTasks(true);
                               // יצירת משימות ברירת מחדל
-                              const defaultTasks = await createDefaultTaskTemplates();
+                              const defaultTasks = await taskService.createDefaultTaskTemplates();
                               setAvailableTasks(defaultTasks);
                               
                               toast({
-                                title: 'משימות ברירת מחדל נוצרו בהצלחה',
-                                description: `נוצרו ${defaultTasks.length} משימות ברירת מחדל`,
+                                title: 'תבניות משימות נוצרו בהצלחה',
+                                description: `נוצרו ${defaultTasks.length} תבניות משימות`,
                                 status: 'success',
                                 duration: 3000,
                                 isClosable: true,
                                 position: 'top-right',
                               });
                             } catch (err) {
-                              console.error('שגיאה ביצירת משימות ברירת מחדל:', err);
+                              console.error('שגיאה ביצירת תבניות משימות:', err);
                               toast({
-                                title: 'שגיאה ביצירת משימות ברירת מחדל',
+                                title: 'שגיאה ביצירת תבניות משימות',
                                 description: err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה',
                                 status: 'error',
                                 duration: 5000,
@@ -885,7 +885,7 @@ export default function NewProject() {
                           }}
                           mr={2}
                         >
-                          צור משימות ברירת מחדל
+                          צור תבניות משימות
                         </Button>
                         <Button
                           colorScheme="blue"
@@ -902,7 +902,7 @@ export default function NewProject() {
                             }
                           }}
                         >
-                          צור משימות מותאמות אישית
+                          צור תבניות משימות מותאמות אישית
                         </Button>
                       </Box>
                     ) : (
@@ -914,7 +914,7 @@ export default function NewProject() {
                           >
                             בחר הכל ({filteredTasks.length})
                           </Checkbox>
-                          <Text fontSize="sm">נבחרו {selectedTaskIds.length} משימות</Text>
+                          <Text fontSize="sm">נבחרו {selectedTaskIds.length} תבניות משימות</Text>
                         </Flex>
                         
                         <Divider mb={2} />
@@ -973,7 +973,7 @@ export default function NewProject() {
                   {selectedTaskTemplates.length > 0 && (
                     <Box mt={6}>
                       <Text fontSize="md" fontWeight="bold" mb={2}>
-                        משימות שנבחרו ({selectedTaskTemplates.length}):
+                        תבניות משימות שנבחרו ({selectedTaskTemplates.length}):
                       </Text>
                       <VStack spacing={2} align="stretch" maxH="200px" overflowY="auto" bg="white" p={2} borderRadius="md">
                         {selectedTaskTemplates.map(task => (
@@ -1021,7 +1021,7 @@ export default function NewProject() {
                 <TabPanel p={4}>
                   <FormControl display="flex" alignItems="center" mb={4}>
                     <FormLabel htmlFor="use-custom-tasks" mb="0">
-                      הוסף משימות מותאמות אישית
+                      הוסף תבניות משימות מותאמות אישית
                     </FormLabel>
                     <Switch
                       id="use-custom-tasks"
@@ -1035,7 +1035,7 @@ export default function NewProject() {
                   
                   <Text fontSize="sm" color="blue.600" mb={4}>
                     <Box as={InfoIcon} display="inline" mr={1} />
-                    ניתן לבחור משימות מותאמות אישית בנוסף למשימות ברירת המחדל. המשימות שתבחר יתווספו לפרויקט החדש.
+                    ניתן ליצור תבניות משימות מותאמות אישית שיהיו זמינות לשימוש בפרויקטים עתידיים. כל תבנית משימה שתיצור תתווסף למאגר התבניות הכללי.
                   </Text>
                   
                   {showCustomTaskSelection && (
@@ -1043,11 +1043,11 @@ export default function NewProject() {
                       <VStack spacing={4} align="stretch">
                         <Box>
                           <Text fontSize="md" fontWeight="bold">
-                            הוספת משימה חדשה:
+                            הוספת תבנית משימה חדשה:
                           </Text>
                           <Text fontSize="sm" color="blue.600" mb={2}>
                             <Box as={InfoIcon} display="inline" mr={1} />
-                            המשימות שתיצור יתווספו למאגר המשימות הכללי ויהיו זמינות לפרויקטים עתידיים. עותק של כל משימה ישויך לפרויקט הנוכחי.
+                            תבניות המשימות שתיצור יתווספו למאגר התבניות הכללי ויהיו זמינות לפרויקטים עתידיים. 
                           </Text>
                         </Box>
                         
