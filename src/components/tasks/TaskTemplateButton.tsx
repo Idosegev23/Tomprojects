@@ -26,7 +26,7 @@ import {
   Flex,
   Badge
 } from '@chakra-ui/react';
-import { FiTemplate, FiSave, FiList, FiPlus } from 'react-icons/fi';
+import { FiCopy, FiSave, FiList, FiPlus } from 'react-icons/fi';
 import { Task } from '@/types/supabase';
 
 // נניח שיש לנו סרביס שמטפל בתבניות
@@ -156,7 +156,7 @@ const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({
     if (buttonText) {
       return (
         <Button
-          leftIcon={<FiTemplate />}
+          leftIcon={<FiCopy />}
           variant={variant}
           size={size}
           isLoading={loading}
@@ -168,7 +168,7 @@ const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({
     
     return (
       <IconButton
-        icon={<FiTemplate />}
+        icon={<FiCopy />}
         variant={variant}
         size={size}
         aria-label="תבניות משימות"

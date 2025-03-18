@@ -55,23 +55,25 @@ type ProjectEditPageProps = {
 
 export default function ProjectEditPage({ params }: ProjectEditPageProps) {
   const { id } = params;
+  const toast = useToast();
+  const router = useRouter();
+  const { user } = useAuthContext();
+  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{ title?: string; status?: string }>({});
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [errors, setErrors] = useState<{
-    title?: string;
-    status?: string;
-  }>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [newStage, setNewStage] = useState('');
   const [entrepreneurs, setEntrepreneurs] = useState<Entrepreneur[]>([]);
+  const [newStageName, setNewStageName] = useState('');
+  
+  // מודלים נפרדים
+  const { isOpen: isEntrepreneurModalOpen, onOpen: openEntrepreneurModal, onClose: closeEntrepreneurModal } = useDisclosure();
+  const { isOpen: isDeleteStageModalOpen, onOpen: openDeleteStageModal, onClose: closeDeleteStageModal } = useDisclosure();
+  const [stageToDelete, setStageToDelete] = useState<string | null>(null);
   const [loadingEntrepreneurs, setLoadingEntrepreneurs] = useState(false);
   const [newEntrepreneurName, setNewEntrepreneurName] = useState('');
-  const { isOpen: isEntrepreneurModalOpen, onOpen: openEntrepreneurModal, onClose: closeEntrepreneurModal } = useDisclosure();
-  
-  const router = useRouter();
-  const toast = useToast();
-  
+
   // טעינת נתונים
   useEffect(() => {
     const fetchData = async () => {
@@ -142,7 +144,10 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setProject(prev => ({ ...prev, [name]: value }));
+    setProject(prev => {
+      if (!prev) return prev;
+      return { ...prev, [name]: value };
+    });
   };
   
   const handleSubmit = async (e: React.FormEvent) => {
@@ -200,7 +205,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
   
   // הוספת שלב חדש
   const handleAddStage = async () => {
-    if (!newStage.trim()) {
+    if (!newStageName.trim()) {
       toast({
         title: 'שם שלב ריק',
         description: 'יש להזין שם לשלב החדש',
@@ -218,7 +223,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
       // יצירת שלב חדש
       const newStage = await stageService.createStage({
         project_id: id,
-        title: newStage,
+        title: newStageName,
         order: maxOrder,
       });
       
@@ -226,7 +231,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
       setStages([...stages, newStage]);
       
       // איפוס שדה הקלט
-      setNewStage('');
+      setNewStageName('');
       
       toast({
         title: 'השלב נוצר בהצלחה',
@@ -250,29 +255,21 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
   
   // מחיקת שלב
   const handleDeleteStage = async (stageId: string) => {
-    if (!confirm('האם אתה בטוח שברצונך למחוק שלב זה? כל המשימות המשויכות אליו יועברו למצב ללא שלב.')) {
-      return;
-    }
-    
     try {
       await stageService.deleteStage(stageId);
-      
-      // עדכון הרשימה המקומית
-      setStages(stages.filter(stage => stage.id !== stageId));
-      
+      // עדכון הרשימה המקומית של השלבים
+      setStages(stages.filter(s => s.id !== stageId));
       toast({
         title: 'השלב נמחק בהצלחה',
         status: 'success',
-        duration: 2000,
+        duration: 3000,
         isClosable: true,
-        position: 'top-right',
       });
     } catch (error) {
       console.error('שגיאה במחיקת שלב:', error);
-      
       toast({
         title: 'שגיאה במחיקת שלב',
-        description: error instanceof Error ? error.message : 'אירעה שגיאה בלתי צפויה',
+        description: error instanceof Error ? error.message : 'אירעה שגיאה לא ידועה',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -520,7 +517,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                   onClick={openEntrepreneurModal}
                   isLoading={loadingEntrepreneurs}
                 >
-                  יזם חדש
+                  הוסף יזם חדש
                 </Button>
               </Flex>
             </FormControl>
@@ -632,10 +629,12 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                           <IconButton
                             aria-label="מחק שלב"
                             icon={<FiTrash2 />}
-                            size="sm"
                             colorScheme="red"
                             variant="ghost"
-                            onClick={() => handleDeleteStage(stage.id)}
+                            onClick={() => {
+                              setStageToDelete(stage.id);
+                              openDeleteStageModal();
+                            }}
                           />
                         </HStack>
                       </Flex>
@@ -648,8 +647,8 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                   <FormLabel>הוסף שלב חדש</FormLabel>
                   <Flex>
                     <Input
-                      value={newStage}
-                      onChange={(e) => setNewStage(e.target.value)}
+                      value={newStageName}
+                      onChange={(e) => setNewStageName(e.target.value)}
                       placeholder="שם השלב החדש"
                       mr={2}
                     />
@@ -673,10 +672,10 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
       <Modal isOpen={isEntrepreneurModalOpen} onClose={closeEntrepreneurModal}>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>הוספת יזם חדש</ModalHeader>
+          <ModalHeader>הוסף יזם חדש</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            <FormControl isRequired>
+            <FormControl>
               <FormLabel>שם היזם</FormLabel>
               <Input
                 value={newEntrepreneurName}
@@ -686,10 +685,44 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
             </FormControl>
           </ModalBody>
           <ModalFooter>
-            <Button colorScheme="blue" mr={3} onClick={handleAddNewEntrepreneur}>
+            <Button
+              colorScheme="blue"
+              mr={3}
+              onClick={handleAddNewEntrepreneur}
+              isLoading={loadingEntrepreneurs}
+            >
               הוסף
             </Button>
             <Button variant="ghost" onClick={closeEntrepreneurModal}>
+              ביטול
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+      
+      {/* מודל למחיקת שלב */}
+      <Modal isOpen={isDeleteStageModalOpen} onClose={closeDeleteStageModal}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>מחיקת שלב</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text>האם אתה בטוח שברצונך למחוק שלב זה? כל המשימות המשויכות אליו יועברו למצב ללא שלב.</Text>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              colorScheme="red"
+              mr={3}
+              onClick={() => {
+                if (stageToDelete) {
+                  handleDeleteStage(stageToDelete);
+                }
+                closeDeleteStageModal();
+              }}
+            >
+              מחק
+            </Button>
+            <Button variant="ghost" onClick={closeDeleteStageModal}>
               ביטול
             </Button>
           </ModalFooter>

@@ -649,8 +649,8 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                 <TaskTree 
                   tasks={tasks} 
                   projectId={id}
-                  onEditTask={handleEditTask}
-                  onDeleteTask={handleDeleteTask}
+                  onTaskEdited={handleEditTask}
+                  onTaskDeleted={handleDeleteTask}
                 />
               </Box>
             ) : (
