@@ -123,13 +123,28 @@ export const projectService = {
   
   // מחיקת פרויקט
   async deleteProject(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('projects')
-      .delete()
-      .eq('id', id);
-    
-    if (error) {
-      console.error(`Error deleting project with id ${id}:`, error);
+    try {
+      // ניסיון מחיקה באמצעות הפונקציה המאולצת
+      const { error: forceDeleteError } = await supabase.rpc('force_delete_project', {
+        project_id_param: id
+      });
+      
+      if (forceDeleteError) {
+        console.error(`Error in force_delete_project for project id ${id}:`, forceDeleteError);
+        
+        // אם נכשל, ננסה את המחיקה הרגילה
+        const { error } = await supabase
+          .from('projects')
+          .delete()
+          .eq('id', id);
+        
+        if (error) {
+          console.error(`Error deleting project with id ${id}:`, error);
+          throw new Error(error.message);
+        }
+      }
+    } catch (error: any) {
+      console.error(`Error in deleteProject for project id ${id}:`, error);
       throw new Error(error.message);
     }
   },
