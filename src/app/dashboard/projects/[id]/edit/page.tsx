@@ -163,6 +163,20 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
     try {
       setIsSubmitting(true);
       
+      // קבלת מידע על היזם שנבחר אם קיים
+      let entrepreneurName = '';
+      if (project.entrepreneur_id) {
+        try {
+          const entrepreneur = await entrepreneurService.getEntrepreneurById(project.entrepreneur_id);
+          if (entrepreneur) {
+            entrepreneurName = entrepreneur.name;
+          }
+        } catch (error) {
+          console.error('שגיאה בקבלת פרטי היזם:', error);
+          // ממשיכים עם העדכון גם אם לא הצלחנו לקבל את שם היזם
+        }
+      }
+      
       // הכנת אובייקט העדכון
       const updateData: UpdateProject = {
         name: project.name,
@@ -170,6 +184,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
         description: project.description,
         updated_at: new Date().toISOString(),
         entrepreneur_id: project.entrepreneur_id,
+        entrepreneur: entrepreneurName, // עדכון שם היזם יחד עם המזהה
       };
       
       // אם יש תאריך יעד, נוסיף אותו
@@ -543,7 +558,11 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                   id="entrepreneur_id"
                   name="entrepreneur_id"
                   value={project?.entrepreneur_id || ''}
-                  onChange={handleChange}
+                  onChange={(e) => {
+                    handleChange(e);
+                    // הסרת פוקוס מהתפריט אחרי בחירה
+                    (e.target as HTMLSelectElement).blur();
+                  }}
                   placeholder="בחר יזם"
                   mr={2}
                 >
@@ -581,7 +600,11 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                 id="status"
                 name="status"
                 value={project.status || ''}
-                onChange={handleChange}
+                onChange={(e) => {
+                  handleChange(e);
+                  // הסרת פוקוס מהתפריט אחרי בחירה
+                  (e.target as HTMLSelectElement).blur();
+                }}
               >
                 <option value="active">פעיל</option>
                 <option value="planning">בתכנון</option>

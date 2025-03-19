@@ -198,7 +198,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({
               </Flex>
             
             <HStack spacing={1} opacity={isHovered ? 1 : 0.3} transition="opacity 0.2s">
-              <Menu>
+              <Menu closeOnSelect={true}>
                 <MenuButton
                   as={IconButton}
                   icon={<FiMoreVertical />}
@@ -227,7 +227,13 @@ const TaskNode: React.FC<TaskNodeProps> = ({
                     title="שנה סטטוס" 
                     type="radio" 
                     defaultValue={task.status}
-                    onChange={(value) => onStatusChange && onStatusChange(task.id, value as string)}
+                    onChange={(value) => {
+                      onStatusChange && onStatusChange(task.id, value as string);
+                      // סגירת התפריט אחרי בחירה
+                      setTimeout(() => {
+                        document.body.click(); // סימולציה של לחיצה מחוץ לתפריט 
+                      }, 100);
+                    }}
                   >
                     <MenuItemOption value="todo">לביצוע</MenuItemOption>
                     <MenuItemOption value="in_progress">בתהליך</MenuItemOption>

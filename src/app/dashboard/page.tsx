@@ -33,14 +33,17 @@ import { FiUsers, FiFolder, FiCheckSquare, FiAlertCircle, FiUser } from 'react-i
 import NextLink from 'next/link';
 import projectService from '@/lib/services/projectService';
 import taskService from '@/lib/services/taskService';
+import entrepreneurService from '@/lib/services/entrepreneurService';
 import { Project, Task } from '@/types/supabase';
+import { useSearchParams } from 'next/navigation';
 
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [entrepreneurs, setEntrepreneurs] = useState<string[]>([]);
+  const [entrepreneurs, setEntrepreneurs] = useState<{ id: string, name: string }[]>([]);
   const [selectedEntrepreneur, setSelectedEntrepreneur] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
   
   // טעינת נתונים
   useEffect(() => {
@@ -52,19 +55,28 @@ export default function Dashboard() {
         const projectsData = await projectService.getProjects();
         setProjects(projectsData);
         
-        // חילוץ רשימת היזמים הייחודיים
-        const uniqueEntrepreneurs = Array.from(
-          new Set(
-            projectsData
-              .map(project => project.entrepreneur)
-              .filter(entrepreneur => entrepreneur !== null && entrepreneur !== '') as string[]
-          )
-        );
-        setEntrepreneurs(uniqueEntrepreneurs);
-        
         // טעינת משימות
         const tasksData = await taskService.getTasks();
         setTasks(tasksData);
+        
+        // טעינת רשימת היזמים
+        try {
+          const entrepreneursData = await entrepreneurService.getEntrepreneurs();
+          setEntrepreneurs(entrepreneursData.map(e => ({ id: e.id, name: e.name })));
+          
+          // בדיקה אם יש פרמטר entrepreneur ב-URL
+          const entrepreneurId = searchParams.get('entrepreneur');
+          if (entrepreneurId) {
+            // חיפוש היזם לפי המזהה
+            const foundEntrepreneur = entrepreneursData.find(e => e.id === entrepreneurId);
+            if (foundEntrepreneur) {
+              setSelectedEntrepreneur(foundEntrepreneur.id);
+              console.log(`נבחר יזם מה-URL: ${foundEntrepreneur.name} (${foundEntrepreneur.id})`);
+            }
+          }
+        } catch (error) {
+          console.error('שגיאה בטעינת יזמים:', error);
+        }
       } catch (error) {
         console.error('שגיאה בטעינת נתונים:', error);
       } finally {
@@ -73,18 +85,18 @@ export default function Dashboard() {
     };
     
     fetchData();
-  }, []);
+  }, [searchParams]);
   
   // סינון פרויקטים לפי יזם
   const filteredProjects = selectedEntrepreneur
-    ? projects.filter(project => project.entrepreneur === selectedEntrepreneur)
+    ? projects.filter(project => project.entrepreneur_id === selectedEntrepreneur)
     : projects;
   
   // סינון משימות לפי יזם
   const filteredTasks = selectedEntrepreneur
     ? tasks.filter(task => {
         const projectOfTask = projects.find(p => p.id === task.project_id);
-        return projectOfTask?.entrepreneur === selectedEntrepreneur;
+        return projectOfTask?.entrepreneur_id === selectedEntrepreneur;
       })
     : tasks;
   
@@ -200,21 +212,39 @@ export default function Dashboard() {
           <Select 
             placeholder="סנן לפי יזם" 
             value={selectedEntrepreneur} 
-            onChange={(e) => setSelectedEntrepreneur(e.target.value)}
+            onChange={(e) => {
+              setSelectedEntrepreneur(e.target.value);
+              // עדכון ה-URL כדי לאפשר שיתוף/שמירה של המצב הנוכחי
+              const url = new URL(window.location.href);
+              if (e.target.value) {
+                url.searchParams.set('entrepreneur', e.target.value);
+              } else {
+                url.searchParams.delete('entrepreneur');
+              }
+              window.history.pushState({}, '', url.toString());
+              // הסרת פוקוס מהתפריט אחרי בחירה
+              (e.target as HTMLSelectElement).blur();
+            }}
             size={{ base: 'sm', md: 'md' }}
             maxW={{ base: '200px', md: '250px' }}
           >
             <option value="">כל היזמים</option>
             {entrepreneurs.map((entrepreneur) => (
-              <option key={entrepreneur} value={entrepreneur}>
-                {entrepreneur}
+              <option key={entrepreneur.id} value={entrepreneur.id}>
+                {entrepreneur.name}
               </option>
             ))}
           </Select>
           
           <Button 
             size={{ base: 'sm', md: 'md' }}
-            onClick={() => setSelectedEntrepreneur('')}
+            onClick={() => {
+              setSelectedEntrepreneur('');
+              // מחיקת הפרמטר מה-URL
+              const url = new URL(window.location.href);
+              url.searchParams.delete('entrepreneur');
+              window.history.pushState({}, '', url.toString());
+            }}
             isDisabled={!selectedEntrepreneur}
           >
             נקה סינון

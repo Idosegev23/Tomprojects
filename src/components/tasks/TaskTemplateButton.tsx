@@ -179,11 +179,18 @@ const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({
   
   return (
     <>
-      <Menu>
+      <Menu closeOnSelect={true}>
         <MenuButton as={React.Fragment}>
           {getButton()}
         </MenuButton>
-        <MenuList zIndex={1000}>
+        <MenuList zIndex={1000} onBlur={(e) => {
+          // סגירת התפריט כאשר הוא מאבד פוקוס אם הלחיצה הייתה מחוץ לתפריט
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setTimeout(() => {
+              document.body.click(); // סימולציה של לחיצה מחוץ לתפריט
+            }, 100);
+          }
+        }}>
           <MenuGroup title="תבניות משימות">
             {templates.map(template => (
               <MenuItem 

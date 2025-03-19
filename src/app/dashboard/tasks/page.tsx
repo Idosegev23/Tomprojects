@@ -447,7 +447,11 @@ export default function Tasks() {
             <Select 
               placeholder="סנן לפי פרויקט" 
               value={selectedProject}
-              onChange={(e) => setSelectedProject(e.target.value)}
+              onChange={(e) => {
+                setSelectedProject(e.target.value);
+                // הסרת פוקוס מהתפריט אחרי בחירה
+                (e.target as HTMLSelectElement).blur();
+              }}
               maxW={{ base: 'full', md: '250px' }}
               size={{ base: 'sm', md: 'md' }}
             >
@@ -462,7 +466,11 @@ export default function Tasks() {
             <Select 
               placeholder="סנן לפי סטטוס" 
               value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
+              onChange={(e) => {
+                setSelectedStatus(e.target.value);
+                // הסרת פוקוס מהתפריט אחרי בחירה
+                (e.target as HTMLSelectElement).blur();
+              }}
               maxW={{ base: 'full', md: '200px' }}
               size={{ base: 'sm', md: 'md' }}
             >
@@ -474,9 +482,30 @@ export default function Tasks() {
             </Select>
             
             <Select 
+              placeholder="סנן לפי עדיפות" 
+              value={selectedPriority}
+              onChange={(e) => {
+                setSelectedPriority(e.target.value);
+                // הסרת פוקוס מהתפריט אחרי בחירה
+                (e.target as HTMLSelectElement).blur();
+              }}
+              maxW={{ base: 'full', md: '200px' }}
+              size={{ base: 'sm', md: 'md' }}
+            >
+              <option value="">כל העדיפויות</option>
+              <option value="high">גבוהה</option>
+              <option value="medium">בינונית</option>
+              <option value="low">נמוכה</option>
+            </Select>
+            
+            <Select 
               placeholder="סנן לפי יזם" 
               value={selectedEntrepreneur}
-              onChange={(e) => setSelectedEntrepreneur(e.target.value)}
+              onChange={(e) => {
+                setSelectedEntrepreneur(e.target.value);
+                // הסרת פוקוס מהתפריט אחרי בחירה
+                (e.target as HTMLSelectElement).blur();
+              }}
               maxW={{ base: 'full', md: '200px' }}
               size={{ base: 'sm', md: 'md' }}
             >

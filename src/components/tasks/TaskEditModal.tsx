@@ -575,7 +575,11 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                       <Select 
                         name="status" 
                         value={formData.status || 'todo'} 
-                        onChange={handleChange}
+                        onChange={(e) => {
+                          handleChange(e);
+                          // הסרת פוקוס מהתפריט אחרי בחירה
+                          (e.target as HTMLSelectElement).blur();
+                        }}
                         bg={getStatusColor(formData.status || 'todo')}
                         color={formData.status === 'todo' ? 'black' : 'white'}
                         fontWeight="medium"
@@ -592,7 +596,11 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                       <Select 
                         name="priority" 
                         value={formData.priority || 'medium'} 
-                        onChange={handleChange}
+                        onChange={(e) => {
+                          handleChange(e);
+                          // הסרת פוקוס מהתפריט אחרי בחירה
+                          (e.target as HTMLSelectElement).blur();
+                        }}
                         bg={getPriorityColor(formData.priority || 'medium')}
                         color={formData.priority === 'low' ? 'black' : 'white'}
                         fontWeight="medium"
@@ -655,7 +663,11 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                             <Select
                               name="stage_id"
                               value={formData.stage_id || ''}
-                              onChange={handleChange}
+                              onChange={(e) => {
+                                handleChange(e);
+                                // הסרת פוקוס מהתפריט אחרי בחירה
+                                (e.target as HTMLSelectElement).blur();
+                              }}
                               placeholder="בחר שלב בפרויקט"
                             >
                               {milestones.map(stage => (
@@ -674,7 +686,11 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                           <Select
                             name="category"
                             value={formData.category || ''}
-                            onChange={handleChange}
+                            onChange={(e) => {
+                              handleChange(e);
+                              // הסרת פוקוס מהתפריט אחרי בחירה
+                              (e.target as HTMLSelectElement).blur();
+                            }}
                             placeholder="בחר קטגוריה"
                           >
                             <option value="פיתוח">פיתוח</option>
@@ -814,7 +830,11 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                     <Select
                       name="category"
                       value={formData.category || ''}
-                      onChange={handleChange}
+                      onChange={(e) => {
+                        handleChange(e);
+                        // הסרת פוקוס מהתפריט אחרי בחירה
+                        (e.target as HTMLSelectElement).blur();
+                      }}
                       placeholder="בחר קטגוריה"
                     >
                       <option value="פיתוח">פיתוח</option>

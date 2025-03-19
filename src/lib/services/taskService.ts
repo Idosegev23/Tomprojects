@@ -439,35 +439,92 @@ export const taskService = {
   
   // שיוך משימות לפרויקט
   async assignTasksToProject(taskIds: string[], projectId: string): Promise<Task[]> {
-    const { data, error } = await supabase
-      .from('tasks')
-      .update({ project_id: projectId })
-      .in('id', taskIds)
-      .select();
+    console.log(`Assigning ${taskIds.length} tasks to project ${projectId}`);
     
-    if (error) {
-      console.error('Error assigning tasks to project:', error);
-      throw new Error(error.message);
+    if (!taskIds.length) {
+      console.error("No task IDs provided for assignment");
+      return [];
     }
     
-    // סנכרון המשימות לטבלה הספציפית של הפרויקט
-    if (data && data.length > 0) {
-      try {
-        for (const task of data) {
-          // קריאה לפונקציה SQL להעתקת המשימה לטבלה הספציפית של הפרויקט
-          await supabase.rpc('copy_task_to_project_table', {
-            task_id: task.id,
-            project_id: projectId
-          });
-        }
-        console.log(`${data.length} tasks assigned and synced to project-specific table for project ${projectId}`);
-      } catch (syncError) {
-        console.error(`Error syncing tasks to project-specific table for project ${projectId}:`, syncError);
-        // נמשיך גם אם יש שגיאה בסנכרון
+    try {
+      // עדכון הפרויקט במשימות בטבלה הראשית
+      const { data, error } = await supabase
+        .from('tasks')
+        .update({ project_id: projectId })
+        .in('id', taskIds)
+        .select();
+      
+      if (error) {
+        console.error('Error assigning tasks to project:', error);
+        throw new Error(error.message);
       }
+      
+      // סנכרון המשימות לטבלה הספציפית של הפרויקט
+      if (data && data.length > 0) {
+        // בדיקה אם הטבלה הספציפית קיימת
+        const tableName = `project_${projectId}_tasks`;
+        let tableExists = false;
+        
+        try {
+          const { data: tableExistsData } = await supabase
+            .rpc('check_table_exists', {
+              table_name_param: tableName
+            });
+          
+          tableExists = !!tableExistsData;
+        } catch (tableCheckError) {
+          console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
+        }
+        
+        // אם הטבלה לא קיימת, ניצור אותה
+        if (!tableExists) {
+          try {
+            await supabase.rpc('create_project_table', {
+              project_id: projectId
+            });
+            console.log(`Created project-specific table ${tableName} for project ${projectId}`);
+            tableExists = true;
+          } catch (createTableError) {
+            console.error(`Error creating project-specific table ${tableName}:`, createTableError);
+          }
+        }
+        
+        // סנכרון המשימות לטבלה הספציפית של הפרויקט
+        if (tableExists) {
+          for (const task of data) {
+            try {
+              // קריאה לפונקציה SQL להעתקת/עדכון המשימה בטבלה הספציפית של הפרויקט
+              await supabase.rpc('sync_task_to_project_table', {
+                task_id: task.id,
+                project_id: projectId
+              });
+            } catch (syncError) {
+              console.error(`Error syncing task ${task.id} to project table ${tableName}:`, syncError);
+              
+              // ניסיון חלופי - העתקה ישירה של המשימה לטבלה
+              try {
+                await supabase.rpc('copy_task_to_project_table', {
+                  task_id: task.id,
+                  project_id: projectId
+                });
+              } catch (copyError) {
+                console.error(`Alternative method also failed for task ${task.id}:`, copyError);
+              }
+            }
+          }
+        }
+        
+        console.log(`${data.length} tasks assigned and synced to project ${projectId}`);
+      } else {
+        console.log(`No tasks were assigned to project ${projectId}`);
+      }
+      
+      return data || [];
+      
+    } catch (error) {
+      console.error(`Critical error in assignTasksToProject:`, error);
+      throw new Error(error instanceof Error ? error.message : 'שגיאה לא ידועה בשיוך משימות לפרויקט');
     }
-    
-    return data || [];
   },
   
   // שכפול משימות ושיוך לפרויקט חדש
