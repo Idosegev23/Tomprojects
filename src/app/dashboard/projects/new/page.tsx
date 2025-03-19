@@ -57,7 +57,7 @@ import projectService from '@/lib/services/projectService';
 import stageService from '@/lib/services/stageService';
 import taskService from '@/lib/services/taskService';
 import entrepreneurService from '@/lib/services/entrepreneurService';
-import type { NewProject, Task, NewTask, Entrepreneur } from '@/types/supabase';
+import type { NewProject, Task, NewTask, Entrepreneur, Stage } from '@/types/supabase';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 
 export default function NewProject() {
@@ -431,13 +431,45 @@ export default function NewProject() {
       const createdProject = await projectService.createProject(newProject);
       
       // יצירת שלבים ברירת מחדל לפרויקט
-      const stages = await stageService.createDefaultStages(createdProject.id);
+      let stages: Stage[] = [];
+      try {
+        stages = await stageService.createDefaultStages(createdProject.id);
+      } catch (stageError) {
+        console.error(`שגיאה ביצירת שלבים ברירת מחדל לפרויקט:`, stageError);
+        toast({
+          title: 'שגיאה ביצירת שלבים לפרויקט',
+          description: 'הפרויקט נוצר, אך אירעה שגיאה ביצירת השלבים. ניתן להוסיף שלבים בהמשך.',
+          status: 'warning',
+          duration: 5000,
+          isClosable: true,
+          position: 'top-right',
+        });
+      }
       
       // אם המשתמש בחר להשתמש במשימות ברירת מחדל, ניצור אותן
-      if (useDefaultTasks && stages.length > 0) {
+      if (useDefaultTasks) {
         try {
+          // בדיקה אם יש שלבים כדי להימנע משגיאות
+          const stageId = stages.length > 0 ? stages[0].id : null;
+          
+          // אם אין שלבים, ננסה ליצור שלב ברירת מחדל
+          let targetStageId = stageId;
+          if (!targetStageId) {
+            try {
+              const defaultStage = await stageService.createStage({
+                title: 'ברירת מחדל',
+                project_id: createdProject.id,
+                description: 'שלב ברירת מחדל שנוצר אוטומטית'
+              });
+              targetStageId = defaultStage.id;
+            } catch (error) {
+              console.error('שגיאה ביצירת שלב ברירת מחדל:', error);
+              // אם לא הצלחנו ליצור שלב, נשתמש ב-null ונסמוך על הלוגיקה של השירות
+            }
+          }
+          
           // יצירת משימות ברירת מחדל לפרויקט נדל"ן
-          await taskService.createDefaultTasksForRealEstateProject(createdProject.id, stages[0].id);
+          await taskService.createDefaultTasksForRealEstateProject(createdProject.id, targetStageId);
           
           toast({
             title: 'משימות ברירת מחדל נוצרו בהצלחה',
@@ -461,11 +493,29 @@ export default function NewProject() {
       }
       
       // אם המשתמש בחר משימות מותאמות אישית, נוסיף אותן בנוסף
-      // רק אם לא בחר להשתמש במשימות ברירת מחדל או אם בחר במפורש להוסיף גם משימות מותאמות אישית
-      if (selectedTaskIds.length > 0 && stages.length > 0) {
+      if (selectedTaskIds.length > 0) {
         try {
+          // בדיקה אם יש שלבים כדי להימנע משגיאות
+          const stageId = stages.length > 0 ? stages[0].id : null;
+          
+          // אם אין שלבים, ננסה ליצור שלב ברירת מחדל
+          let targetStageId = stageId;
+          if (!targetStageId) {
+            try {
+              const defaultStage = await stageService.createStage({
+                title: 'ברירת מחדל',
+                project_id: createdProject.id,
+                description: 'שלב ברירת מחדל שנוצר אוטומטית'
+              });
+              targetStageId = defaultStage.id;
+            } catch (error) {
+              console.error('שגיאה ביצירת שלב ברירת מחדל:', error);
+              // אם לא הצלחנו ליצור שלב, נשתמש ב-null ונסמוך על הלוגיקה של השירות
+            }
+          }
+          
           // שכפול המשימות שנבחרו לפרויקט החדש
-          const clonedTasks = await taskService.cloneTasksToProject(selectedTaskIds, createdProject.id, stages[0].id);
+          const clonedTasks = await taskService.cloneTasksToProject(selectedTaskIds, createdProject.id, targetStageId);
           
           toast({
             title: 'המשימות שנבחרו שוכפלו בהצלחה',

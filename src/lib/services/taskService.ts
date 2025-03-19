@@ -471,7 +471,7 @@ export const taskService = {
   },
   
   // שכפול משימות ושיוך לפרויקט חדש
-  async cloneTasksToProject(taskIds: string[], projectId: string, stageId: string): Promise<Task[]> {
+  async cloneTasksToProject(taskIds: string[], projectId: string, stageId: string | null): Promise<Task[]> {
     // קבלת המשימות המקוריות
     const { data: originalTasks, error: fetchError } = await supabase
       .from('tasks')
@@ -834,7 +834,7 @@ export const taskService = {
   },
   
   // יצירת משימות ברירת מחדל לפרויקט נדל"ן חדש
-  async createDefaultTasksForRealEstateProject(projectId: string, stageId: string): Promise<Task[]> {
+  async createDefaultTasksForRealEstateProject(projectId: string, stageId: string | null): Promise<Task[]> {
     // בדיקה אם כבר יש משימות בפרויקט - נבדוק בטבלה הספציפית של הפרויקט
     const tableName = `project_${projectId}_tasks`;
     
@@ -895,17 +895,16 @@ export const taskService = {
     
     try {
       // קבלת כל תבניות המשימות הקיימות
-      const taskTemplates = await this.getAllTaskTemplates();
+      let taskTemplates = await this.getAllTaskTemplates();
       
       if (!taskTemplates || taskTemplates.length === 0) {
         console.log("No task templates found, creating default templates first");
         await this.createDefaultTaskTemplates();
         // קבלת התבניות שנוצרו
-        const createdTemplates = await this.getAllTaskTemplates();
-        if (!createdTemplates || createdTemplates.length === 0) {
+        taskTemplates = await this.getAllTaskTemplates();
+        if (!taskTemplates || taskTemplates.length === 0) {
           throw new Error("Failed to create and retrieve task templates");
         }
-        taskTemplates.push(...createdTemplates);
       }
       
       console.log(`Found ${taskTemplates.length} task templates to clone into the project`);

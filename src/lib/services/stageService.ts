@@ -95,7 +95,6 @@ export const stageService = {
         description: 'שלב ההיכרות עם הפרויקט',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        order: 1
       },
       { 
         id: crypto.randomUUID(),
@@ -104,7 +103,6 @@ export const stageService = {
         description: 'איסוף כל החומר הקיים הרלוונטי לפרויקט',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        order: 2
       },
       { 
         id: crypto.randomUUID(),
@@ -113,7 +111,6 @@ export const stageService = {
         description: 'השלמת החומרים החסרים',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        order: 3
       },
       { 
         id: crypto.randomUUID(),
@@ -122,7 +119,6 @@ export const stageService = {
         description: 'הוספת הערות וסיכום ביניים',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        order: 4
       },
       { 
         id: crypto.randomUUID(),
@@ -131,7 +127,6 @@ export const stageService = {
         description: 'יישור קו ואיחוד הנתונים',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        order: 5
       },
       { 
         id: crypto.randomUUID(),
@@ -140,7 +135,6 @@ export const stageService = {
         description: 'הכנה לקראת פריסייל',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        order: 6
       },
       { 
         id: crypto.randomUUID(),
@@ -149,7 +143,6 @@ export const stageService = {
         description: 'איסוף נתונים ועדכונים לפרויקט',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        order: 7
       },
       { 
         id: crypto.randomUUID(),
@@ -158,7 +151,6 @@ export const stageService = {
         description: 'המשך תהליך המכירות',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        order: 8
       },
       { 
         id: crypto.randomUUID(),
@@ -167,7 +159,6 @@ export const stageService = {
         description: 'התנהלות במהלך הבניה',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        order: 9
       },
       { 
         id: crypto.randomUUID(),
@@ -176,7 +167,6 @@ export const stageService = {
         description: 'מסירת הדירות ללקוחות',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        order: 10
       }
     ];
     
@@ -195,15 +185,26 @@ export const stageService = {
   
   // עדכון סדר השלבים
   async reorderStages(stages: { id: string, order: number }[]): Promise<void> {
-    // עדכון כל שלב בנפרד
-    const updates = stages.map(stage => 
-      supabase
-        .from('stages')
-        .update({ order: stage.order })
-        .eq('id', stage.id)
-    );
-    
     try {
+      // בדיקה אם העמודה 'order' קיימת בטבלה לפני ניסיון עדכון
+      const { error: checkError } = await supabase
+        .from('stages')
+        .select('id')
+        .limit(1);
+        
+      if (checkError && checkError.message.includes("order")) {
+        console.warn("Column 'order' does not exist in stages table. Skipping reordering.");
+        return;
+      }
+      
+      // עדכון כל שלב בנפרד
+      const updates = stages.map(stage => 
+        supabase
+          .from('stages')
+          .update({ order: stage.order })
+          .eq('id', stage.id)
+      );
+      
       await Promise.all(updates);
     } catch (error) {
       console.error('Error reordering stages:', error);
