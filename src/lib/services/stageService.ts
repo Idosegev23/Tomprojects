@@ -184,19 +184,14 @@ export const stageService = {
   },
   
   // עדכון סדר השלבים
+  // הערה: פונקציה זו מוכנה לעתיד במקרה שיוסיפו את שדה order לסכמה
   async reorderStages(stages: { id: string, order: number }[]): Promise<void> {
     try {
-      // בדיקה אם העמודה 'order' קיימת בטבלה לפני ניסיון עדכון
-      const { error: checkError } = await supabase
-        .from('stages')
-        .select('id')
-        .limit(1);
-        
-      if (checkError && checkError.message.includes("order")) {
-        console.warn("Column 'order' does not exist in stages table. Skipping reordering.");
-        return;
-      }
+      console.warn("Column 'order' does not exist in stages table. Functionality not implemented.");
+      return;
       
+      // הקוד הבא יפעל רק אם וכאשר יוסיפו את שדה order לטבלת stages
+      /*
       // עדכון כל שלב בנפרד
       const updates = stages.map(stage => 
         supabase
@@ -206,6 +201,7 @@ export const stageService = {
       );
       
       await Promise.all(updates);
+      */
     } catch (error) {
       console.error('Error reordering stages:', error);
       throw new Error('Failed to reorder stages');

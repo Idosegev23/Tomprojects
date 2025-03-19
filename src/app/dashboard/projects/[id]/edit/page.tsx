@@ -220,14 +220,10 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
     }
     
     try {
-      // קביעת סדר השלב החדש כאחרון
-      const maxOrder = stages.length > 0 ? Math.max(...stages.map(s => s.order || 0)) + 1 : 1;
-      
-      // יצירת שלב חדש
+      // יצירת שלב חדש - ללא שדה order
       const newStage = await stageService.createStage({
         project_id: id,
         title: newStageName,
-        order: maxOrder,
       });
       
       // עדכון הרשימה המקומית
@@ -403,20 +399,9 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
     updatedStages[currentIndex] = updatedStages[newIndex];
     updatedStages[newIndex] = temp;
     
-    // עדכון סדר השלבים
-    const stagesWithNewOrder = updatedStages.map((stage, index) => ({
-      ...stage,
-      order: index + 1,
-    }));
-    
     try {
-      // שמירת העדכון בשרת
-      await stageService.reorderStages(
-        stagesWithNewOrder.map(stage => ({ id: stage.id, order: stage.order }))
-      );
-      
-      // עדכון המצב המקומי
-      setStages(stagesWithNewOrder);
+      // עדכון המצב המקומי בלבד, כיוון שאין שדה order בסכמה
+      setStages(updatedStages);
       
       toast({
         title: 'סדר השלבים עודכן',
@@ -652,9 +637,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                     אין שלבים בפרויקט זה
                   </Text>
                 ) : (
-                  stages
-                    .sort((a, b) => (a.order || 0) - (b.order || 0))
-                    .map(stage => (
+                  stages.map((stage, index) => (
                       <Flex
                         key={stage.id}
                         border="1px"
@@ -679,7 +662,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                             size="sm"
                             variant="ghost"
                             onClick={() => handleMoveStage(stage.id, 'up')}
-                            isDisabled={stage.order === 1}
+                            isDisabled={index === 0}
                           />
                           <IconButton
                             aria-label="הורד שלב"
@@ -687,7 +670,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                             size="sm"
                             variant="ghost"
                             onClick={() => handleMoveStage(stage.id, 'down')}
-                            isDisabled={stage.order === stages.length}
+                            isDisabled={index === stages.length - 1}
                           />
                           <IconButton
                             aria-label="מחק שלב"
