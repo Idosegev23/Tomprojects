@@ -563,18 +563,18 @@ export const taskService = {
           return taskData;
         });
         
-        // הוספת המשימות המשוכפלות לטבלה הראשית
+        // הוספת המשימות המשוכפלות רק לטבלה הייחודית
         const { data: insertedTasks, error: insertError } = await supabase
-          .from('tasks')
+          .from(tableName)
           .insert(clonedTasks)
           .select();
         
         if (insertError) {
-          console.error(`Error inserting cloned tasks into main tasks table:`, insertError);
+          console.error(`Error inserting cloned tasks into project-specific table ${tableName}:`, insertError);
           throw new Error(insertError.message);
         }
         
-        console.log(`${insertedTasks?.length || 0} tasks cloned to project ${projectId}`);
+        console.log(`${insertedTasks?.length || 0} tasks cloned to project ${projectId} table ${tableName}`);
         return insertedTasks || [];
       } catch (err) {
         console.error(`Error in cloneTasksToProject for project ${projectId}:`, err);
@@ -647,227 +647,6 @@ export const taskService = {
     }
   },
   
-  // יצירת משימות ברירת מחדל כתבניות
-  async createDefaultTaskTemplates(): Promise<Task[]> {
-    // בדיקה אם כבר יש משימות תבניות
-    const existingTemplates = await this.getAllTaskTemplates();
-    if (existingTemplates.length > 0) {
-      return existingTemplates; // אם יש כבר תבניות, נחזיר אותן
-    }
-    
-    // משימות ברירת מחדל לפרויקטי נדל"ן
-    const defaultTemplates = [
-      {
-        id: crypto.randomUUID(),
-        project_id: null, // ללא שיוך לפרויקט
-        title: 'איתור קרקע מתאימה',
-        description: 'חיפוש וסינון קרקעות פוטנציאליות לפרויקט',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['קרקע', 'איתור']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'בדיקת היתכנות ראשונית',
-        description: 'בדיקת תב"ע, זכויות בנייה, ומגבלות תכנוניות',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['תכנון', 'היתכנות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'משא ומתן לרכישת הקרקע',
-        description: 'ניהול מו"מ עם בעלי הקרקע וגיבוש הסכם',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['קרקע', 'רכישה']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'גיוס צוות תכנון',
-        description: 'בחירת אדריכל, מהנדסים ויועצים',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['תכנון', 'צוות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'תכנון אדריכלי ראשוני',
-        description: 'הכנת תכניות קונספט ראשוניות',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['תכנון', 'אדריכלות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'הגשת בקשה להיתר בנייה',
-        description: 'הכנת מסמכים והגשה לוועדה המקומית',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['תכנון', 'היתרים']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'בחירת קבלן מבצע',
-        description: 'פרסום מכרז, קבלת הצעות ובחירת קבלן',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['ביצוע', 'קבלנים']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'עבודות תשתית ופיתוח',
-        description: 'ביצוע עבודות תשתית ופיתוח באתר',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['ביצוע', 'תשתיות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'בנייה',
-        description: 'ביצוע עבודות הבנייה',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['ביצוע', 'בנייה']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'הכנת תכנית שיווק',
-        description: 'גיבוש אסטרטגיית שיווק ומכירות',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['שיווק', 'תכנון']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'הקמת משרד מכירות',
-        description: 'הקמת משרד מכירות באתר או במיקום אסטרטגי',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['שיווק', 'מכירות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'פרסום ושיווק',
-        description: 'פרסום הפרויקט בערוצי מדיה שונים',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['שיווק', 'פרסום']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'בדיקות איכות ותיקונים',
-        description: 'ביצוע בדיקות איכות ותיקון ליקויים',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['מסירה', 'איכות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'מסירת דירות',
-        description: 'מסירת דירות לרוכשים',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['מסירה', 'דירות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'רישום בטאבו',
-        description: 'רישום הדירות על שם הרוכשים בטאבו',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted: false,
-        is_template: true,
-        labels: ['מסירה', 'רישום']
-      }
-    ];
-    
-    // הוספת המשימות לבסיס הנתונים
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert(defaultTemplates)
-      .select();
-    
-    if (error) {
-      console.error('Error creating default task templates:', error);
-      throw new Error(error.message);
-    }
-    
-    return data || [];
-  },
-  
   // יצירת משימות ברירת מחדל לפרויקט נדל"ן חדש
   async createDefaultTasksForRealEstateProject(projectId: string, stageId: string | null): Promise<Task[]> {
     // בדיקה אם כבר יש משימות בפרויקט - נבדוק בטבלה הספציפית של הפרויקט
@@ -875,22 +654,35 @@ export const taskService = {
     
     try {
       // בדיקה אם הטבלה הייחודית קיימת
-      const { data: tableExists, error: tableCheckError } = await supabase
-        .rpc('check_table_exists', {
-          table_name_param: tableName
-        });
-      
-      if (tableCheckError) {
-        console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
-        throw new Error(tableCheckError.message);
+      let tableExists = false;
+      try {
+        const { data, error: tableCheckError } = await supabase
+          .rpc('check_table_exists', {
+            table_name_param: tableName
+          });
+        
+        if (tableCheckError) {
+          console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
+          throw new Error(tableCheckError.message);
+        }
+        
+        tableExists = !!data;
+      } catch (err) {
+        console.error(`Error checking project table ${tableName}:`, err);
       }
       
       // אם הטבלה לא קיימת, ניצור אותה
       if (!tableExists) {
-        await supabase.rpc('create_project_table', {
-          project_id: projectId
-        });
-        console.log(`Created project-specific table ${tableName} for project ${projectId}`);
+        try {
+          await supabase.rpc('create_project_table', {
+            project_id: projectId
+          });
+          console.log(`Created project-specific table ${tableName} for project ${projectId}`);
+          tableExists = true;
+        } catch (createTableError) {
+          console.error(`Error creating project-specific table ${tableName}:`, createTableError);
+          throw new Error('Failed to create project-specific table');
+        }
       }
       
       // בדיקה אם כבר יש משימות בטבלה הייחודית
@@ -906,29 +698,24 @@ export const taskService = {
         console.log(`Project ${projectId} already has tasks in ${tableName}, skipping default task creation`);
         return existingTasks;
       }
-    } catch (err) {
-      console.error(`Error checking project table ${tableName}:`, err);
-      // נמשיך למרות השגיאה
-    }
     
-    // קבלת השלבים של הפרויקט
-    const { data: stages, error: stagesError } = await supabase
-      .from('stages')
-      .select('*')
-      .eq('project_id', projectId);
-    
-    if (stagesError) {
-      console.error(`Error fetching stages for project ${projectId}:`, stagesError);
-      throw new Error(stagesError.message);
-    }
-    
-    // מיפוי שלבים לפי כותרת
-    const stageMap: Record<string, string> = {};
-    stages?.forEach(stage => {
-      stageMap[stage.title] = stage.id;
-    });
-    
-    try {
+      // קבלת השלבים של הפרויקט
+      const { data: stages, error: stagesError } = await supabase
+        .from('stages')
+        .select('*')
+        .eq('project_id', projectId);
+      
+      if (stagesError) {
+        console.error(`Error fetching stages for project ${projectId}:`, stagesError);
+        throw new Error(stagesError.message);
+      }
+      
+      // מיפוי שלבים לפי כותרת
+      const stageMap: Record<string, string> = {};
+      stages?.forEach(stage => {
+        stageMap[stage.title] = stage.id;
+      });
+      
       // קבלת כל תבניות המשימות הקיימות
       let taskTemplates = await this.getAllTaskTemplates();
       
@@ -970,7 +757,12 @@ export const taskService = {
         return taskData;
       });
       
-      // הוספת המשימות לטבלה הייחודית
+      if (!tableExists) {
+        console.error(`Table ${tableName} does not exist and could not be created`);
+        throw new Error(`Table ${tableName} does not exist and could not be created`);
+      }
+      
+      // הוספת המשימות רק לטבלה הייחודית של הפרויקט
       const { data: createdTasks, error: createError } = await supabase
         .from(tableName)
         .insert(newTasks)
@@ -981,15 +773,14 @@ export const taskService = {
         throw new Error(createError.message);
       }
       
-      console.log(`Created ${createdTasks?.length || 0} default tasks for project ${projectId}`);
+      console.log(`Created ${createdTasks?.length || 0} default tasks for project ${projectId} in table ${tableName}`);
       return createdTasks || [];
-      
     } catch (err) {
       console.error(`Error creating default tasks for project ${projectId}:`, err);
       throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה');
     }
   },
-
+  
   // פונקציה חדשה: קבלת כל המשימות בהיררכיה (משימת אב וכל תתי המשימות שלה)
   async getTaskHierarchy(rootTaskId: string): Promise<Task[]> {
     // מציאת כל המשימות שקשורות להיררכיה זו
@@ -1259,26 +1050,236 @@ export const taskService = {
   // פונקציה חדשה: סנכרון כל המשימות של פרויקט מהטבלה הראשית לטבלה הספציפית
   async syncProjectTasks(projectId: string): Promise<void> {
     try {
-      // ניסיון להשתמש בפונקציית RPC
-      try {
-        await supabase.rpc('sync_project_tasks', {
-          project_id: projectId
-        });
-        console.log(`All tasks for project ${projectId} synced successfully using RPC`);
-        return;
-      } catch (rpcError) {
-        console.error(`Error syncing tasks with RPC for project ${projectId}:`, rpcError);
-        console.log(`Falling back to manual sync for project ${projectId}`);
-      }
+      // הסנכרון כבר לא נדרש כי כל הפעולות מתבצעות ישירות בטבלה הספציפית
+      console.log(`Sync not needed for project ${projectId} - all operations now use only project-specific table`);
       
-      // מימוש חלופי אם ה-RPC נכשל - ניקח את כל המשימות מהטבלה הראשית
-      // במימוש זה, אנחנו פשוט נחזיר הצלחה, מכיוון שבכל מקרה השינויים נשמרים בטבלה הראשית
-      console.log(`Manual sync not needed for project ${projectId} - all operations use main tasks table`);
-      
+      // אין צורך להשתמש ב-RPC או לבצע סנכרון ידני, כי אנחנו לא עובדים יותר עם הטבלה הראשית
+      // עבור משימות של פרויקטים ספציפיים
     } catch (err) {
-      console.error(`Error syncing tasks for project ${projectId}:`, err);
-      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה בסנכרון המשימות');
+      console.error(`Error in syncProjectTasks for project ${projectId}:`, err);
+      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה בפונקציית הסנכרון');
     }
+  },
+
+  // יצירת משימות ברירת מחדל כתבניות
+  async createDefaultTaskTemplates(): Promise<Task[]> {
+    // בדיקה אם כבר יש משימות תבניות
+    const existingTemplates = await this.getAllTaskTemplates();
+    if (existingTemplates.length > 0) {
+      return existingTemplates; // אם יש כבר תבניות, נחזיר אותן
+    }
+    
+    // משימות ברירת מחדל לפרויקטי נדל"ן
+    const defaultTemplates = [
+      {
+        id: crypto.randomUUID(),
+        project_id: null, // ללא שיוך לפרויקט
+        title: 'איתור קרקע מתאימה',
+        description: 'חיפוש וסינון קרקעות פוטנציאליות לפרויקט',
+        status: 'todo',
+        priority: 'high',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['קרקע', 'איתור']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'בדיקת היתכנות ראשונית',
+        description: 'בדיקת תב"ע, זכויות בנייה, ומגבלות תכנוניות',
+        status: 'todo',
+        priority: 'high',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['תכנון', 'היתכנות']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'משא ומתן לרכישת הקרקע',
+        description: 'ניהול מו"מ עם בעלי הקרקע וגיבוש הסכם',
+        status: 'todo',
+        priority: 'high',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['קרקע', 'רכישה']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'גיוס צוות תכנון',
+        description: 'בחירת אדריכל, מהנדסים ויועצים',
+        status: 'todo',
+        priority: 'medium',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['תכנון', 'צוות']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'תכנון אדריכלי ראשוני',
+        description: 'הכנת תכניות קונספט ראשוניות',
+        status: 'todo',
+        priority: 'medium',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['תכנון', 'אדריכלות']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'הגשת בקשה להיתר בנייה',
+        description: 'הכנת מסמכים והגשה לוועדה המקומית',
+        status: 'todo',
+        priority: 'high',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['תכנון', 'היתרים']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'בחירת קבלן מבצע',
+        description: 'פרסום מכרז, קבלת הצעות ובחירת קבלן',
+        status: 'todo',
+        priority: 'high',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['ביצוע', 'קבלנים']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'עבודות תשתית ופיתוח',
+        description: 'ביצוע עבודות תשתית ופיתוח באתר',
+        status: 'todo',
+        priority: 'medium',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['ביצוע', 'תשתיות']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'בנייה',
+        description: 'ביצוע עבודות הבנייה',
+        status: 'todo',
+        priority: 'high',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['ביצוע', 'בנייה']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'הכנת תכנית שיווק',
+        description: 'גיבוש אסטרטגיית שיווק ומכירות',
+        status: 'todo',
+        priority: 'medium',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['שיווק', 'תכנון']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'הקמת משרד מכירות',
+        description: 'הקמת משרד מכירות באתר או במיקום אסטרטגי',
+        status: 'todo',
+        priority: 'medium',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['שיווק', 'מכירות']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'פרסום ושיווק',
+        description: 'פרסום הפרויקט בערוצי מדיה שונים',
+        status: 'todo',
+        priority: 'medium',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['שיווק', 'פרסום']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'בדיקות איכות ותיקונים',
+        description: 'ביצוע בדיקות איכות ותיקון ליקויים',
+        status: 'todo',
+        priority: 'high',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['מסירה', 'איכות']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'מסירת דירות',
+        description: 'מסירת דירות לרוכשים',
+        status: 'todo',
+        priority: 'high',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['מסירה', 'דירות']
+      },
+      {
+        id: crypto.randomUUID(),
+        project_id: null,
+        title: 'רישום בטאבו',
+        description: 'רישום הדירות על שם הרוכשים בטאבו',
+        status: 'todo',
+        priority: 'medium',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        is_template: true,
+        labels: ['מסירה', 'רישום']
+      }
+    ];
+    
+    // הוספת המשימות לבסיס הנתונים
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert(defaultTemplates)
+      .select();
+    
+    if (error) {
+      console.error('Error creating default task templates:', error);
+      throw new Error(error.message);
+    }
+    
+    return data || [];
   },
 };
 
