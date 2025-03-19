@@ -79,7 +79,9 @@ const TaskNode: React.FC<TaskNodeProps> = ({
   onStatusChange,
   isFiltered = false
 }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
+  // יש להתחיל עם isExpanded=true לתצוגה ברירת מחדל טובה יותר
+  // אם מדובר בתצוגה מסוננת, תמיד נרצה להציג את כל העץ פתוח
+  const [isExpanded, setIsExpanded] = useState<boolean>(true);
   const [isHovered, setIsHovered] = useState(false);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   
@@ -94,6 +96,16 @@ const TaskNode: React.FC<TaskNodeProps> = ({
   
   // פונקציה להוספת תת-משימה שנוצרה לעץ המשימות
   const handleSubtaskCreated = (createdTask: Task) => {
+    toast({
+      title: "תת-משימה נוצרה בהצלחה",
+      status: "success",
+      duration: 3000,
+      isClosable: true,
+    });
+    
+    // וידוא שהעץ יהיה פתוח לאחר יצירת תת-משימה
+    setIsExpanded(true);
+    
     if (onEditTask) {
       onEditTask(task);
     }
@@ -146,7 +158,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({
         >
           <Flex justifyContent="space-between" alignItems="center">
             <Flex alignItems="center" flex="1">
-              {children && (
+              {React.Children.count(children) > 0 && (
                 <IconButton
                   icon={isExpanded ? <FiChevronDown /> : <FiChevronRight />}
                   variant="ghost"
@@ -268,53 +280,127 @@ const TaskTree: React.FC<TaskTreeProps> = ({
   onTaskStatusChanged,
   searchTerm = '',
 }) => {
-  const [taskTree, setTaskTree] = useState<Task[]>([]);
-  const [filteredTree, setFilteredTree] = useState<Task[]>([]);
+  const [taskTree, setTaskTree] = useState<(Task & { children?: Task[] })[]>([]);
+  const [filteredTree, setFilteredTree] = useState<(Task & { children?: Task[] })[]>([]);
   const [isFilterActive, setIsFilterActive] = useState(false);
   
+  // בניית עץ המשימות ההיררכי
   useEffect(() => {
     // בניית עץ המשימות
     const buildTaskTree = () => {
-      // יצירת מפה של משימות לפי מזהה
+      // יצירת מפה של משימות לפי ID
       const taskMap = new Map<string, Task & { children?: Task[] }>();
       
-      // הוספת כל המשימות למפה
+      // הוספת כל המשימות למפה עם מערך ילדים ריק
       tasks.forEach(task => {
+        // וידוא שהמשימה מקבלת מערך ילדים ריק אם אין לה כבר אחד
         taskMap.set(task.id, { ...task, children: [] });
       });
       
-      // יצירת עץ
-      const tree: Task[] = [];
+      // מיון המשימות להיררכיה - משימות אב ומשימות ילדים
+      const rootTasks: (Task & { children?: Task[] })[] = [];
       
-      // הוספת משימות לעץ או לתתי-משימות
-      tasks.forEach(task => {
-        const taskWithChildren = taskMap.get(task.id);
-        
-        if (!taskWithChildren) return;
-        
+      // עיבוד כל המשימות - חיבור תתי-משימות למשימות האב
+      taskMap.forEach(task => {
+        // בדיקה אם זו תת-משימה (יש לה parent_task_id)
         if (task.parent_task_id && taskMap.has(task.parent_task_id)) {
-          // זו תת-משימה, נוסיף אותה לעץ של המשימה האב
-          const parentTask = taskMap.get(task.parent_task_id);
-          if (parentTask && parentTask.children) {
-            parentTask.children.push(taskWithChildren);
+          // תת-משימה - חיבור למשימת האב
+          const parent = taskMap.get(task.parent_task_id);
+          if (parent) {
+            // בדיקה שהילד לא כבר קיים במערך הילדים של האב
+            if (!parent.children) {
+              parent.children = [];
             }
-          } else {
-            // זו משימת שורש
-          tree.push(taskWithChildren);
+            // רק אם הילד לא קיים כבר, הוסף אותו
+            if (!parent.children.some(child => child.id === task.id)) {
+              parent.children.push(task);
+            }
+          }
+        } else {
+          // משימת אב - הוספה לרשימת השורש רק אם היא לא כבר שם
+          if (!rootTasks.some(rootTask => rootTask.id === task.id)) {
+            rootTasks.push(task);
+          }
         }
       });
       
-      // מיון המשימות (לדוגמה, לפי תאריך יצירה)
-      const sortedTree = tree.sort((a, b) => {
-        const dateA = new Date(a.created_at || 0).getTime();
-        const dateB = new Date(b.created_at || 0).getTime();
-        return dateB - dateA; // המשימות החדשות יוצגו ראשונות
+      // מיון משימות האב לפי מספר היררכי או לפי תאריך יצירה אם אין מספר היררכי
+      rootTasks.sort((a, b) => {
+        // אם יש מספרים היררכיים לשתי המשימות
+        if (a.hierarchical_number && b.hierarchical_number) {
+          const aNum = a.hierarchical_number.split('.').map(Number);
+          const bNum = b.hierarchical_number.split('.').map(Number);
+          
+          for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
+            if (aNum[i] !== bNum[i]) {
+              return aNum[i] - bNum[i];
+            }
+          }
+          
+          return aNum.length - bNum.length;
+        } 
+        // אם רק לאחת מהן יש מספר היררכי
+        else if (a.hierarchical_number) {
+          return -1; // a מופיע קודם
+        } else if (b.hierarchical_number) {
+          return 1; // b מופיע קודם
+        } 
+        // אם אין מספרים היררכיים, מיון לפי תאריך יצירה אם קיים
+        else if (a.created_at && b.created_at) {
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        }
+        
+        return 0;
       });
       
-      setTaskTree(sortedTree);
+      // פונקציה רקורסיבית למיון תתי-משימות
+      const sortChildrenRecursively = (tasks: (Task & { children?: Task[] })[]) => {
+        tasks.forEach(task => {
+          if (task.children && task.children.length > 0) {
+            // מיון תתי-משימות לפי מספר היררכי או תאריך יצירה
+            task.children.sort((a, b) => {
+              // אם יש מספרים היררכיים לשתי המשימות
+              if (a.hierarchical_number && b.hierarchical_number) {
+                const aNum = a.hierarchical_number.split('.').map(Number);
+                const bNum = b.hierarchical_number.split('.').map(Number);
+                
+                for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
+                  if (aNum[i] !== bNum[i]) {
+                    return aNum[i] - bNum[i];
+                  }
+                }
+                
+                return aNum.length - bNum.length;
+              } 
+              // אם רק לאחת מהן יש מספר היררכי
+              else if (a.hierarchical_number) {
+                return -1; // a מופיע קודם
+              } else if (b.hierarchical_number) {
+                return 1; // b מופיע קודם
+              } 
+              // אם אין מספרים היררכיים, מיון לפי תאריך יצירה אם קיים
+              else if (a.created_at && b.created_at) {
+                return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+              }
+              
+              return 0;
+            });
+            
+            // מיון רקורסיבי של תתי-משימות עמוקות יותר
+            sortChildrenRecursively(task.children);
+          }
+        });
+      };
+      
+      // מיון רקורסיבי של כל העץ
+      sortChildrenRecursively(rootTasks);
+      
+      console.log('מבנה עץ משימות מיוצר:', rootTasks);
+      return rootTasks;
     };
     
-    buildTaskTree();
+    const tree = buildTaskTree();
+    setTaskTree(tree);
   }, [tasks]);
   
   // פילטור המשימות לפי חיפוש
