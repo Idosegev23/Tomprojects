@@ -541,7 +541,8 @@ export const taskService = {
         
         // יצירת עותקים של המשימות עם מזהים חדשים ושיוך לפרויקט החדש
         const clonedTasks = tasksToClone.map(task => {
-          const newTask = {
+          // בדיקה האם העמודה is_global_template קיימת כדי למנוע שגיאות
+          const taskData: any = {
             ...task,
             id: crypto.randomUUID(),
             project_id: projectId,
@@ -549,11 +550,17 @@ export const taskService = {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             original_task_id: task.id, // שמירת המזהה המקורי
-            is_global_template: false, // לא להוסיף לרשימה הכללית, כי זו משימה ספציפית לפרויקט
             hierarchical_number: null // נאפס את המספר ההיררכי כדי שייקבע מחדש
           };
           
-          return newTask;
+          // הוספת השדה is_global_template רק אם הטבלה תומכת בו
+          try {
+            taskData.is_global_template = false;
+          } catch (err) {
+            console.log("Column is_global_template might not exist yet, skipping");
+          }
+          
+          return taskData;
         });
         
         // הוספת המשימות המשוכפלות לטבלה הראשית
@@ -900,20 +907,30 @@ export const taskService = {
       console.log(`Found ${taskTemplates.length} task templates to clone into the project`);
       
       // הכנת משימות לפרויקט על בסיס התבניות
-      const newTasks = taskTemplates.map((template, index) => ({
-        id: crypto.randomUUID(),
-        project_id: projectId,
-        stage_id: stageMap['לביצוע'] || stageId,
-        title: template.title,
-        description: template.description,
-        status: template.status || 'todo',
-        priority: template.priority || 'medium',
-        hierarchical_number: String(index + 1),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: template.labels || [],
-        original_task_id: template.id // שמירת המזהה של התבנית המקורית
-      }));
+      const newTasks = taskTemplates.map((template, index) => {
+        // יצירת אובייקט משימה בסיסי
+        const taskData: any = {
+          id: crypto.randomUUID(),
+          project_id: projectId,
+          stage_id: stageMap['לביצוע'] || stageId,
+          title: template.title,
+          description: template.description,
+          status: template.status || 'todo',
+          priority: template.priority || 'medium',
+          hierarchical_number: String(index + 1),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          labels: template.labels || [],
+          original_task_id: template.id // שמירת המזהה של התבנית המקורית
+        };
+        
+        // בדיקה האם השדה is_global_template קיים בתבנית
+        if ('is_global_template' in template) {
+          taskData.is_global_template = false;
+        }
+        
+        return taskData;
+      });
       
       // הוספת המשימות לטבלה הייחודית
       const { data: createdTasks, error: createError } = await supabase
