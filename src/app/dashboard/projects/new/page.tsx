@@ -49,15 +49,20 @@ import {
   ModalFooter,
   ModalBody,
   ModalCloseButton,
+  AccordionItem,
+  AccordionButton,
+  AccordionPanel,
+  AccordionIcon,
+  Accordion,
 } from '@chakra-ui/react';
 import { useRouter } from 'next/navigation';
-import { FiSave, FiArrowRight, FiSearch, FiCalendar, FiFilter, FiTag, FiPlus, FiTrash2, FiX, FiCheck } from 'react-icons/fi';
+import { FiSave, FiArrowRight, FiSearch, FiCalendar, FiFilter, FiTag, FiPlus, FiTrash2, FiX, FiCheck, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import { InfoIcon } from '@chakra-ui/icons';
 import projectService from '@/lib/services/projectService';
 import stageService from '@/lib/services/stageService';
 import taskService from '@/lib/services/taskService';
 import entrepreneurService from '@/lib/services/entrepreneurService';
-import type { NewProject, Task, NewTask, Entrepreneur, Stage } from '@/types/supabase';
+import type { NewProject, Task, NewTask, Entrepreneur, Stage, TaskWithChildren } from '@/types/supabase';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 
 export default function NewProject() {
@@ -126,8 +131,32 @@ export default function NewProject() {
     const loadAllTaskTemplates = async () => {
       try {
         setLoadingTasks(true);
-        const tasks = await taskService.getAllTaskTemplates();
-        setAvailableTasks(tasks);
+        // שימוש בפונקציה החדשה שמחזירה משימות היררכיות
+        const hierarchicalTasks = await taskService.getAllHierarchicalTaskTemplates();
+        
+        // אם אין תבניות היררכיות, ננסה לקבל את כל תבניות המשימות הרגילות
+        if (hierarchicalTasks.length === 0) {
+          const flatTasks = await taskService.getAllTaskTemplates();
+          setAvailableTasks(flatTasks);
+        } else {
+          // המרת המשימות ההיררכיות למבנה השטוח לטובת התצוגה הקיימת
+          // שימור המידע ההיררכי לתצוגה החדשה
+          setHierarchicalTasks(hierarchicalTasks);
+          
+          // המרה לרשימה שטוחה לתמיכה בחלקים אחרים של הממשק
+          const flattenHierarchicalTasks = (tasks: TaskWithChildren[]): Task[] => {
+            const result: Task[] = [];
+            tasks.forEach(task => {
+              result.push(task);
+              if (task.children && task.children.length > 0) {
+                result.push(...flattenHierarchicalTasks(task.children));
+              }
+            });
+            return result;
+          };
+          
+          setAvailableTasks(flattenHierarchicalTasks(hierarchicalTasks));
+        }
       } catch (err) {
         console.error('שגיאה בטעינת תבניות משימות:', err);
         toast({
@@ -697,6 +726,9 @@ export default function NewProject() {
     }
   };
   
+  // הוספת משתנה מצב חדש לשמירת המשימות ההיררכיות
+  const [hierarchicalTasks, setHierarchicalTasks] = useState<TaskWithChildren[]>([]);
+  
   return (
     <Container maxW="container.md" py={6}>
       <VStack spacing={8} align="stretch">
@@ -794,6 +826,7 @@ export default function NewProject() {
             <Tabs variant="enclosed" colorScheme="primary">
               <TabList>
                 <Tab>תבניות משימות ברירת מחדל</Tab>
+                <Tab>בחירת תבניות משימות</Tab>
                 <Tab>הוספת תבניות משימות מותאמות אישית</Tab>
               </TabList>
               
@@ -813,7 +846,7 @@ export default function NewProject() {
                   
                   <Text fontSize="sm" color="blue.600" mb={4}>
                     <Box as={InfoIcon} display="inline" mr={1} />
-                    ניתן לבחור גם תבניות משימות מותאמות אישית בלשונית "תבניות משימות מותאמות אישית" בנוסף לתבניות ברירת המחדל.
+                    ניתן לבחור גם תבניות משימות מותאמות אישית בלשונית "בחירת תבניות משימות" בנוסף לתבניות ברירת המחדל.
                   </Text>
                   
                   {useDefaultTasks && (
@@ -838,125 +871,130 @@ export default function NewProject() {
                       </Text>
                     </Box>
                   )}
+                </TabPanel>
+                
+                <TabPanel p={4}>
+                  <Text fontSize="md" fontWeight="bold" mb={4}>
+                    בחר תבניות משימות לשיוך לפרויקט החדש
+                  </Text>
                   
-                  <Divider my={4} />
+                  <Text fontSize="sm" color="blue.600" mb={4}>
+                    <Box as={InfoIcon} display="inline" mr={1} />
+                    תבניות המשימות שתבחר ישוכפלו לפרויקט החדש, כולל כל תתי-המשימות שלהן.
+                  </Text>
                   
-                  <Box>
-                    <Text fontSize="md" fontWeight="bold" mb={2}>
-                      בחר תבניות משימות לשיוך לפרויקט:
-                    </Text>
-                    <Text fontSize="sm" color="blue.600" mb={4}>
-                      <Box as={InfoIcon} display="inline" mr={1} />
-                      תבניות המשימות שתבחר ישוכפלו לפרויקט החדש. תוכל לבחור מבין התבניות הקיימות או ליצור תבניות חדשות.
-                    </Text>
-                    
-                    <InputGroup mb={4}>
-                      <InputLeftElement pointerEvents="none">
-                        <FiSearch color="gray.300" />
-                      </InputLeftElement>
-                      <Input 
-                        placeholder="חיפוש תבניות משימות..." 
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        bg="white"
-                      />
-                    </InputGroup>
-                    
-                    {/* סינון לפי תגיות */}
-                    {uniqueLabels.length > 0 && (
-                      <Box mb={4}>
-                        <Flex align="center" mb={2}>
-                          <FiTag style={{ marginLeft: '8px' }} />
-                          <Text fontSize="sm" fontWeight="bold">
-                            סנן לפי תגיות:
-                          </Text>
-                        </Flex>
-                        <Wrap spacing={2}>
-                          {uniqueLabels.map(label => (
-                            <WrapItem key={`filter-${label}`}>
-                              <Tag 
-                                size="md" 
-                                colorScheme={activeFilters.includes(label) ? "primary" : "gray"}
-                                borderRadius="full"
-                                cursor="pointer"
-                                onClick={() => toggleFilter(label)}
-                              >
-                                <TagLabel>{label}</TagLabel>
-                              </Tag>
-                            </WrapItem>
-                          ))}
-                        </Wrap>
-                      </Box>
-                    )}
-                    
-                    {loadingTasks ? (
-                      <Flex justify="center" py={4}>
-                        <Spinner size="md" />
+                  <InputGroup mb={4}>
+                    <InputLeftElement pointerEvents="none">
+                      <FiSearch color="gray.300" />
+                    </InputLeftElement>
+                    <Input 
+                      placeholder="חיפוש תבניות משימות..." 
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      bg="white"
+                    />
+                  </InputGroup>
+                  
+                  {/* סינון לפי תגיות */}
+                  {uniqueLabels.length > 0 && (
+                    <Box mb={4}>
+                      <Flex align="center" mb={2}>
+                        <FiTag style={{ marginLeft: '8px' }} />
+                        <Text fontSize="sm" fontWeight="bold">
+                          סנן לפי תגיות:
+                        </Text>
                       </Flex>
-                    ) : filteredTasks.length === 0 ? (
-                      <Box textAlign="center" py={4}>
-                        <Text mb={4}>
-                          {searchTerm || activeFilters.length > 0 ? 'לא נמצאו תבניות משימות התואמות את החיפוש' : 'אין תבניות משימות זמינות לבחירה'}
-                        </Text>
-                        <Text fontSize="sm" color="blue.600" mb={4}>
-                          <Box as={InfoIcon} display="inline" mr={1} />
-                          ניתן ליצור תבניות משימות חדשות בטאב "הוספת משימות מותאמות אישית"
-                        </Text>
-                        <Button
-                          colorScheme="primary"
-                          leftIcon={<FiPlus />}
-                          onClick={async () => {
-                            try {
-                              setLoadingTasks(true);
-                              // יצירת משימות ברירת מחדל
-                              const defaultTasks = await taskService.createDefaultTaskTemplates();
-                              setAvailableTasks(defaultTasks);
-                              
-                              toast({
-                                title: 'תבניות משימות נוצרו בהצלחה',
-                                description: `נוצרו ${defaultTasks.length} תבניות משימות`,
-                                status: 'success',
-                                duration: 3000,
-                                isClosable: true,
-                                position: 'top-right',
-                              });
-                            } catch (err) {
-                              console.error('שגיאה ביצירת תבניות משימות:', err);
-                              toast({
-                                title: 'שגיאה ביצירת תבניות משימות',
-                                description: err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה',
-                                status: 'error',
-                                duration: 5000,
-                                isClosable: true,
-                              });
-                            } finally {
-                              setLoadingTasks(false);
+                      <Wrap spacing={2}>
+                        {uniqueLabels.map(label => (
+                          <WrapItem key={`filter-${label}`}>
+                            <Tag 
+                              size="md" 
+                              colorScheme={activeFilters.includes(label) ? "primary" : "gray"}
+                              borderRadius="full"
+                              cursor="pointer"
+                              onClick={() => toggleFilter(label)}
+                            >
+                              <TagLabel>{label}</TagLabel>
+                            </Tag>
+                          </WrapItem>
+                        ))}
+                      </Wrap>
+                    </Box>
+                  )}
+                  
+                  {loadingTasks ? (
+                    <Flex justify="center" py={4}>
+                      <Spinner size="md" />
+                    </Flex>
+                  ) : hierarchicalTasks.length === 0 ? (
+                    <Box textAlign="center" py={4}>
+                      <Text mb={4}>
+                        {searchTerm || activeFilters.length > 0 ? 'לא נמצאו תבניות משימות התואמות את החיפוש' : 'אין תבניות משימות זמינות לבחירה'}
+                      </Text>
+                      <Text fontSize="sm" color="blue.600" mb={4}>
+                        <Box as={InfoIcon} display="inline" mr={1} />
+                        ניתן ליצור תבניות משימות חדשות בטאב "הוספת משימות מותאמות אישית"
+                      </Text>
+                      <Button
+                        colorScheme="primary"
+                        leftIcon={<FiPlus />}
+                        onClick={async () => {
+                          try {
+                            setLoadingTasks(true);
+                            // יצירת משימות ברירת מחדל
+                            const defaultTasks = await taskService.createDefaultTaskTemplates();
+                            setAvailableTasks(defaultTasks);
+                            
+                            toast({
+                              title: 'תבניות משימות נוצרו בהצלחה',
+                              description: `נוצרו ${defaultTasks.length} תבניות משימות`,
+                              status: 'success',
+                              duration: 3000,
+                              isClosable: true,
+                              position: 'top-right',
+                            });
+                            
+                            // טעינה מחדש של המשימות ההיררכיות
+                            const hierarchicalTasks = await taskService.getAllHierarchicalTaskTemplates();
+                            setHierarchicalTasks(hierarchicalTasks);
+                          } catch (err) {
+                            console.error('שגיאה ביצירת תבניות משימות:', err);
+                            toast({
+                              title: 'שגיאה ביצירת תבניות משימות',
+                              description: err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה',
+                              status: 'error',
+                              duration: 5000,
+                              isClosable: true,
+                            });
+                          } finally {
+                            setLoadingTasks(false);
+                          }
+                        }}
+                        mr={2}
+                      >
+                        צור תבניות משימות
+                      </Button>
+                      <Button
+                        colorScheme="blue"
+                        leftIcon={<FiPlus />}
+                        onClick={() => {
+                          // מעבר לטאב השלישי
+                          const tabsElement = document.querySelector('[role="tablist"]');
+                          if (tabsElement) {
+                            const thirdTab = tabsElement.children[2] as HTMLElement;
+                            if (thirdTab) {
+                              thirdTab.click();
+                              setShowCustomTaskSelection(true);
                             }
-                          }}
-                          mr={2}
-                        >
-                          צור תבניות משימות
-                        </Button>
-                        <Button
-                          colorScheme="blue"
-                          leftIcon={<FiPlus />}
-                          onClick={() => {
-                            // מעבר לטאב השני
-                            const tabsElement = document.querySelector('[role="tablist"]');
-                            if (tabsElement) {
-                              const secondTab = tabsElement.children[1] as HTMLElement;
-                              if (secondTab) {
-                                secondTab.click();
-                                setShowCustomTaskSelection(true);
-                              }
-                            }
-                          }}
-                        >
-                          צור תבניות משימות מותאמות אישית
-                        </Button>
-                      </Box>
-                    ) : (
-                      <>
+                          }
+                        }}
+                      >
+                        צור תבניות משימות מותאמות אישית
+                      </Button>
+                    </Box>
+                  ) : (
+                    <>
+                      <Box background="white" borderRadius="md" p={4} boxShadow="sm" mb={4}>
                         <Flex justify="space-between" align="center" mb={2}>
                           <Checkbox 
                             isChecked={selectedTaskIds.length === filteredTasks.length && filteredTasks.length > 0}
@@ -966,105 +1004,129 @@ export default function NewProject() {
                           </Checkbox>
                           <Text fontSize="sm">נבחרו {selectedTaskIds.length} תבניות משימות</Text>
                         </Flex>
-                        
-                        <Divider mb={2} />
-                        
-                        <VStack spacing={2} align="stretch" maxH="300px" overflowY="auto" bg="white" p={2} borderRadius="md">
-                          {filteredTasks.map(task => (
-                            <Box 
-                              key={task.id} 
-                              p={3} 
-                              borderWidth="1px" 
-                              borderRadius="md"
-                              _hover={{ bg: 'gray.50' }}
-                            >
-                              <Flex justify="space-between" align="flex-start">
-                                <HStack align="flex-start" spacing={3}>
-                                  <Checkbox 
-                                    isChecked={selectedTaskIds.includes(task.id)}
-                                    onChange={(e) => handleTaskSelection(task, e.target.checked)}
-                                  />
-                                  <VStack align="flex-start" spacing={1}>
-                                    <Text fontWeight="bold">{task.title}</Text>
-                                    {task.description && (
-                                      <Text fontSize="sm" noOfLines={2}>{task.description}</Text>
-                                    )}
-                                    <HStack spacing={2} flexWrap="wrap">
-                                      <Badge colorScheme={getStatusColor(task.status)}>{task.status}</Badge>
-                                      {task.due_date && (
-                                        <Text fontSize="xs" color="gray.600">
-                                          <FiCalendar style={{ display: 'inline', marginLeft: '2px' }} />
-                                          {formatDate(task.due_date)}
-                                        </Text>
-                                      )}
-                                      {task.labels && task.labels.length > 0 && (
-                                        <Wrap spacing={1} mt={1}>
-                                          {task.labels.map(label => (
-                                            <WrapItem key={`${task.id}-${label}`}>
-                                              <Tag size="sm" colorScheme="blue" borderRadius="full">
-                                                {label}
-                                              </Tag>
-                                            </WrapItem>
-                                          ))}
-                                        </Wrap>
-                                      )}
-                                    </HStack>
+                      </Box>
+                      
+                      {/* תצוגה היררכית של תבניות המשימות */}
+                      <Accordion allowMultiple defaultIndex={[]} background="white" borderRadius="md" overflow="hidden" boxShadow="sm">
+                        {Array.isArray(hierarchicalTasks) && hierarchicalTasks
+                          .filter(task => 
+                            (searchTerm === '' || task.title.includes(searchTerm)) &&
+                            (activeFilters.length === 0 || (task.labels && task.labels.some(label => activeFilters.includes(label))))
+                          )
+                          .map((taskItem) => (
+                            <AccordionItem key={taskItem.id} border="1px solid" borderColor="gray.200" mb={2} borderRadius="md">
+                              <h2>
+                                <AccordionButton py={3} _hover={{ bg: 'gray.50' }}>
+                                  <HStack flex="1" align="center" spacing={3}>
+                                    <Checkbox 
+                                      isChecked={selectedTaskIds.includes(taskItem.id)}
+                                      onChange={(e) => handleTaskSelection(taskItem, e.target.checked)}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <Box flex="1" textAlign="start">
+                                      <Text fontWeight="bold">{taskItem.title}</Text>
+                                      <HStack spacing={2} mt={1}>
+                                        <Badge colorScheme={getStatusColor(taskItem.status)}>{taskItem.status}</Badge>
+                                        {taskItem.priority && (
+                                          <Badge colorScheme={taskItem.priority === 'high' ? 'red' : taskItem.priority === 'medium' ? 'yellow' : 'green'}>
+                                            {taskItem.priority}
+                                          </Badge>
+                                        )}
+                                        {taskItem.due_date && (
+                                          <Text fontSize="xs" color="gray.600">
+                                            <FiCalendar style={{ display: 'inline', marginLeft: '2px' }} />
+                                            {formatDate(taskItem.due_date)}
+                                          </Text>
+                                        )}
+                                      </HStack>
+                                    </Box>
+                                  </HStack>
+                                  {taskItem.children && taskItem.children.length > 0 && <AccordionIcon />}
+                                </AccordionButton>
+                              </h2>
+                              <AccordionPanel pb={4} bg={useColorModeValue('gray.50', 'gray.700')}>
+                                {taskItem.description && (
+                                  <Text fontSize="sm" mb={3}>{taskItem.description}</Text>
+                                )}
+                                
+                                {taskItem.labels && taskItem.labels.length > 0 && (
+                                  <Wrap spacing={1} mb={3}>
+                                    {taskItem.labels.map(label => (
+                                      <WrapItem key={`${taskItem.id}-${label}`}>
+                                        <Tag size="sm" colorScheme="blue" borderRadius="full">
+                                          {label}
+                                        </Tag>
+                                      </WrapItem>
+                                    ))}
+                                  </Wrap>
+                                )}
+                                
+                                {taskItem.children && taskItem.children.length > 0 && (
+                                  <VStack spacing={1} align="stretch" mt={2} pl={4} borderLeftWidth="2px" borderLeftColor="gray.300">
+                                    {taskItem.children.map(childTask => (
+                                      <Box 
+                                        key={childTask.id} 
+                                        p={3} 
+                                        borderWidth="1px" 
+                                        borderRadius="md"
+                                        bg="white"
+                                        _hover={{ bg: 'gray.50' }}
+                                        mb={2}
+                                      >
+                                        <Flex justify="space-between" align="flex-start">
+                                          <HStack align="flex-start" spacing={3}>
+                                            <Checkbox 
+                                              isChecked={selectedTaskIds.includes(childTask.id)}
+                                              onChange={(e) => handleTaskSelection(childTask, e.target.checked)}
+                                            />
+                                            <VStack align="flex-start" spacing={1}>
+                                              <Text fontWeight="bold">{childTask.title}</Text>
+                                              {childTask.description && (
+                                                <Text fontSize="sm" noOfLines={2}>{childTask.description}</Text>
+                                              )}
+                                              <HStack spacing={2} flexWrap="wrap">
+                                                <Badge colorScheme={getStatusColor(childTask.status)}>{childTask.status}</Badge>
+                                                {childTask.due_date && (
+                                                  <Text fontSize="xs" color="gray.600">
+                                                    <FiCalendar style={{ display: 'inline', marginLeft: '2px' }} />
+                                                    {formatDate(childTask.due_date)}
+                                                  </Text>
+                                                )}
+                                                {childTask.labels && childTask.labels.length > 0 && (
+                                                  <Wrap spacing={1} mt={1}>
+                                                    {childTask.labels.map(label => (
+                                                      <WrapItem key={`${childTask.id}-${label}`}>
+                                                        <Tag size="sm" colorScheme="blue" borderRadius="full">
+                                                          {label}
+                                                        </Tag>
+                                                      </WrapItem>
+                                                    ))}
+                                                  </Wrap>
+                                                )}
+                                              </HStack>
+                                            </VStack>
+                                          </HStack>
+                                        </Flex>
+                                      </Box>
+                                    ))}
                                   </VStack>
-                                </HStack>
-                              </Flex>
-                            </Box>
+                                )}
+                              </AccordionPanel>
+                            </AccordionItem>
                           ))}
-                        </VStack>
-                      </>
-                    )}
-                  </Box>
-                  
-                  {/* תצוגת המשימות שנבחרו */}
-                  {selectedTaskTemplates.length > 0 && (
-                    <Box mt={6}>
-                      <Text fontSize="md" fontWeight="bold" mb={2}>
-                        תבניות משימות שנבחרו ({selectedTaskTemplates.length}):
-                      </Text>
-                      <VStack spacing={2} align="stretch" maxH="200px" overflowY="auto" bg="white" p={2} borderRadius="md">
-                        {selectedTaskTemplates.map(task => (
-                          <Box 
-                            key={`selected-${task.id}`} 
-                            p={3} 
-                            borderWidth="1px" 
-                            borderRadius="md"
-                            _hover={{ bg: 'gray.50' }}
-                          >
-                            <Flex justify="space-between" align="center">
-                              <VStack align="flex-start" spacing={1}>
-                                <Text fontWeight="bold">{task.title}</Text>
-                                <HStack spacing={2}>
-                                  <Badge colorScheme={getStatusColor(task.status)}>{task.status}</Badge>
-                                  {task.labels && task.labels.length > 0 && (
-                                    <Wrap spacing={1}>
-                                      {task.labels.map(label => (
-                                        <WrapItem key={`selected-${task.id}-${label}`}>
-                                          <Tag size="sm" colorScheme="blue" borderRadius="full">
-                                            {label}
-                                          </Tag>
-                                        </WrapItem>
-                                      ))}
-                                    </Wrap>
-                                  )}
-                                </HStack>
-                              </VStack>
-                              <IconButton
-                                aria-label="הסר משימה"
-                                icon={<FiTrash2 />}
-                                size="sm"
-                                colorScheme="red"
-                                variant="ghost"
-                                onClick={() => removeSelectedTask(task.id)}
-                              />
-                            </Flex>
-                          </Box>
-                        ))}
-                      </VStack>
-                    </Box>
+                      </Accordion>
+                      
+                      {/* אין תוצאות לחיפוש */}
+                      {Array.isArray(hierarchicalTasks) && 
+                       hierarchicalTasks.filter(task => 
+                        (searchTerm === '' || task.title.includes(searchTerm)) &&
+                        (activeFilters.length === 0 || (task.labels && task.labels.some(label => activeFilters.includes(label))))
+                       ).length === 0 && (
+                        <Box textAlign="center" py={4}>
+                          <Text>לא נמצאו תבניות משימות התואמות את החיפוש</Text>
+                        </Box>
+                      )}
+                    </>
                   )}
                 </TabPanel>
                 

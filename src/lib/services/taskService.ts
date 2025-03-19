@@ -1,5 +1,5 @@
 import supabase from '../supabase';
-import { Task, NewTask, UpdateTask } from '@/types/supabase';
+import { Task, NewTask, UpdateTask, TaskWithChildren } from '@/types/supabase';
 
 export const taskService = {
   // קריאת כל המשימות
@@ -606,6 +606,44 @@ export const taskService = {
     } catch (err) {
       console.error('Error in getAllTaskTemplates:', err);
       throw err;
+    }
+  },
+  
+  // פונקציה חדשה: קבלת כל תבניות המשימות בצורה היררכית
+  async getAllHierarchicalTaskTemplates(): Promise<TaskWithChildren[]> {
+    try {
+      // מקבל את כל תבניות המשימות
+      const allTemplates = await this.getAllTaskTemplates();
+      
+      // אם אין תבניות, נחזיר מערך ריק
+      if (!allTemplates || allTemplates.length === 0) {
+        return [];
+      }
+      
+      // ארגון המשימות בצורה היררכית
+      // 1. זיהוי משימות-אב (משימות ללא parent_task_id)
+      const rootTasks = allTemplates.filter(task => !task.parent_task_id);
+      const childTasks = allTemplates.filter(task => task.parent_task_id);
+      
+      // 2. בניית עץ המשימות ההיררכי
+      const buildChildrenTree = (parentTask: Task): TaskWithChildren => {
+        const children = childTasks
+          .filter(task => task.parent_task_id === parentTask.id)
+          .map(childTask => buildChildrenTree(childTask));
+        
+        return {
+          ...parentTask,
+          children: children.length > 0 ? children : undefined
+        };
+      };
+      
+      // 3. בניית העץ המלא עם כל משימות האב
+      const hierarchicalTemplates = rootTasks.map(rootTask => buildChildrenTree(rootTask));
+      
+      return hierarchicalTemplates;
+    } catch (err) {
+      console.error('Error in getAllHierarchicalTaskTemplates:', err);
+      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה');
     }
   },
   
