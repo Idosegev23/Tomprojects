@@ -406,19 +406,63 @@ export const taskService = {
   
   // קבלת כל המשימות בפרויקט במבנה היררכי
   async getHierarchicalTasks(projectId: string): Promise<Task[]> {
-    // קבלת כל המשימות בפרויקט
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('project_id', projectId)
-      .order('hierarchical_number', { ascending: true });
+    const tableName = `project_${projectId}_tasks`;
     
-    if (error) {
-      console.error(`Error fetching hierarchical tasks for project ${projectId}:`, error);
-      throw new Error(error.message);
+    try {
+      // בדיקה אם הטבלה הייחודית קיימת
+      let tableExists = false;
+      try {
+        const { data: checkResult, error: tableCheckError } = await supabase
+          .rpc('check_table_exists', {
+            table_name_param: tableName
+          });
+        
+        if (tableCheckError) {
+          console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
+          // נמשיך ונשתמש בטבלה הראשית במקרה של שגיאה
+        } else {
+          tableExists = !!checkResult;
+        }
+      } catch (err) {
+        console.error(`Error checking project table ${tableName}:`, err);
+      }
+      
+      if (tableExists) {
+        // שימוש בטבלה הספציפית של הפרויקט
+        const { data, error } = await supabase
+          .from(tableName)
+          .select('*')
+          .order('hierarchical_number', { ascending: true });
+        
+        if (error) {
+          console.error(`Error fetching hierarchical tasks from project-specific table ${tableName}:`, error);
+          throw new Error(error.message);
+        }
+        
+        console.log(`Retrieved ${data?.length || 0} tasks from project-specific table ${tableName}`);
+        return data || [];
+      } else {
+        // שימוש בטבלה הכללית (לתאימות לאחור)
+        console.warn(`Project table ${tableName} does not exist, falling back to main tasks table`);
+        
+        const { data, error } = await supabase
+          .from('tasks')
+          .select('*')
+          .eq('project_id', projectId)
+          .order('hierarchical_number', { ascending: true });
+        
+        if (error) {
+          console.error(`Error fetching hierarchical tasks for project ${projectId} from main table:`, error);
+          throw new Error(error.message);
+        }
+        
+        console.log(`Retrieved ${data?.length || 0} tasks from main table for project ${projectId}`);
+        return data || [];
+      }
+    } catch (err) {
+      console.error(`Error in getHierarchicalTasks for project ${projectId}:`, err);
+      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה בשליפת משימות היררכיות');
     }
-    
-    return data || [];
   },
 
   // קבלת משימות שאינן משויכות לפרויקט
@@ -579,11 +623,10 @@ export const taskService = {
           }
         }
         
-        // בדיקה אם המשימות כבר קיימות בפרויקט
+        // בדיקה אם המשימות כבר קיימות בפרויקט - בטבלה הספציפית של הפרויקט
         const existingTasksResult = await supabase
-          .from('tasks')
+          .from(tableName)
           .select('original_task_id')
-          .eq('project_id', projectId)
           .in('original_task_id', taskIds);
           
         const existingOriginalTaskIds = new Set(existingTasksResult.data?.map(task => task.original_task_id) || []);
@@ -592,7 +635,7 @@ export const taskService = {
         const tasksToClone = originalTasks.filter(task => !existingOriginalTaskIds.has(task.id));
         
         if (tasksToClone.length === 0) {
-          console.log(`All selected tasks already exist in project ${projectId}`);
+          console.log(`All selected tasks already exist in project ${projectId} table ${tableName}`);
           return [];
         }
         
