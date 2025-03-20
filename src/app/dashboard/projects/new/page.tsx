@@ -377,7 +377,6 @@ export default function NewProject() {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
       };
       
       if (newCustomTask.due_date) {

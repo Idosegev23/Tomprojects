@@ -689,11 +689,12 @@ export const taskService = {
   // קבלת כל המשימות הזמינות לשכפול
   async getAllTaskTemplates(): Promise<Task[]> {
     try {
-      // מחזיר רק משימות שהן תבניות (is_template=true)
+      // מחזיר רק משימות שאינן שייכות לפרויקט (project_id הוא null)
+      // אלה הן ככל הנראה תבניות משימות
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
-        .eq('is_template', true)
+        .is('project_id', null)
         .eq('deleted', false)
         .order('title', { ascending: true });
       
@@ -702,6 +703,7 @@ export const taskService = {
         throw new Error(error.message);
       }
       
+      console.log(`Retrieved ${data?.length || 0} task templates with null project_id`);
       return data || [];
     } catch (err) {
       console.error('Error in getAllTaskTemplates:', err);
@@ -1181,7 +1183,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['קרקע', 'איתור']
       },
       {
@@ -1194,7 +1195,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['תכנון', 'היתכנות']
       },
       {
@@ -1207,7 +1207,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['קרקע', 'רכישה']
       },
       {
@@ -1220,7 +1219,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['תכנון', 'צוות']
       },
       {
@@ -1233,7 +1231,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['תכנון', 'אדריכלות']
       },
       {
@@ -1246,7 +1243,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['תכנון', 'היתרים']
       },
       {
@@ -1259,7 +1255,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['ביצוע', 'קבלנים']
       },
       {
@@ -1272,7 +1267,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['ביצוע', 'תשתיות']
       },
       {
@@ -1285,7 +1279,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['ביצוע', 'בנייה']
       },
       {
@@ -1298,7 +1291,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['שיווק', 'תכנון']
       },
       {
@@ -1311,7 +1303,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['שיווק', 'מכירות']
       },
       {
@@ -1324,7 +1315,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['שיווק', 'פרסום']
       },
       {
@@ -1337,7 +1327,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['מסירה', 'איכות']
       },
       {
@@ -1350,7 +1339,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['מסירה', 'דירות']
       },
       {
@@ -1363,7 +1351,6 @@ export const taskService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted: false,
-        is_template: true,
         labels: ['מסירה', 'רישום']
       }
     ];
@@ -1379,6 +1366,7 @@ export const taskService = {
       throw new Error(error.message);
     }
     
+    console.log(`Created ${data?.length || 0} default task templates`);
     return data || [];
   },
 };
