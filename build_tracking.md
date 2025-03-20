@@ -43,70 +43,32 @@
 - שיפור המיגרציה כך שתתחשב בתאריך עדכון המשימה וגם בסטטוס המחיקה שלה
 - התייחסות למשימות כפולות בכל טבלאות הפרויקטים הספציפיות
 
-### 2.1. ניהול פרויקטים  
-- **יצירה ועריכה:**  
-  - ממשק ליצירת פרויקט נדל"ן חדש הכולל שדות: שם, בעלים, תאריכים (יצירה, עדכון, תאריכי התחלה/סיום מתוכננים ופעילים), סטטוס, תקציב כולל, עדיפות, התקדמות, מזהה מנהל פרויקט.
-  - אפשרות לעריכת פרויקט קיים.
-  - בעת יצירת פרויקט – ישנה אפשרות "תבנית" אשר תייבא אוטומטית את רשימת המשימות הקבועה (למשל, שלבים בסיסיים בפרויקט נדל"ן כגון רכישת קרקע, תכנון, היתרים, בנייה, שיווק וכו׳).
+## 2025-03-21
 
-- **תצוגת רשימת פרויקטים:**  
-  - דשבורד ראשי המציג את כל הפרויקטים, עם אפשרות סינון וחיפוש (לפי שם, סטטוס, תאריכים, עדיפות וכו׳).
-
-### 2.2. ניהול משימות ותתי‑משימות  
-- **ניהול משימות:**  
-  - ממשק בתוך כל פרויקט המציג את כל המשימות הקשורות אליו.
-  - כל משימה תכלול שדות: כותרת, תיאור, סטטוס (למשל: "todo", "in progress", "done"), עדיפות, אחראי (למרות שלא מנהלים הרשאות בשלב ה-MVP), תאריך התחלה, תאריך יעד, שעת ביצוע (מוערכת ואמיתית), תקציב, ועוד.
-  - תמיכה בהוספת תתי‑משימות על ידי שימוש בשדה `parent_task_id`.
-
-- **תצוגות משימות:**  
-  - **לוח קנבן:** תצוגה גרפית שמחלקת את המשימות לקטגוריות לפי סטטוס, עם אפשרות לגרירה ושחרור (bulk פעולות באמצעות צ׳קבוקס לשינוי סטטוס או העברה).
-  - **עץ היררכי:** תצוגה הממחישה את מבנה המשימות ותתי‑המשימות בפרויקט.
-  - **גאנט:** תצוגת לו"ז המשימות, המציגה תלות בין משימות, תאריכי התחלה ויעד, למעקב אחר התקדמות.
-
-### 2.3. תבניות פרויקטים  
-- בעת יצירת פרויקט נדל"ן חדש, המשתמש יכול לבחור באפשרות "מבוסס תבנית" שתייבא מראש קבוצת משימות קבועה.
-- ניתן לסמן באמצעות צ׳קבוקס משימות קיימות בתבנית (למשל, לסמן כ"לא רלוונטי" או להסיר משימות מסוימות) לפני יצירת הפרויקט.
-
----
-
-## 3. ארכיטקטורה וטכנולוגיות מומלצות
-
-### 3.1. Frontend  
-- **Framework:** Next.js (React)  
-  - מאפשר Server Side Rendering ותמיכה ב-PWA.
-- **ספריות UI:** Tailwind CSS + Chakra UI  
-  - לבניית ממשק מודרני, נקי ורספונסיבי.
-- **ספריות נוספות:**  
-  - **react-beautiful-dnd** – ללוח קנבן עם גרירה ושחרור.
-  - **FullCalendar** – להצגת גאנט.
-  - **React Hook Form** – לניהול טפסים.
-  - **@tanstack/react-query** - לניהול מצב הנתונים והבקשות.
-
-### 3.2. Backend  
-- **בסיס נתונים:** Supabase (PostgreSQL)  
-  - נתונים יישמרו בטבלאות לפי המבנה שסופק.
-- **API:**  
-  - שימוש ב-Supabase JavaScript Client לביצוע פעולות CRUD.
-- **Realtime:**  
-  - שימוש ב-Supabase Realtime לעדכונים בזמן אמת (לדוגמה, עדכון לוח קנבן).
-
-### 3.3. אינטגרציות  
-- בשלב ה-MVP אין צורך באינטגרציות חיצוניות כמו מייל או וואטסאפ – ניתן להוסיף placeholders לעתיד.
-
----
-
-## 4. מבנה מסד הנתונים
-
-### פרטי Supabase  
-- **Project ID:** `orgkbmxecoegyjojoqmh`
-- **Project URL:** `https://orgkbmxecoegyjojoqmh.supabase.co`
-- **anon/public API Key:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9yZ2tibXhlY29lZ3lqb2pvcW1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg4NjMyODYsImV4cCI6MjA1NDQzOTI4Nn0.jK13G36VU7eLVQsxsXLhlYLKafISrh9j8QIWIQH7TVs`
-- **Service Role Key:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9yZ2tibXhlY29lZ3lqb2pvcW1oIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczODg2MzI4NiwiZXhwIjoyMDU0NDM5Mjg2fQ.2RoxeZAwgG3sD3JussNHgRpTKHbeas1nsGzuUkmkPHw`
-- **JWT Secret:** `EBVabbAgrKcn+cvpKnXVXyw0Vds58GJXx/MhQO5UdOAerD88Iz2807ZJxL8fna5I0TQL0rkVD4KJPVY9ODSItw==`
-- **Database Password:** `DV55b2XoiUy3nQ4X`
-- **Database Host:** `aws-0-eu-central-1.pooler.supabase.com`
-- **Database User:** `postgres.orgkbmxecoegyjojoqmh`
-- **Database Name:** `postgres`
+- עודכן מבנה טבלת המשימות (tasks) לפי המבנה החדש הנדרש
+- נוספה מיגרציה חדשה `20250321000001_tasks_restructure.sql` המבצעת את השינויים הבאים:
+  - גיבוי הטבלה הקיימת ל-`tasks_backup`
+  - הסרת הטבלה הקיימת ויצירתה מחדש עם השדות הנדרשים
+  - השדות החדשים: `title` (שם משימה), `description` (תיאור), `project_id` (פרויקט), `stage_id` (שלב), `parent_task_id` (משימת הורה), `hierarchical_number` (מספר היררכי), `due_date` (תאריך יעד), `status` (סטטוס), `priority` (עדיפות), `category` (קטגוריה), `responsible` (אחראי), `dropbox_folder` (קישור לתקיית דרופבוקס), `created_at` (תאריך הקמה), `updated_at` (תאריך עדכון אחרון)
+  - הוספת אינדקסים לשיפור ביצועים
+  - יצירת טריגר לעדכון שדה `updated_at` אוטומטית בכל עדכון של המשימה
+  - יצירת פונקציה וטריגר ליצירת מספר היררכי אוטומטי בעת הוספת משימה חדשה
+- נוספה מיגרציה נוספת `20250321000002_tasks_data_migration.sql` המבצעת את השינויים הבאים:
+  - העברת נתונים מטבלת הגיבוי `tasks_backup` לטבלה החדשה
+  - העברה רק של משימות פעילות (שאינן מחוקות) ובעלות כותרת
+  - השדה החדש `dropbox_folder` מאותחל כריק
+  - עדכון מספרים היררכיים לכל המשימות שאין להן
+- עודכן מבנה טבלת השלבים (stages) לפי המבנה החדש הנדרש
+- נוספה מיגרציה חדשה `20250321000003_stages_restructure.sql` המבצעת את השינויים הבאים:
+  - גיבוי הטבלה הקיימת ל-`stages_backup`
+  - הסרת הטבלה הקיימת ויצירתה מחדש עם השדות הנדרשים
+  - השדות החדשים: `title` (שם שלב), `hierarchical_number` (מספר היררכי), `due_date` (תאריך יעד), `status` (סטטוס), `progress` (אחוז התקדמות), `color` (צבע), `parent_stage_id` (שלב הורה), `dependencies` (תלויות), `sort_order` (סדר הצגה), `created_at` (תאריך הקמה), `updated_at` (תאריך עדכון אחרון)
+  - הוספת אינדקסים לשיפור ביצועים
+  - יצירת טריגר לעדכון שדה `updated_at` אוטומטית בכל עדכון של השלב
+  - יצירת פונקציה וטריגר ליצירת מספר היררכי אוטומטי בעת הוספת שלב חדש
+  - יצירת פונקציה וטריגר לקביעת סדר הצגה (sort_order) בעת הוספת שלב חדש
+  - יצירת טבלת `stages_history` לתיעוד היסטוריית שינויים בשלבים
+  - הוספת טריגרים לתיעוד אוטומטי של כל שינוי בטבלת השלבים
 
 ### טבלאות עיקריות
 #### projects
@@ -232,6 +194,13 @@
 [
   {
     "table_name": "stages",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "uuid_generate_v4()"
+  },
+  {
+    "table_name": "stages",
     "column_name": "title",
     "data_type": "text",
     "is_nullable": "NO",
@@ -239,38 +208,73 @@
   },
   {
     "table_name": "stages",
-    "column_name": "description",
+    "column_name": "hierarchical_number",
     "data_type": "text",
     "is_nullable": "YES",
     "column_default": null
   },
   {
     "table_name": "stages",
+    "column_name": "due_date",
+    "data_type": "date",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "stages",
+    "column_name": "status",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": "'pending'::text"
+  },
+  {
+    "table_name": "stages",
+    "column_name": "progress",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": "0"
+  },
+  {
+    "table_name": "stages",
+    "column_name": "color",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "stages",
+    "column_name": "parent_stage_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "stages",
+    "column_name": "dependencies",
+    "data_type": "text[]",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "stages",
+    "column_name": "sort_order",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "stages",
     "column_name": "created_at",
-    "data_type": "timestamp without time zone",
+    "data_type": "timestamp with time zone",
     "is_nullable": "YES",
     "column_default": "now()"
   },
   {
     "table_name": "stages",
     "column_name": "updated_at",
-    "data_type": "timestamp without time zone",
+    "data_type": "timestamp with time zone",
     "is_nullable": "YES",
     "column_default": "now()"
-  },
-  {
-    "table_name": "stages",
-    "column_name": "id",
-    "data_type": "uuid",
-    "is_nullable": "NO",
-    "column_default": null
-  },
-  {
-    "table_name": "stages",
-    "column_name": "project_id",
-    "data_type": "uuid",
-    "is_nullable": "YES",
-    "column_default": null
   }
 ]
 ```
@@ -284,6 +288,20 @@
     "data_type": "uuid",
     "is_nullable": "NO",
     "column_default": "uuid_generate_v4()"
+  },
+  {
+    "table_name": "tasks",
+    "column_name": "title",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "tasks",
+    "column_name": "description",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
   },
   {
     "table_name": "tasks",
@@ -301,22 +319,22 @@
   },
   {
     "table_name": "tasks",
-    "column_name": "title",
-    "data_type": "text",
-    "is_nullable": "NO",
+    "column_name": "parent_task_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
     "column_default": null
   },
   {
     "table_name": "tasks",
-    "column_name": "description",
+    "column_name": "hierarchical_number",
     "data_type": "text",
     "is_nullable": "YES",
     "column_default": null
   },
   {
     "table_name": "tasks",
-    "column_name": "category",
-    "data_type": "text",
+    "column_name": "due_date",
+    "data_type": "date",
     "is_nullable": "YES",
     "column_default": null
   },
@@ -336,6 +354,13 @@
   },
   {
     "table_name": "tasks",
+    "column_name": "category",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "tasks",
     "column_name": "responsible",
     "data_type": "uuid",
     "is_nullable": "YES",
@@ -343,80 +368,10 @@
   },
   {
     "table_name": "tasks",
-    "column_name": "estimated_hours",
-    "data_type": "numeric",
+    "column_name": "dropbox_folder",
+    "data_type": "text",
     "is_nullable": "YES",
     "column_default": null
-  },
-  {
-    "table_name": "tasks",
-    "column_name": "actual_hours",
-    "data_type": "numeric",
-    "is_nullable": "YES",
-    "column_default": null
-  },
-  {
-    "table_name": "tasks",
-    "column_name": "start_date",
-    "data_type": "date",
-    "is_nullable": "YES",
-    "column_default": null
-  },
-  {
-    "table_name": "tasks",
-    "column_name": "due_date",
-    "data_type": "date",
-    "is_nullable": "YES",
-    "column_default": null
-  },
-  {
-    "table_name": "tasks",
-    "column_name": "completed_date",
-    "data_type": "date",
-    "is_nullable": "YES",
-    "column_default": null
-  },
-  {
-    "table_name": "tasks",
-    "column_name": "budget",
-    "data_type": "numeric",
-    "is_nullable": "YES",
-    "column_default": null
-  },
-  {
-    "table_name": "tasks",
-    "column_name": "dependencies",
-    "data_type": "ARRAY",
-    "is_nullable": "YES",
-    "column_default": null
-  },
-  {
-    "table_name": "tasks",
-    "column_name": "assignees",
-    "data_type": "ARRAY",
-    "is_nullable": "YES",
-    "column_default": null
-  },
-  {
-    "table_name": "tasks",
-    "column_name": "watchers",
-    "data_type": "ARRAY",
-    "is_nullable": "YES",
-    "column_default": null
-  },
-  {
-    "table_name": "tasks",
-    "column_name": "labels",
-    "data_type": "ARRAY",
-    "is_nullable": "YES",
-    "column_default": null
-  },
-  {
-    "table_name": "tasks",
-    "column_name": "deleted",
-    "data_type": "boolean",
-    "is_nullable": "YES",
-    "column_default": "false"
   },
   {
     "table_name": "tasks",
@@ -431,20 +386,6 @@
     "data_type": "timestamp with time zone",
     "is_nullable": "YES",
     "column_default": "now()"
-  },
-  {
-    "table_name": "tasks",
-    "column_name": "hierarchical_number",
-    "data_type": "text",
-    "is_nullable": "YES",
-    "column_default": null
-  },
-  {
-    "table_name": "tasks",
-    "column_name": "parent_task_id",
-    "data_type": "uuid",
-    "is_nullable": "YES",
-    "column_default": null
   }
 ]
 ```

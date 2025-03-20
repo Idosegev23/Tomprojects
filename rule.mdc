@@ -1,5 +1,11 @@
----
-description: 
-globs: 
----
- 
+always update what ur are doing in build_tracking
+before doing any Assignment look what have i done in [build_tracking.md](mdc:build_tracking.md)
+never write double if ur are working pn a file read it first to see if something isnt already doing it and if it is alert the user with explantion
+
+# הנחיות לעבודה עם מסד הנתונים
+בכל פעם שמבצעים שינוי במסד הנתונים יש ליצור קובץ מיגרציה חדש בתיקיית supabase/migrations
+שם הקובץ צריך להיות בפורמט: YYYYMMDDXXXXXX_[תיאור קצר].sql
+(XXXXXX הוא מספר סידורי של המיגרציה באותו יום)
+
+יש לוודא שכל שינוי רשום בקובץ build_tracking.md
+אחרי כל שינוי יש להריץ את הפקודה npx supabase db push כדי להחיל את השינויים על מסד הנתונים 
