@@ -377,7 +377,6 @@ export default function NewProject() {
         priority: newCustomTask.priority,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
       };
       
       if (newCustomTask.due_date) {
@@ -531,7 +530,6 @@ export default function NewProject() {
         priority: 'high',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['קרקע', 'איתור']
       },
       {
@@ -543,7 +541,6 @@ export default function NewProject() {
         priority: 'high',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['תכנון', 'היתכנות']
       },
       {
@@ -555,7 +552,6 @@ export default function NewProject() {
         priority: 'high',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['קרקע', 'רכישה']
       },
       {
@@ -567,7 +563,6 @@ export default function NewProject() {
         priority: 'medium',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['תכנון', 'צוות']
       },
       {
@@ -579,7 +574,6 @@ export default function NewProject() {
         priority: 'medium',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['תכנון', 'אדריכלות']
       }
     ];

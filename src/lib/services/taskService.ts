@@ -1197,7 +1197,6 @@ export const taskService = {
         priority: 'high',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['קרקע', 'איתור']
       },
       {
@@ -1209,7 +1208,6 @@ export const taskService = {
         priority: 'high',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['תכנון', 'היתכנות']
       },
       {
@@ -1221,7 +1219,6 @@ export const taskService = {
         priority: 'high',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['קרקע', 'רכישה']
       },
       {
@@ -1233,7 +1230,6 @@ export const taskService = {
         priority: 'medium',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['תכנון', 'צוות']
       },
       {
@@ -1245,7 +1241,6 @@ export const taskService = {
         priority: 'medium',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['תכנון', 'אדריכלות']
       },
       {
@@ -1257,7 +1252,6 @@ export const taskService = {
         priority: 'high',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['תכנון', 'היתרים']
       },
       {
@@ -1269,7 +1263,6 @@ export const taskService = {
         priority: 'high',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['ביצוע', 'קבלנים']
       },
       {
@@ -1281,7 +1274,6 @@ export const taskService = {
         priority: 'medium',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['ביצוע', 'תשתיות']
       },
       {
@@ -1293,7 +1285,6 @@ export const taskService = {
         priority: 'high',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['ביצוע', 'בנייה']
       },
       {
@@ -1305,7 +1296,6 @@ export const taskService = {
         priority: 'medium',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['שיווק', 'תכנון']
       },
       {
@@ -1317,7 +1307,6 @@ export const taskService = {
         priority: 'medium',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['שיווק', 'מכירות']
       },
       {
@@ -1329,7 +1318,6 @@ export const taskService = {
         priority: 'medium',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['שיווק', 'פרסום']
       },
       {
@@ -1341,7 +1329,6 @@ export const taskService = {
         priority: 'high',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['מסירה', 'איכות']
       },
       {
@@ -1353,7 +1340,6 @@ export const taskService = {
         priority: 'high',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['מסירה', 'דירות']
       },
       {
@@ -1365,7 +1351,6 @@ export const taskService = {
         priority: 'medium',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        deleted: false,
         labels: ['מסירה', 'רישום']
       }
     ];
