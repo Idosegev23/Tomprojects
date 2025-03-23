@@ -270,7 +270,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
   // מחיקת שלב
   const handleDeleteStage = async (stageId: string) => {
     try {
-      await stageService.deleteStage(stageId);
+      await stageService.deleteStage(stageId, id);
       // עדכון הרשימה המקומית של השלבים
       setStages(stages.filter(s => s.id !== stageId));
       toast({

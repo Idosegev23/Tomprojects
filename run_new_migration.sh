@@ -1,37 +1,34 @@
 #!/bin/bash
 
-# סקריפט להרצת המיגרציה החדשה
-# 20250325000001_optimize_project_tables.sql
+echo "=== הרצת מיגרציה חדשה: תיקון פונקציית מחיקת שלב ==="
 
-echo "הרצת מיגרציה חדשה לשיפור טבלאות פרויקט ומניעת כפילויות..."
+# מידע חיבור לסופאבייס (נלקח מסקריפט fetch_schema.sh)
+DB_HOST="aws-0-eu-central-1.pooler.supabase.com"
+DB_NAME="postgres"
+DB_USER="postgres.orgkbmxecoegyjojoqmh"
+DB_PASSWORD="DV55b2XoiUy3nQ4X"
 
-# טעינת משתני הסביבה מקובץ .env.local
-if [ -f .env.local ]; then
-    export $(grep -v '^#' .env.local | xargs)
-    echo "נטענו משתני סביבה מקובץ .env.local"
-else
-    echo "שגיאה: קובץ .env.local לא נמצא"
-    exit 1
-fi
-
-# שימוש ב-PSQL להרצת המיגרציה
-PGPASSWORD=$SUPABASE_DB_PASSWORD psql -h $SUPABASE_DB_HOST -U $SUPABASE_DB_USER -d $SUPABASE_DB_NAME -f migrations/20250325000001_optimize_project_tables.sql
+# הרצת קובץ המיגרציה
+echo "מריץ מיגרציה 20250327000001_fix_delete_stage.sql..."
+PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -d $DB_NAME -U $DB_USER -f migrations/20250327000001_fix_delete_stage.sql
 
 if [ $? -eq 0 ]; then
     echo "המיגרציה הורצה בהצלחה!"
     
-    # העברת המיגרציה לתיקיית המיגרציות שהורצו
-    mkdir -p migrations/applied
-    cp migrations/20250325000001_optimize_project_tables.sql migrations/applied/
-    echo "המיגרציה הועברה לתיקיית המיגרציות שהורצו"
+    # יצירת תיקיית applied אם לא קיימת
+    if [ ! -d "migrations/applied" ]; then
+        mkdir -p migrations/applied
+    fi
+    
+    # העתקת קובץ המיגרציה לתיקיית applied
+    cp migrations/20250327000001_fix_delete_stage.sql migrations/applied/
+    echo "קובץ המיגרציה הועתק לתיקיית applied."
 else
-    echo "שגיאה בהרצת המיגרציה"
+    echo "אירעה שגיאה בהרצת המיגרציה!"
     exit 1
 fi
 
-echo "עדכון סכמת מסד הנתונים..."
+# עדכון הסכימה מחדש
+./fetch_schema.sh
 
-# הרצת סקריפט עדכון סכמה
-sh fetch_schema.sh
-
-echo "סיום התהליך בהצלחה!" 
+echo "=== תהליך המיגרציה הושלם בהצלחה! ===" 

@@ -159,41 +159,39 @@ export const stageService = {
   // עדכון שלב קיים
   async updateStage(id: string, stage: UpdateStage, projectId: string): Promise<Stage> {
     try {
-      // קודם ננסה לעדכן בטבלה הספציפית של הפרויקט אם היא קיימת
+      // וידוא שהטבלה הספציפית של הפרויקט קיימת
       const tableName = getProjectStagesTable(projectId);
-      const tableExists = await checkIfTableExists(tableName);
+      let tableExists = await checkIfTableExists(tableName);
       
-      if (tableExists) {
-        // עדכון השלב בטבלה הספציפית
-        const { data: specificData, error: specificError } = await supabase
-          .from(tableName)
-          .update(stage)
-          .eq('id', id)
-          .select()
-          .single();
-        
-        if (specificError) {
-          console.error(`Error updating stage with id ${id} in project-specific table ${tableName}:`, specificError);
-          // נמשיך לטבלה הכללית במקרה של שגיאה
-        } else {
-          console.log(`Stage updated successfully in project-specific table ${tableName}`);
-          return specificData;
+      // אם הטבלה לא קיימת, ניצור אותה
+      if (!tableExists) {
+        try {
+          await supabase.rpc('create_project_stages_table', {
+            project_id: projectId
+          });
+          
+          console.log(`Created project-specific stages table ${tableName} for project ${projectId}`);
+          tableExists = true;
+        } catch (createError) {
+          console.error(`Error creating project-specific stages table ${tableName}:`, createError);
+          throw new Error(`שגיאה ביצירת טבלת שלבים ייעודית: ${createError instanceof Error ? createError.message : 'שגיאה לא ידועה'}`);
         }
       }
       
-      // עדכון השלב בטבלה הכללית
+      // עדכון השלב רק בטבלה הספציפית
       const { data, error } = await supabase
-        .from('stages')
+        .from(tableName)
         .update(stage)
         .eq('id', id)
         .select()
         .single();
       
       if (error) {
-        console.error(`Error updating stage with id ${id} in main table:`, error);
-        throw new Error(error.message);
+        console.error(`Error updating stage with id ${id} in project-specific table ${tableName}:`, error);
+        throw new Error(`שגיאה בעדכון שלב: ${error.message}`);
       }
       
+      console.log(`Stage updated successfully in project-specific table ${tableName}`);
       return data;
     } catch (err) {
       console.error(`Error in updateStage for stage ${id}:`, err);
@@ -208,32 +206,38 @@ export const stageService = {
       const tableName = getProjectStagesTable(projectId);
       const tableExists = await checkIfTableExists(tableName);
       
-      if (tableExists) {
-        // מחיקת השלב מהטבלה הספציפית
-        const { error: specificError } = await supabase
-          .from(tableName)
-          .delete()
-          .eq('id', id);
+      if (!tableExists) {
+        throw new Error(`טבלת השלבים הייחודית ${tableName} לא קיימת`);
+      }
+      
+      // עדכון המשימות המשויכות לשלב זה (אם ישנן)
+      const tasksTableName = `project_${projectId}_tasks`;
+      const tasksTableExists = await checkIfTableExists(tasksTableName);
+      
+      if (tasksTableExists) {
+        const { error: updateTasksError } = await supabase
+          .from(tasksTableName)
+          .update({ stage_id: null })
+          .eq('stage_id', id);
         
-        if (specificError) {
-          console.error(`Error deleting stage with id ${id} from project-specific table ${tableName}:`, specificError);
-          // נמשיך לטבלה הכללית במקרה של שגיאה
-        } else {
-          console.log(`Stage deleted successfully from project-specific table ${tableName}`);
-          return;
+        if (updateTasksError) {
+          console.error(`שגיאה בעדכון משימות של שלב ${id} בטבלת המשימות הייחודית ${tasksTableName}:`, updateTasksError);
+          // נמשיך למחיקת השלב גם אם יש שגיאה בעדכון המשימות
         }
       }
       
-      // מחיקת השלב מהטבלה הכללית
-      const { error } = await supabase
-        .from('stages')
+      // מחיקת השלב מהטבלה הספציפית
+      const { error: deleteError } = await supabase
+        .from(tableName)
         .delete()
         .eq('id', id);
       
-      if (error) {
-        console.error(`Error deleting stage with id ${id} from main table:`, error);
-        throw new Error(error.message);
+      if (deleteError) {
+        console.error(`Error deleting stage with id ${id} from project-specific table ${tableName}:`, deleteError);
+        throw new Error(`שגיאה במחיקת שלב מטבלה ייחודית: ${deleteError.message}`);
       }
+      
+      console.log(`Stage deleted successfully from project-specific table ${tableName}`);
     } catch (err) {
       console.error(`Error in deleteStage for stage ${id}:`, err);
       throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה');
