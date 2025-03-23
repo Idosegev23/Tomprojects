@@ -997,3 +997,15 @@ node run_sql.js sql/insert_numeric_stages_tasks.sql
 - וידאנו שכל הפעולות על משימות בפרויקט מתבצעות אך ורק מול הטבלאות הייחודיות של הפרויקט
 
 השינוי הנוכחי משלים את הרפורמה שהתחלנו לביצוע בארכיטקטורת הנתונים של המערכת, שבה כל פרויקט מקבל טבלאות משימות ושלבים ייחודיות משלו. גישה זו מונעת התנגשויות ומאפשרת גמישות רבה יותר בניהול הפרויקטים.
+
+### 2025-03-30 - הסרת התייחסויות לעמודות שאינן קיימות
+
+- הוסרו התייחסויות נוספות לעמודות `deleted` ו-`is_global_template` שלא הוסרו בתיקון הקודם
+- עודכנה פונקציית `getTasks` בשירות המשימות להשתמש ב-`is('project_id', null)` במקום `or('project_id.is.null,is_global_template.eq.true')`
+- עודכנה פונקציית `createTask` להסרת התייחסויות לשדה `is_global_template`
+- עודכנה פונקציית `createDefaultTasksForRealEstateProject` להסרת בדיקת קיום השדה `is_global_template`
+- עודכנה פונקציית `getProjectSpecificTasks` להסרת סינון לפי עמודה `deleted`
+- עודכנו שלוש התייחסויות לעמודה `deleted` בשירות השלבים `stageService.ts` בפונקציית `getStagesWithTasks`
+- השינויים מתקנים שגיאות "column tasks.deleted does not exist" ו-"column tasks.is_global_template does not exist" שהופיעו במספר מקומות במערכת
+
+השינויים האלה מסנכרנים את הקוד עם המבנה העדכני של הטבלאות ומונעים שגיאות הקשורות לעמודות שאינן קיימות עוד.

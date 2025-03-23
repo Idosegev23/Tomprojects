@@ -14,8 +14,8 @@ export const taskService = {
       query = query.eq('project_id', filters.projectId);
     } else {
       // אם לא מסננים לפי פרויקט, נסנן החוצה משימות ספציפיות לפרויקט
-      // ונציג רק משימות גלובליות או משימות עם is_global_template=true
-      query = query.or('project_id.is.null,is_global_template.eq.true');
+      // ונציג רק משימות גלובליות
+      query = query.is('project_id', null);
     }
     
     // הוספת סינון לפי סטטוס אם צריך
@@ -75,11 +75,6 @@ export const taskService = {
       
       // אם המשימה היא ללא פרויקט (תבנית גלובלית), נוסיף אותה לטבלה הראשית
       if (!task.project_id) {
-        // סימון המשימה כתבנית גלובלית אם לא צוין אחרת
-        if (task.is_global_template === undefined) {
-          task.is_global_template = true;
-        }
-        
         // הוספת תבנית גלובלית לטבלה הראשית
         const { data, error } = await supabase
           .from('tasks')
@@ -710,7 +705,6 @@ export const taskService = {
         .from('tasks')
         .select('*')
         .is('project_id', null)
-        .eq('deleted', false)
         .order('title', { ascending: true });
       
       if (error) {
@@ -865,11 +859,6 @@ export const taskService = {
           labels: template.labels || [],
           original_task_id: template.id // שמירת המזהה של התבנית המקורית
         };
-        
-        // בדיקה האם השדה is_global_template קיים בתבנית
-        if ('is_global_template' in template) {
-          taskData.is_global_template = false;
-        }
         
         return taskData;
       });
@@ -1115,7 +1104,6 @@ export const taskService = {
         .from('tasks')
         .select('*')
         .eq('project_id', projectId)
-        .eq('deleted', false)
         .order('hierarchical_number', { ascending: true });
       
       if (error) {

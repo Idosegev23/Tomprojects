@@ -423,7 +423,6 @@ export const stageService = {
               .select('*')
               .eq('stage_id', stage.id)
               .eq('project_id', projectId)
-              .eq('deleted', false)
               .order('created_at', { ascending: true });
             
             if (!error) {
@@ -436,7 +435,6 @@ export const stageService = {
                 .select('*')
                 .eq('stage_id', stage.id)
                 .eq('project_id', projectId)
-                .eq('deleted', false)
                 .order('created_at', { ascending: true });
               
               if (generalError) {
@@ -452,7 +450,6 @@ export const stageService = {
               .select('*')
               .eq('stage_id', stage.id)
               .eq('project_id', projectId)
-              .eq('deleted', false)
               .order('created_at', { ascending: true });
             
             if (error) {
