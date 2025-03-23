@@ -116,40 +116,39 @@ export const stageService = {
         stage.id = crypto.randomUUID();
       }
       
-      // קודם נוסיף את השלב לטבלה הספציפית של הפרויקט אם היא קיימת
+      // קודם נוודא שהטבלה הספציפית של הפרויקט קיימת
       const projectId = stage.project_id;
       const tableName = getProjectStagesTable(projectId);
-      const tableExists = await checkIfTableExists(tableName);
+      let tableExists = await checkIfTableExists(tableName);
       
-      if (tableExists) {
-        // הוספת השלב לטבלה הספציפית
-        const { data: specificData, error: specificError } = await supabase
-          .from(tableName)
-          .insert(stage)
-          .select()
-          .single();
-        
-        if (specificError) {
-          console.error(`Error creating stage in project-specific table ${tableName}:`, specificError);
-          // נמשיך לטבלה הכללית במקרה של שגיאה
-        } else {
-          console.log(`Stage created successfully in project-specific table ${tableName}`);
-          return specificData;
+      // אם הטבלה לא קיימת, ניצור אותה
+      if (!tableExists) {
+        try {
+          await supabase.rpc('create_project_stages_table', {
+            project_id: projectId
+          });
+          
+          console.log(`Created project-specific stages table ${tableName} for project ${projectId}`);
+          tableExists = true;
+        } catch (createError) {
+          console.error(`Error creating project-specific stages table ${tableName}:`, createError);
+          throw new Error(`שגיאה ביצירת טבלת שלבים ייעודית: ${createError instanceof Error ? createError.message : 'שגיאה לא ידועה'}`);
         }
       }
       
-      // הוספת השלב לטבלה הכללית
+      // הוספת השלב רק לטבלה הספציפית
       const { data, error } = await supabase
-        .from('stages')
+        .from(tableName)
         .insert(stage)
         .select()
         .single();
       
       if (error) {
-        console.error('Error creating stage in main table:', error);
-        throw new Error(error.message);
+        console.error(`Error creating stage in project-specific table ${tableName}:`, error);
+        throw new Error(`שגיאה ביצירת שלב: ${error.message}`);
       }
       
+      console.log(`Stage created successfully in project-specific table ${tableName}`);
       return data;
     } catch (err) {
       console.error('Error in createStage:', err);
@@ -327,37 +326,37 @@ export const stageService = {
         }
       ];
       
-      // קודם ננסה להוסיף את השלבים לטבלה הספציפית של הפרויקט אם היא קיימת
+      // וידוא שהטבלה הספציפית של הפרויקט קיימת
       const tableName = getProjectStagesTable(projectId);
-      const tableExists = await checkIfTableExists(tableName);
+      let tableExists = await checkIfTableExists(tableName);
       
-      if (tableExists) {
-        // הוספת השלבים לטבלה הספציפית
-        const { data: specificData, error: specificError } = await supabase
-          .from(tableName)
-          .insert(defaultStages)
-          .select();
-        
-        if (specificError) {
-          console.error(`Error creating default stages in project-specific table ${tableName}:`, specificError);
-          // נמשיך לטבלה הכללית במקרה של שגיאה
-        } else {
-          console.log(`Default stages created successfully in project-specific table ${tableName}`);
-          return specificData || [];
+      // אם הטבלה לא קיימת, ניצור אותה
+      if (!tableExists) {
+        try {
+          await supabase.rpc('create_project_stages_table', {
+            project_id: projectId
+          });
+          
+          console.log(`Created project-specific stages table ${tableName} for project ${projectId}`);
+          tableExists = true;
+        } catch (createError) {
+          console.error(`Error creating project-specific stages table ${tableName}:`, createError);
+          throw new Error(`שגיאה ביצירת טבלת שלבים ייעודית: ${createError instanceof Error ? createError.message : 'שגיאה לא ידועה'}`);
         }
       }
       
-      // הוספת השלבים לטבלה הכללית
+      // הוספת השלבים רק לטבלה הספציפית
       const { data, error } = await supabase
-        .from('stages')
+        .from(tableName)
         .insert(defaultStages)
         .select();
       
       if (error) {
-        console.error(`Error creating default stages for project ${projectId} in main table:`, error);
-        throw new Error(error.message);
+        console.error(`Error creating default stages in project-specific table ${tableName}:`, error);
+        throw new Error(`שגיאה ביצירת שלבי ברירת מחדל: ${error.message}`);
       }
       
+      console.log(`Default stages created successfully in project-specific table ${tableName}`);
       return data || [];
     } catch (err) {
       console.error(`Error in createDefaultStages for project ${projectId}:`, err);

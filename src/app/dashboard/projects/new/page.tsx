@@ -64,6 +64,7 @@ import taskService from '@/lib/services/taskService';
 import entrepreneurService from '@/lib/services/entrepreneurService';
 import type { NewProject, Task, NewTask, Entrepreneur, Stage, TaskWithChildren } from '@/types/supabase';
 import { useAuthContext } from '@/components/auth/AuthProvider';
+import { supabase } from '@/lib/supabase';
 
 export default function NewProject() {
   const [project, setProject] = useState<{
@@ -458,122 +459,40 @@ export default function NewProject() {
       // שליחה לשרת
       const createdProject = await projectService.createProject(newProject);
       
-      // יצירת שלבים ברירת מחדל לפרויקט
-      let stages: Stage[] = [];
+      // אתחול טבלאות ונתונים של הפרויקט בהתאם לבחירות המשתמש
       try {
-        stages = await stageService.createDefaultStages(createdProject.id);
-      } catch (stageError) {
-        console.error(`שגיאה ביצירת שלבים ברירת מחדל לפרויקט:`, stageError);
+        // קריאה לפונקציה החדשה שמאתחלת טבלאות ונתונים
+        const { data, error } = await supabase.rpc('init_project_tables_and_data', {
+          project_id: createdProject.id,
+          create_default_stages: true,
+          create_default_tasks: useDefaultTasks,
+          selected_task_ids: selectedTaskIds.length > 0 ? selectedTaskIds : null
+        });
+        
+        if (error) {
+          throw new Error(error.message);
+        }
+        
         toast({
-          title: 'שגיאה ביצירת שלבים לפרויקט',
-          description: 'הפרויקט נוצר, אך אירעה שגיאה ביצירת השלבים. ניתן להוסיף שלבים בהמשך.',
+          title: 'הפרויקט נוצר בהצלחה',
+          description: 'כל הטבלאות והנתונים אותחלו בהצלחה',
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+          position: 'top-right',
+        });
+      } catch (initError) {
+        console.error('שגיאה באתחול טבלאות ונתונים:', initError);
+        
+        toast({
+          title: 'שגיאה באתחול טבלאות הפרויקט',
+          description: initError instanceof Error ? initError.message : 'אירעה שגיאה בלתי צפויה',
           status: 'warning',
           duration: 5000,
           isClosable: true,
           position: 'top-right',
         });
       }
-      
-      // אם המשתמש בחר להשתמש במשימות ברירת מחדל, ניצור אותן
-      if (useDefaultTasks) {
-        try {
-          // בדיקה אם יש שלבים כדי להימנע משגיאות
-          const stageId = stages.length > 0 ? stages[0].id : null;
-          
-          // אם אין שלבים, ננסה ליצור שלב ברירת מחדל
-          let targetStageId = stageId;
-          if (!targetStageId) {
-            try {
-              const defaultStage = await stageService.createStage({
-                title: 'ברירת מחדל',
-                project_id: createdProject.id,
-                description: 'שלב ברירת מחדל שנוצר אוטומטית'
-              });
-              targetStageId = defaultStage.id;
-            } catch (error) {
-              console.error('שגיאה ביצירת שלב ברירת מחדל:', error);
-              // אם לא הצלחנו ליצור שלב, נשתמש ב-null ונסמוך על הלוגיקה של השירות
-            }
-          }
-          
-          // יצירת משימות ברירת מחדל לפרויקט נדל"ן
-          await taskService.createDefaultTasksForRealEstateProject(createdProject.id, targetStageId);
-          
-          toast({
-            title: 'משימות ברירת מחדל נוצרו בהצלחה',
-            status: 'success',
-            duration: 3000,
-            isClosable: true,
-            position: 'top-right',
-          });
-        } catch (taskError) {
-          console.error('שגיאה ביצירת משימות ברירת מחדל:', taskError);
-          
-          toast({
-            title: 'שגיאה ביצירת משימות ברירת מחדל',
-            description: taskError instanceof Error ? taskError.message : 'אירעה שגיאה בלתי צפויה',
-            status: 'warning',
-            duration: 5000,
-            isClosable: true,
-            position: 'top-right',
-          });
-        }
-      }
-      
-      // אם המשתמש בחר משימות מותאמות אישית, נוסיף אותן בנוסף
-      if (selectedTaskIds.length > 0) {
-        try {
-          // בדיקה אם יש שלבים כדי להימנע משגיאות
-          const stageId = stages.length > 0 ? stages[0].id : null;
-          
-          // אם אין שלבים, ננסה ליצור שלב ברירת מחדל
-          let targetStageId = stageId;
-          if (!targetStageId) {
-            try {
-              const defaultStage = await stageService.createStage({
-                title: 'ברירת מחדל',
-                project_id: createdProject.id,
-                description: 'שלב ברירת מחדל שנוצר אוטומטית'
-              });
-              targetStageId = defaultStage.id;
-            } catch (error) {
-              console.error('שגיאה ביצירת שלב ברירת מחדל:', error);
-              // אם לא הצלחנו ליצור שלב, נשתמש ב-null ונסמוך על הלוגיקה של השירות
-            }
-          }
-          
-          // שכפול המשימות שנבחרו לפרויקט החדש
-          const clonedTasks = await taskService.cloneTasksToProject(selectedTaskIds, createdProject.id, targetStageId);
-          
-          toast({
-            title: 'המשימות שנבחרו שוכפלו בהצלחה',
-            description: `${clonedTasks.length} משימות נוצרו בפרויקט החדש`,
-            status: 'success',
-            duration: 3000,
-            isClosable: true,
-            position: 'top-right',
-          });
-        } catch (taskError) {
-          console.error('שגיאה בשכפול משימות מותאמות אישית:', taskError);
-          
-          toast({
-            title: 'שגיאה בשכפול המשימות',
-            description: taskError instanceof Error ? taskError.message : 'אירעה שגיאה בלתי צפויה',
-            status: 'warning',
-            duration: 5000,
-            isClosable: true,
-            position: 'top-right',
-          });
-        }
-      }
-      
-      toast({
-        title: 'הפרויקט נוצר בהצלחה',
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-        position: 'top-right',
-      });
       
       // ניווט לדף הפרויקט החדש
       router.push(`/dashboard/projects/${createdProject.id}`);

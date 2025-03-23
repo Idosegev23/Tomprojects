@@ -56,109 +56,100 @@ export const taskService = {
   
   // יצירת משימה חדשה
   async createTask(task: NewTask): Promise<Task> {
-    // וידוא שיש מזהה UUID
-    if (!task.id) {
-      task.id = crypto.randomUUID();
-    }
-    
-    // אם יש project_id ואין hierarchical_number, נחשב את המספר ההיררכי הבא
-    if (task.project_id && !task.hierarchical_number) {
-      // אם יש parent_task_id, נחשב את המספר ההיררכי הבא כתת-משימה
-      if (task.parent_task_id) {
-        task.hierarchical_number = await this.getNextSubHierarchicalNumber(task.parent_task_id);
-      } else {
-        // אחרת, נחשב את המספר ההיררכי הבא כמשימת שורש
-        task.hierarchical_number = await this.getNextRootHierarchicalNumber(task.project_id);
-      }
-    }
-    
-    // אם המשימה היא ללא פרויקט, היא אוטומטית גלובלית ונוסיף אותה לטבלה הראשית
-    if (!task.project_id && task.is_global_template === undefined) {
-      task.is_global_template = true;
-      
-      // הוספה לטבלה הראשית
-      const { data, error } = await supabase
-        .from('tasks')
-        .insert(task)
-        .select()
-        .single();
-      
-      if (error) {
-        console.error('Error creating global task:', error);
-        throw new Error(error.message);
+    try {
+      // וידוא שיש מזהה UUID
+      if (!task.id) {
+        task.id = crypto.randomUUID();
       }
       
-      return data;
-    }
-    
-    // אם יש project_id, נוסיף את המשימה ישירות לטבלה הייחודית של הפרויקט
-    if (task.project_id) {
-      try {
-        const tableName = `project_${task.project_id}_tasks`;
+      // אם יש project_id ואין hierarchical_number, נחשב את המספר ההיררכי הבא
+      if (task.project_id && !task.hierarchical_number) {
+        // אם יש parent_task_id, נחשב את המספר ההיררכי הבא כתת-משימה
+        if (task.parent_task_id) {
+          task.hierarchical_number = await this.getNextSubHierarchicalNumber(task.parent_task_id);
+        } else {
+          // אחרת, נחשב את המספר ההיררכי הבא כמשימת שורש
+          task.hierarchical_number = await this.getNextRootHierarchicalNumber(task.project_id);
+        }
+      }
+      
+      // אם המשימה היא ללא פרויקט (תבנית גלובלית), נוסיף אותה לטבלה הראשית
+      if (!task.project_id) {
+        // סימון המשימה כתבנית גלובלית אם לא צוין אחרת
+        if (task.is_global_template === undefined) {
+          task.is_global_template = true;
+        }
         
-        // בדיקה אם הטבלה הייחודית קיימת
-        const { data: tableExists, error: tableCheckError } = await supabase
+        // הוספת תבנית גלובלית לטבלה הראשית
+        const { data, error } = await supabase
+          .from('tasks')
+          .insert(task)
+          .select()
+          .single();
+        
+        if (error) {
+          console.error('Error creating global task template:', error);
+          throw new Error(`שגיאה ביצירת תבנית משימה גלובלית: ${error.message}`);
+        }
+        
+        console.log('Global task template created successfully in main tasks table');
+        return data;
+      }
+      
+      // כאן מדובר במשימה עם project_id - נוסיף אותה רק לטבלה הייחודית של הפרויקט
+      const tableName = `project_${task.project_id}_tasks`;
+      
+      // בדיקה אם הטבלה הייחודית קיימת
+      let tableExists = false;
+      try {
+        const { data: checkResult, error: tableCheckError } = await supabase
           .rpc('check_table_exists', {
             table_name_param: tableName
           });
         
         if (tableCheckError) {
           console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
-          throw new Error(tableCheckError.message);
+          throw new Error(`שגיאה בבדיקת קיום טבלת משימות ייעודית: ${tableCheckError.message}`);
         }
         
-        // אם הטבלה לא קיימת, ניצור אותה
-        if (!tableExists) {
+        tableExists = !!checkResult;
+      } catch (err) {
+        console.error(`Error checking project table ${tableName}:`, err);
+        throw new Error(`שגיאה בבדיקת קיום טבלת משימות ייעודית: ${err instanceof Error ? err.message : 'שגיאה לא ידועה'}`);
+      }
+      
+      // אם הטבלה לא קיימת, ניצור אותה
+      if (!tableExists) {
+        try {
           await supabase.rpc('create_project_table', {
             project_id: task.project_id
           });
           console.log(`Created project-specific table ${tableName} for project ${task.project_id}`);
+          tableExists = true;
+        } catch (createTableError) {
+          console.error(`Error creating project-specific table ${tableName}:`, createTableError);
+          throw new Error(`שגיאה ביצירת טבלת משימות ייעודית: ${createTableError instanceof Error ? createTableError.message : 'שגיאה לא ידועה'}`);
         }
-        
-        // שימוש בפונקציית RPC להוספת משימה ישירות לטבלת הפרויקט
-        const { data, error } = await supabase.rpc('add_tasks_to_project_table', {
-          tasks_data: JSON.stringify([task]),
-          project_id: task.project_id
-        });
-        
-        if (error) {
-          console.error(`Error adding task to project-specific table ${tableName}:`, error);
-          throw new Error(error.message);
-        }
-        
-        // קבלת המשימה שנוצרה
-        const { data: createdTask, error: fetchError } = await supabase
-          .from(tableName)
-          .select('*')
-          .eq('id', task.id)
-          .single();
-        
-        if (fetchError) {
-          console.error(`Error fetching created task from ${tableName}:`, fetchError);
-          throw new Error(fetchError.message);
-        }
-        
-        console.log(`Task added directly to project-specific table ${tableName}`);
-        return createdTask;
-      } catch (err) {
-        console.error(`Error in createTask for project ${task.project_id}:`, err);
-        throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה');
       }
+      
+      // הוספת המשימה לטבלה הייחודית
+      const { data, error } = await supabase
+        .from(tableName)
+        .insert(task)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error(`Error adding task to project-specific table ${tableName}:`, error);
+        throw new Error(`שגיאה בהוספת משימה לטבלת הפרויקט: ${error.message}`);
+      }
+      
+      console.log(`Task created successfully in project-specific table ${tableName}`);
+      return data;
+    } catch (err) {
+      console.error('Error in createTask:', err);
+      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה ביצירת משימה');
     }
-    
-    // אם הגענו לכאן, זו משימה ללא פרויקט (כנראה) אז נוסיף אותה לטבלה הראשית
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert(task)
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('Error creating task:', error);
-      throw new Error(error.message);
-    }
-    
-    return data;
   },
   
   // עדכון משימה קיימת
@@ -491,83 +482,107 @@ export const taskService = {
     }
     
     try {
-      // עדכון הפרויקט במשימות בטבלה הראשית
-      const { data, error } = await supabase
+      // קריאת המשימות המקוריות מהטבלה הראשית
+      const { data: originalTasks, error: fetchError } = await supabase
         .from('tasks')
-        .update({ project_id: projectId })
-        .in('id', taskIds)
+        .select('*')
+        .in('id', taskIds);
+      
+      if (fetchError) {
+        console.error('Error fetching original tasks:', fetchError);
+        throw new Error(`שגיאה בקריאת המשימות המקוריות: ${fetchError.message}`);
+      }
+      
+      if (!originalTasks || originalTasks.length === 0) {
+        console.log('No original tasks found to assign');
+        return [];
+      }
+      
+      // שם הטבלה הספציפית של הפרויקט
+      const tableName = `project_${projectId}_tasks`;
+      
+      // בדיקה אם הטבלה הספציפית קיימת, ואם לא - יצירתה
+      let tableExists = false;
+      try {
+        const { data: checkResult, error: tableCheckError } = await supabase
+          .rpc('check_table_exists', {
+            table_name_param: tableName
+          });
+        
+        if (tableCheckError) {
+          console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
+          throw new Error(`שגיאה בבדיקת קיום טבלת משימות: ${tableCheckError.message}`);
+        }
+        
+        tableExists = !!checkResult;
+      } catch (err) {
+        console.error(`Error checking table existence:`, err);
+        throw new Error(`שגיאה בבדיקת קיום טבלה: ${err instanceof Error ? err.message : 'שגיאה לא ידועה'}`);
+      }
+      
+      // אם הטבלה לא קיימת, ניצור אותה
+      if (!tableExists) {
+        try {
+          await supabase.rpc('create_project_table', {
+            project_id: projectId
+          });
+          console.log(`Created project-specific table ${tableName} for project ${projectId}`);
+          tableExists = true;
+        } catch (createTableError) {
+          console.error(`Error creating project-specific table ${tableName}:`, createTableError);
+          throw new Error(`שגיאה ביצירת טבלת משימות: ${createTableError instanceof Error ? createTableError.message : 'שגיאה לא ידועה'}`);
+        }
+      }
+      
+      // העתקת המשימות מהטבלה הראשית לטבלה הייחודית עם עדכון project_id
+      const tasksToInsert = originalTasks.map(task => {
+        return {
+          ...task,
+          id: crypto.randomUUID(), // מזהה חדש
+          project_id: projectId,
+          original_task_id: task.id, // שמירת המזהה המקורי
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          hierarchical_number: null // יעודכן אוטומטית מאוחר יותר
+        };
+      });
+      
+      // הוספת המשימות לטבלה הייחודית
+      const { data: insertedTasks, error: insertError } = await supabase
+        .from(tableName)
+        .insert(tasksToInsert)
         .select();
       
-      if (error) {
-        console.error('Error assigning tasks to project:', error);
-        throw new Error(error.message);
+      if (insertError) {
+        console.error(`Error assigning tasks to project-specific table ${tableName}:`, insertError);
+        throw new Error(`שגיאה בהוספת משימות לפרויקט: ${insertError.message}`);
       }
       
-      // סנכרון המשימות לטבלה הספציפית של הפרויקט
-      if (data && data.length > 0) {
-        // בדיקה אם הטבלה הספציפית קיימת
-        const tableName = `project_${projectId}_tasks`;
-        let tableExists = false;
-        
-        try {
-          const { data: tableExistsData } = await supabase
-            .rpc('check_table_exists', {
-              table_name_param: tableName
-            });
-          
-          tableExists = !!tableExistsData;
-        } catch (tableCheckError) {
-          console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
-        }
-        
-        // אם הטבלה לא קיימת, ניצור אותה
-        if (!tableExists) {
-          try {
-            await supabase.rpc('create_project_table', {
-              project_id: projectId
-            });
-            console.log(`Created project-specific table ${tableName} for project ${projectId}`);
-            tableExists = true;
-          } catch (createTableError) {
-            console.error(`Error creating project-specific table ${tableName}:`, createTableError);
-          }
-        }
-        
-        // סנכרון המשימות לטבלה הספציפית של הפרויקט
-        if (tableExists) {
-          for (const task of data) {
-            try {
-              // קריאה לפונקציה SQL להעתקת/עדכון המשימה בטבלה הספציפית של הפרויקט
-              await supabase.rpc('sync_task_to_project_table', {
-                task_id: task.id,
-                project_id: projectId
-              });
-            } catch (syncError) {
-              console.error(`Error syncing task ${task.id} to project table ${tableName}:`, syncError);
-              
-              // ניסיון חלופי - העתקה ישירה של המשימה לטבלה
-              try {
-                await supabase.rpc('copy_task_to_project_table', {
-                  task_id: task.id,
-                  project_id: projectId
-                });
-              } catch (copyError) {
-                console.error(`Alternative method also failed for task ${task.id}:`, copyError);
-              }
-            }
-          }
-        }
-        
-        console.log(`${data.length} tasks assigned and synced to project ${projectId}`);
-      } else {
-        console.log(`No tasks were assigned to project ${projectId}`);
-      }
+      // מספור היררכי של המשימות החדשות
+      await this.updateHierarchicalNumbersForProject(projectId);
       
-      return data || [];
-      
+      console.log(`${insertedTasks?.length || 0} tasks assigned to project ${projectId} table ${tableName}`);
+      return insertedTasks || [];
     } catch (error) {
       console.error(`Critical error in assignTasksToProject:`, error);
       throw new Error(error instanceof Error ? error.message : 'שגיאה לא ידועה בשיוך משימות לפרויקט');
+    }
+  },
+  
+  // פונקציה עזר לעדכון מספרים היררכיים בפרויקט
+  async updateHierarchicalNumbersForProject(projectId: string): Promise<void> {
+    try {
+      const tableName = `project_${projectId}_tasks`;
+      
+      // עדכון מספרים היררכיים למשימות ללא מספר
+      await supabase.rpc('update_hierarchical_numbers_for_project', {
+        project_id_param: projectId
+      });
+      
+      console.log(`Updated hierarchical numbers for project ${projectId}`);
+    } catch (error) {
+      console.error(`Error updating hierarchical numbers for project ${projectId}:`, error);
+      // לא נזרוק שגיאה כדי לא לעצור את התהליך המרכזי
     }
   },
   

@@ -66,13 +66,18 @@ export const projectService = {
       throw new Error(error.message);
     }
     
-    // יצירת טבלה ייחודית לפרויקט
+    // יצירת טבלאות ספציפיות לפרויקט ואתחול נתונים ראשוניים
     try {
-      await this.createProjectTable(data.id);
+      await supabase.rpc('init_project_tables_and_data', {
+        project_id: data.id,
+        create_default_stages: true,
+        create_default_tasks: true
+      });
+      console.log(`Project tables for project ${data.id} initialized successfully with default data`);
     } catch (tableError) {
-      console.error(`Error creating project table for project ${data.id}:`, tableError);
+      console.error(`Error initializing project tables for project ${data.id}:`, tableError);
       // לא נזרוק שגיאה כאן כדי לא לעצור את יצירת הפרויקט
-      console.log('Project created successfully, but without a dedicated table. Some features may be limited.');
+      console.log('Project created successfully, but without dedicated tables. Some features may be limited.');
     }
     
     return data;
