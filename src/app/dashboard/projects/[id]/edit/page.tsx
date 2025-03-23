@@ -316,7 +316,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
       const updatedStage = await stageService.updateStage(stageToEdit.id, {
         title: editedStageName,
         updated_at: new Date().toISOString()
-      });
+      }, id);
       
       // עדכון הרשימה המקומית
       setStages(stages.map(s => s.id === updatedStage.id ? updatedStage : s));

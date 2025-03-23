@@ -113,7 +113,7 @@ export default function TaskPage() {
         
         // טעינת נתוני השלב
         if (taskData.stage_id) {
-          const stageData = await stageService.getStageById(taskData.stage_id);
+          const stageData = await stageService.getStageById(taskData.stage_id, taskData.project_id);
           setStage(stageData);
         }
       } catch (err) {
