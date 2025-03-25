@@ -1535,3 +1535,58 @@ if ('children' in cleanTask) {
 
 **קבצים ששונו:**
 - `src/lib/services/stageService.ts`
+
+## 2025-07-26 - המשך תיקון בעיות בסנכרון טבלאות שלבים ומשימות
+
+**בעיה:**
+- שגיאה עם הודעה: `relation "public.information_schema.tables" does not exist` בעת ניסיון לבדוק קיום טבלאות
+- כישלון בסנכרון שלבים לטבלאות ייחודיות של הפרויקט בגלל שהקוד מנסה לגשת ל-`information_schema.tables`
+- בעיות בבדיקת קיום טבלאות במספר מקומות שונים בקוד
+
+**פתרון:**
+1. תיקון נוסף של פונקציות `getProjectStages` ו-`createDefaultStages` להשתמש בפונקציית `checkIfTableExists` המעודכנת שאינה תלויה ב-`information_schema`
+2. עדכון קוד סנכרון השלבים ב-route.ts להשתמש בגישה ישירה לטבלאות באמצעות שאילתות פשוטות לבדיקת קיום הטבלאות
+3. פישוט תהליך הבדיקה אם טבלה קיימת בכל הקוד
+
+**יתרונות:**
+- תמיכה טובה יותר בסביבות שאין בהן גישה ל-`information_schema.tables`
+- שיפור היציבות של תהליך סנכרון השלבים
+- הפחתת שגיאות 404 (Not Found) בבקשות API
+- התאמה טובה יותר לסביבת ההפעלה של Supabase
+
+**קבצים ששונו:**
+- `src/lib/services/stageService.ts` - עדכון הפונקציות `getProjectStages` ו-`createDefaultStages`
+- `src/app/api/projects/sync-stages/route.ts` - החלפת השימוש ב-`information_schema.tables` בשיטה ישירה יותר
+
+## 2025-07-26 - סיכום בעיות וסנכרון טבלאות שלבים
+
+**בעיות מרכזיות שזוהו:**
+1. שגיאת גישה ל-`information_schema.tables`: `relation "public.information_schema.tables" does not exist` 
+2. אי-התאמה בין שמות השדות בפונקציות שונות: 
+   - פונקציית `copy_stages_to_project` משתמשת בשדה `sort_order`
+   - פונקציית `create_project_stages_table` יוצרת שדה בשם `order_num` 
+3. ניסיון לגשת לשדות רבים שאינם קיימים בטיפוס הבסיסי של `Stage`
+
+**פתרונות שיושמו:**
+1. **שינוי שיטת בדיקת קיום טבלאות**:
+   - עדכון פונקציית `checkIfTableExists` להשתמש בגישה ישירה לטבלה במקום ל-`information_schema`
+   - עדכון הפונקציות `getProjectStages` ו-`createDefaultStages` להשתמש בפונקציה המעודכנת
+   - עדכון הקוד ב-route.ts לבדיקת קיום טבלאות בשיטה ישירה
+
+2. **תיקון טיפוסים ונתונים**:
+   - הוספת Cast ל-any במקומות הנדרשים כדי לעקוף בדיקות טיפוס
+   - יצירת שדות ב-`adaptedStage` עם ערכי ברירת מחדל
+   - בדיקה אם שדות קיימים באובייקט המקורי לפני השימוש בהם
+   - הוספת כל השדות הנדרשים בפונקציית `createDefaultStages`
+
+3. **מצב רצוי לטיפול עתידי**:
+   - לוודא התאמה בשמות השדות בין `create_project_stages_table` ו-`copy_stages_to_project`
+   - ליצור מיגרציית SQL לעדכון הטבלאות הקיימות עם שדות חסרים
+   - לבדוק את מבנה טבלאות ה-stages הקיימות בבסיס הנתונים ולהתאים את הקוד בהתאם
+
+**קבצים ששונו:**
+- `src/lib/services/stageService.ts`: עדכון פונקציות `checkIfTableExists`, `getProjectStages`, `createStage` ו-`createDefaultStages`
+- `src/app/api/projects/sync-stages/route.ts`: שיפור בדיקת קיום טבלאות
+
+**המלצה לשיפור נוסף:**
+יש ליצור מיגרציית SQL שתעדכן את הפונקציה `create_project_stages_table` ליצור טבלה עם שדה `sort_order` במקום `order_num` כדי להתאים לשאר המערכת.

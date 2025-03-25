@@ -89,25 +89,41 @@ export async function POST(req: NextRequest) {
     try {
       console.log('סנכרון מזהי שלבים בטבלת המשימות הספציפית...');
       
-      // 1. בדיקה אם הטבלאות קיימות
+      // 1. הגדרת שמות הטבלאות
       const tasksTableName = `project_${projectId}_tasks`;
       const stagesTableName = `project_${projectId}_stages`;
       
-      // בדיקה אם הטבלאות קיימות
-      const { data: tablesData, error: tablesError } = await supabase
-        .from('information_schema.tables')
-        .select('table_name')
-        .in('table_name', [tasksTableName, stagesTableName])
-        .eq('table_schema', 'public');
-        
-      if (tablesError) {
-        console.error('שגיאה בבדיקת קיום הטבלאות:', tablesError);
-        throw tablesError;
+      // 2. בדיקה אם הטבלאות קיימות באמצעות ניסיון ישיר לבצע שאילתה
+      let tasksTableExists = false;
+      let stagesTableExists = false;
+      
+      try {
+        // בדיקת טבלת המשימות
+        const { error: tasksError } = await supabase
+          .from(tasksTableName)
+          .select('count(*)')
+          .limit(1);
+          
+        tasksTableExists = !tasksError;
+      } catch (e) {
+        console.log(`טבלת המשימות ${tasksTableName} לא קיימת`);
+      }
+      
+      try {
+        // בדיקת טבלת השלבים
+        const { error: stagesError } = await supabase
+          .from(stagesTableName)
+          .select('count(*)')
+          .limit(1);
+          
+        stagesTableExists = !stagesError;
+      } catch (e) {
+        console.log(`טבלת השלבים ${stagesTableName} לא קיימת`);
       }
       
       // אם שתי הטבלאות קיימות, נבצע סנכרון
-      if (tablesData && tablesData.length === 2) {
-        // 2. שליפת הנתונים מטבלת המשימות ומטבלת השלבים
+      if (tasksTableExists && stagesTableExists) {
+        // 3. שליפת הנתונים מטבלת המשימות ומטבלת השלבים
         const { data: tasksWithStageId, error: tasksError } = await supabase
           .from(tasksTableName)
           .select('id, stage_id, title')
@@ -118,7 +134,7 @@ export async function POST(req: NextRequest) {
           throw tasksError;
         }
         
-        // 3. שליפת שלבים מהטבלה הכללית
+        // 4. שליפת שלבים מהטבלה הכללית
         const { data: generalStages, error: generalStagesError } = await supabase
           .from('stages')
           .select('id, title');
@@ -128,7 +144,7 @@ export async function POST(req: NextRequest) {
           throw generalStagesError;
         }
         
-        // 4. שליפת שלבים מהטבלה הספציפית
+        // 5. שליפת שלבים מהטבלה הספציפית
         const { data: projectStages, error: projectStagesError } = await supabase
           .from(stagesTableName)
           .select('id, title');
@@ -146,7 +162,7 @@ export async function POST(req: NextRequest) {
           });
         }
         
-        // 5. עדכון ה-stage_id של המשימות לפי כותרת השלב
+        // 6. עדכון ה-stage_id של המשימות לפי כותרת השלב
         if (tasksWithStageId && tasksWithStageId.length > 0 && generalStages && generalStages.length > 0) {
           let updatedCount = 0;
           

@@ -52,33 +52,9 @@ export const stageService = {
     const projectStagesTableName = `project_${projectId}_stages`;
     
     try {
-      // בדיקה אם הטבלה קיימת
-      const { data: tablesData, error: tablesError } = await supabase
-        .from('information_schema.tables')
-        .select('table_name')
-        .eq('table_name', projectStagesTableName)
-        .eq('table_schema', 'public');
+      // בדיקה אם הטבלה קיימת באמצעות הפונקציה המעודכנת
+      const tableExists = await checkIfTableExists(projectStagesTableName);
         
-      if (tablesError) {
-        console.error(`שגיאה בבדיקת קיום טבלת ${projectStagesTableName}:`, tablesError);
-        
-        // במקרה של שגיאה, ננסה לשלוף נתונים מטבלת השלבים הכללית
-        console.log(`מנסה לשלוף שלבים מהטבלה הכללית (stages) עבור פרויקט ${projectId}`);
-        const { data: generalStages, error: generalError } = await supabase
-          .from('stages')
-          .select('*')
-          .eq('project_id', projectId);
-          
-        if (generalError) {
-          console.error('שגיאה בשליפת שלבים מהטבלה הכללית:', generalError);
-          return [];
-        }
-        
-        return generalStages || [];
-      }
-      
-      const tableExists = tablesData && tablesData.length > 0;
-      
       if (tableExists) {
         // שליפת השלבים מהטבלה הייחודית לפרויקט
         const { data, error } = await supabase
@@ -431,18 +407,12 @@ export const stageService = {
       // נבדוק אם הטבלה הייחודית לפרויקט קיימת
       const projectStagesTableName = `project_${projectId}_stages`;
       
-      // בדיקה אם הטבלה קיימת
-      const { data: tablesData, error: tablesError } = await supabase
-        .from('information_schema.tables')
-        .select('table_name')
-        .eq('table_name', projectStagesTableName)
-        .eq('table_schema', 'public');
-        
-      if (tablesError) {
-        console.error(`שגיאה בבדיקת קיום טבלת ${projectStagesTableName}:`, tablesError);
-        
+      // בדיקה אם הטבלה קיימת באמצעות הפונקציה המעודכנת
+      const tableExists = await checkIfTableExists(projectStagesTableName);
+      
+      if (!tableExists) {
         // נשתמש בטבלה הכללית במקום
-        console.log(`מוסיף שלבי ברירת מחדל לטבלה הכללית (stages) עבור פרויקט ${projectId}`);
+        console.log(`טבלת ${projectStagesTableName} לא קיימת, מוסיף שלבי ברירת מחדל לטבלה הכללית עבור פרויקט ${projectId}`);
         const { data, error } = await supabase
           .from('stages')
           .upsert(defaultStages.map(stage => ({ ...stage, id: uuidv4() })));
@@ -464,11 +434,7 @@ export const stageService = {
         }
         
         return createdStages || [];
-      }
-      
-      const tableExists = tablesData && tablesData.length > 0;
-      
-      if (tableExists) {
+      } else {
         // הוספת שלבי ברירת מחדל לטבלה הייחודית לפרויקט
         const { data, error } = await supabase
           .from(projectStagesTableName)
@@ -533,30 +499,6 @@ export const stageService = {
           }
           
           return generalStages || [];
-        }
-        
-        return createdStages || [];
-      } else {
-        // נשתמש בטבלה הכללית במקום
-        console.log(`טבלת ${projectStagesTableName} לא קיימת, מוסיף שלבי ברירת מחדל לטבלה הכללית עבור פרויקט ${projectId}`);
-        const { data, error } = await supabase
-          .from('stages')
-          .upsert(defaultStages.map(stage => ({ ...stage, id: uuidv4() })));
-          
-        if (error) {
-          console.error('שגיאה בהוספת שלבי ברירת מחדל לטבלה הכללית:', error);
-          return [];
-        }
-        
-        // שליפת השלבים שנוצרו
-        const { data: createdStages, error: fetchError } = await supabase
-          .from('stages')
-          .select('*')
-          .eq('project_id', projectId);
-          
-        if (fetchError) {
-          console.error('שגיאה בשליפת שלבי ברירת מחדל שנוצרו:', fetchError);
-          return [];
         }
         
         return createdStages || [];
