@@ -48,7 +48,6 @@ import SubtaskInput from '@/components/tasks/SubtaskInput';
 // הרחבת הטיפוס של המשימה כדי להכיל את כל השדות הדרושים
 interface ExtendedTask extends Task {
   dropbox_folder?: string;
-  hierarchical_number?: string;
 }
 
 interface TaskEditModalProps {
@@ -82,7 +81,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     category: '',
     responsible: null,
     dropbox_folder: '',
-    hierarchical_number: '',
+    hierarchical_number: null,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -129,7 +128,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         category: '',
         responsible: null,
         dropbox_folder: '',
-        hierarchical_number: '',
+        hierarchical_number: null,
       });
       setIsSubtask(false);
       setSubtasks([]);
@@ -254,10 +253,11 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     setLoading(true);
     
     try {
-      let taskData: Partial<ExtendedTask> = {
+      // נשתמש ב-type casting כדי לעקוף את בעיות ההתאמה בין הטיפוסים
+      let taskData = {
         ...formData,
-        project_id: projectId,
-      };
+        project_id: projectId
+      } as any;
       
       // אם זו לא תת-משימה, מוודאים שאין משימת אב
       if (!isSubtask) {
@@ -648,9 +648,16 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                                   aria-label="ערוך תת-משימה"
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => {
-                                    onClose(); // סגירת המודל הנוכחי
-                                    if (onEditTask) onEditTask(subtask); // פתיחת מודל עריכה לתת-המשימה
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toast({
+                                      title: 'עריכת תת-משימה',
+                                      description: 'נא לסגור את המודל הנוכחי ולערוך את תת-המשימה דרך מסך המשימות הראשי',
+                                      status: 'info',
+                                      duration: 3000,
+                                      isClosable: true,
+                                    });
+                                    // סגירת המודל תעשה רק אם המשתמש מחליט לבצע עריכה
                                   }}
                                 />
                                 <IconButton

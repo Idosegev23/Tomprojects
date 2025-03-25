@@ -12,7 +12,7 @@ export interface ExtendedStage extends Stage {
 // טיפוס שמרחיב את Task כדי לכלול שדות נוספים
 export interface ExtendedTask extends Task {
   dropbox_folder?: string;
-  // ללא שינוי של hierarchical_number, הוא קיים כבר ב-Task המקורי כ-string | null
+  // hierarchical_number מוגדר כ-string | null ב-Task המקורי
 }
 
 // טיפוס שמתאים למודל של שלב עם משימות
