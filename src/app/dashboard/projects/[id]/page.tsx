@@ -731,11 +731,11 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                     <Box>
                       {stages.length > 0 ? (
                         <TaskKanban
-                          projectId={id}
+                          projects={[project]}
                           stages={stages}
                           tasks={tasks}
-                          onTaskUpdated={handleTaskUpdated}
-                          onTaskDeleted={handleTaskDeleted}
+                          onEditTask={handleTaskUpdated}
+                          onDeleteTask={handleTaskDeleted}
                           onStageChange={handleStageChange}
                           onStatusChange={handleStatusChange}
                         />
@@ -768,7 +768,6 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                         <TaskGantt
                           tasks={tasks}
                           onTaskDrop={handleTaskDrop}
-                          onTaskUpdated={handleTaskUpdated}
                         />
                       ) : (
                         <Card p={8} textAlign="center" variant="outline">
@@ -801,8 +800,9 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                         <TaskTree
                           projectId={id}
                           tasks={tasks}
-                          onTaskUpdated={handleTaskUpdated}
+                          onTaskEdited={handleTaskUpdated}
                           onTaskDeleted={handleTaskDeleted}
+                          onTaskStatusChanged={handleStatusChange}
                         />
                       ) : (
                         <Card p={8} textAlign="center" variant="outline">
@@ -850,7 +850,10 @@ export default function ProjectPage({ params }: ProjectPageProps) {
               isOpen={isAssignTasksModalOpen}
               onClose={() => setIsAssignTasksModalOpen(false)}
               projectId={id}
-              onTasksAssigned={handleTaskCreated}
+              onTasksAssigned={(assignedTasks) => {
+                // הוספת כל המשימות שהוקצו לרשימת המשימות
+                setTasks([...tasks, ...assignedTasks]);
+              }}
             />
           )}
           
