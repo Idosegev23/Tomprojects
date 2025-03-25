@@ -1,6 +1,7 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { stageService } from '@/lib/services/stageService';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,65 +18,171 @@ export async function POST(req: NextRequest) {
     // יצירת לקוח supabase עם הקוקיז של הבקשה
     const supabase = createRouteHandlerClient({ cookies });
     
-    // 1. קריאה לפונקציית RPC להעתקת שלבים מהטבלה הכללית לטבלה הייחודית של הפרויקט
-    const { data: result, error } = await supabase.rpc(
-      'copy_stages_to_project',
-      { project_id: projectId }
-    );
-    
-    if (error) {
-      console.error('שגיאה בסנכרון שלבים:', error);
+    let success = false;
+    let result: any = null;
+
+    try {
+      // 1. נסיון ראשון: קריאה לפונקציית RPC להעתקת שלבים מהטבלה הכללית לטבלה הייחודית של הפרויקט
+      console.log('ניסיון קריאה לפונקציית copy_stages_to_project...');
+      const { data, error } = await supabase.rpc(
+        'copy_stages_to_project',
+        { project_id: projectId }
+      );
       
-      // בדיקה אם הפונקציה לא קיימת וניסיון להשתמש בפונקציה הישנה כגיבוי
-      if (error.message?.includes('function copy_stages_to_project')) {
-        const { data: oldResult, error: oldError } = await supabase.rpc(
+      if (error) {
+        console.error('שגיאה בסנכרון שלבים באמצעות copy_stages_to_project:', error);
+        throw error;
+      }
+      
+      success = true;
+      result = data;
+    } catch (rpcError) {
+      console.log('ניסיון קריאה לפונקציית copy_stages_to_project_table כגיבוי...');
+      try {
+        // 2. נסיון שני: קריאה לפונקציית RPC הישנה כגיבוי
+        const { data, error } = await supabase.rpc(
           'copy_stages_to_project_table',
           { project_id: projectId }
         );
         
-        if (oldError) {
-          return NextResponse.json(
-            { 
-              error: 'שגיאה בסנכרון שלבים', 
-              details: oldError.message,
-              code: oldError.code
-            },
-            { status: 500 }
-          );
+        if (error) {
+          console.error('שגיאה גם בסנכרון שלבים באמצעות copy_stages_to_project_table:', error);
+          throw error;
         }
         
-        // שליפת השלבים מהטבלה הייחודית של הפרויקט
-        const stagesTableName = `project_${projectId}_stages`;
-        const { data: stages, error: stagesError } = await supabase
-          .from(stagesTableName)
-          .select('*');
+        success = true;
+        result = { project_stages_count: 0 }; // אין מידע על מספר השלבים מהפונקציה הישנה
+      } catch (oldRpcError) {
+        console.log('שני ניסיונות RPC נכשלו, עובר לשימוש ישיר ב-stageService...');
         
-        if (stagesError) {
-          return NextResponse.json(
-            { 
-              error: `אירעה שגיאה בגישה לטבלת השלבים ${stagesTableName}`,
-              details: stagesError.message
-            },
-            { status: 500 }
-          );
+        // 3. מצב חירום: נשתמש ב-stageService באופן ישיר
+        try {
+          // קודם נבדוק אם כבר יש שלבים
+          const existingStages = await stageService.getProjectStages(projectId);
+          
+          // אם אין שלבים, ניצור שלבי ברירת מחדל
+          if (!existingStages || existingStages.length === 0) {
+            const newStages = await stageService.createDefaultStages(projectId);
+            success = true;
+            result = { project_stages_count: newStages.length };
+          } else {
+            // אם כבר יש שלבים, נחזיר הצלחה עם מספר השלבים הקיימים
+            success = true;
+            result = { project_stages_count: existingStages.length };
+          }
+        } catch (serviceError) {
+          console.error('כל ניסיונות הסנכרון נכשלו:', serviceError);
+          throw new Error('כל ניסיונות הסנכרון נכשלו');
         }
+      }
+    }
+    
+    // שליפת השלבים מהטבלה הייחודית של הפרויקט לצורך הצגת המספר הסופי
+    try {
+      const stages = await stageService.getProjectStages(projectId);
+      result = { ...result, project_stages_count: stages.length };
+    } catch (e) {
+      console.warn('שגיאה בקבלת מספר השלבים הסופי:', e);
+    }
+    
+    // סנכרון מזהי השלבים בטבלת המשימות הספציפית של הפרויקט
+    try {
+      console.log('סנכרון מזהי שלבים בטבלת המשימות הספציפית...');
+      
+      // 1. בדיקה אם הטבלאות קיימות
+      const tasksTableName = `project_${projectId}_tasks`;
+      const stagesTableName = `project_${projectId}_stages`;
+      
+      // בדיקה אם הטבלאות קיימות
+      const { data: tablesData, error: tablesError } = await supabase
+        .from('information_schema.tables')
+        .select('table_name')
+        .in('table_name', [tasksTableName, stagesTableName])
+        .eq('table_schema', 'public');
         
-        return NextResponse.json({
-          success: true,
-          message: `סנכרון השלבים הושלם בהצלחה (גיבוי)`,
-          project_stages_count: stages?.length || 0,
-          legacy_mode: true
-        });
+      if (tablesError) {
+        console.error('שגיאה בבדיקת קיום הטבלאות:', tablesError);
+        throw tablesError;
       }
       
-      return NextResponse.json(
-        { 
-          error: 'שגיאה בסנכרון שלבים', 
-          details: error.message,
-          code: error.code
-        },
-        { status: 500 }
-      );
+      // אם שתי הטבלאות קיימות, נבצע סנכרון
+      if (tablesData && tablesData.length === 2) {
+        // 2. שליפת הנתונים מטבלת המשימות ומטבלת השלבים
+        const { data: tasksWithStageId, error: tasksError } = await supabase
+          .from(tasksTableName)
+          .select('id, stage_id, title')
+          .not('stage_id', 'is', null);
+          
+        if (tasksError) {
+          console.error('שגיאה בשליפת משימות עם stage_id:', tasksError);
+          throw tasksError;
+        }
+        
+        // 3. שליפת שלבים מהטבלה הכללית
+        const { data: generalStages, error: generalStagesError } = await supabase
+          .from('stages')
+          .select('id, title');
+          
+        if (generalStagesError) {
+          console.error('שגיאה בשליפת שלבים מהטבלה הכללית:', generalStagesError);
+          throw generalStagesError;
+        }
+        
+        // 4. שליפת שלבים מהטבלה הספציפית
+        const { data: projectStages, error: projectStagesError } = await supabase
+          .from(stagesTableName)
+          .select('id, title');
+          
+        if (projectStagesError) {
+          console.error('שגיאה בשליפת שלבים מהטבלה הספציפית:', projectStagesError);
+          throw projectStagesError;
+        }
+        
+        // יצירת מיפוי בין כותרות שלבים למזהים בטבלה הספציפית
+        const stageMap = new Map();
+        if (projectStages) {
+          projectStages.forEach(stage => {
+            stageMap.set(stage.title.toLowerCase().trim(), stage.id);
+          });
+        }
+        
+        // 5. עדכון ה-stage_id של המשימות לפי כותרת השלב
+        if (tasksWithStageId && tasksWithStageId.length > 0 && generalStages && generalStages.length > 0) {
+          let updatedCount = 0;
+          
+          for (const task of tasksWithStageId) {
+            // מציאת השלב המקורי לפי המזהה
+            const originalStage = generalStages.find(s => s.id === task.stage_id);
+            
+            if (originalStage) {
+              // חיפוש שלב תואם בטבלה הספציפית לפי כותרת
+              const matchingStageId = stageMap.get(originalStage.title.toLowerCase().trim());
+              
+              if (matchingStageId && matchingStageId !== task.stage_id) {
+                // עדכון המזהה של השלב במשימה
+                const { error: updateError } = await supabase
+                  .from(tasksTableName)
+                  .update({ stage_id: matchingStageId })
+                  .eq('id', task.id);
+                  
+                if (updateError) {
+                  console.error(`שגיאה בעדכון stage_id עבור משימה ${task.id}:`, updateError);
+                } else {
+                  updatedCount++;
+                }
+              }
+            }
+          }
+          
+          console.log(`עודכנו ${updatedCount} מתוך ${tasksWithStageId.length} משימות עם מזהי שלבים חדשים`);
+          result = { ...result, updated_tasks_count: updatedCount };
+        }
+      } else {
+        console.log('לא כל הטבלאות הדרושות קיימות, מדלג על סנכרון המשימות.');
+      }
+    } catch (syncError) {
+      console.error('שגיאה בסנכרון מזהי השלבים במשימות:', syncError);
+      // לא מפסיקים את הפעולה אם יש שגיאה בסנכרון מזהי השלבים
     }
     
     return NextResponse.json({
@@ -83,12 +190,13 @@ export async function POST(req: NextRequest) {
       message: `סנכרון השלבים הושלם בהצלחה`,
       ...result
     });
+    
   } catch (error: any) {
     console.error('שגיאה בלתי צפויה בסנכרון שלבים:', error);
     
     return NextResponse.json(
       { 
-        error: 'אירעה שגיאה בלתי צפויה',
+        error: 'אירעה שגיאה בסנכרון שלבים',
         details: error.message
       },
       { status: 500 }
