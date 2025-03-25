@@ -18,8 +18,33 @@ import {
   Input,
   Select,
   Checkbox,
+  Card,
+  CardBody,
+  Tag,
+  TagLabel,
+  TagLeftIcon,
+  Tooltip,
+  Divider,
+  useColorModeValue,
 } from '@chakra-ui/react';
-import { FiPlus, FiFilter, FiEdit, FiTrash2, FiCalendar, FiMoreVertical } from 'react-icons/fi';
+import { 
+  FiPlus, 
+  FiFilter, 
+  FiEdit, 
+  FiTrash2, 
+  FiCalendar, 
+  FiMoreVertical, 
+  FiClock, 
+  FiFlag, 
+  FiCheck, 
+  FiCheckCircle, 
+  FiAlertCircle, 
+  FiClock as FiClockCircle,
+  FiCreditCard,
+  FiStar,
+  FiActivity,
+  FiList
+} from 'react-icons/fi';
 import { Task } from '@/types/supabase';
 import taskService from '@/lib/services/taskService';
 import TaskEditModal from '@/components/tasks/TaskEditModal';
@@ -45,6 +70,9 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   
   const toast = useToast();
+  const boxBgColor = useColorModeValue('white', 'gray.800');
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const hoverBgColor = useColorModeValue('gray.50', 'gray.700');
   
   // טעינת המשימות
   useEffect(() => {
@@ -78,35 +106,46 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
     setIsTaskModalOpen(true);
   };
   
-  // פונקציה להתייחסות למשימה שנוצרה
-  const handleTaskCreated = (task: Task) => {
-    // הוספת המשימה החדשה לרשימה המקומית
-    setTasks([task, ...tasks]);
+  // פונקציה לטיפול ביצירת משימה חדשה
+  const handleTaskCreated = (newTask: Task) => {
+    setTasks([...tasks, newTask]);
     
-    // שליחת עדכון להורה
     if (onTaskCreated) {
-      onTaskCreated(task);
+      onTaskCreated(newTask);
     }
     
     toast({
-      title: 'המשימה נוצרה בהצלחה',
+      title: 'משימה נוצרה בהצלחה',
       status: 'success',
       duration: 3000,
       isClosable: true,
     });
   };
   
-  // פונקציה לפתיחת מודל עריכת משימה
-  const handleEditTask = (task: Task) => {
-    setSelectedTask(task);
-    setIsTaskModalOpen(true);
+  // פונקציה לטיפול בעדכון משימה
+  const handleTaskUpdated = (updatedTask: Task) => {
+    setTasks(tasks.map(task => (task.id === updatedTask.id ? updatedTask : task)));
+    setSelectedTask(null);
+    setIsTaskModalOpen(false);
+    
+    if (onTaskUpdated) {
+      onTaskUpdated(updatedTask);
+    }
+    
+    toast({
+      title: 'משימה עודכנה בהצלחה',
+      status: 'success',
+      duration: 3000,
+      isClosable: true,
+    });
   };
   
-  // פונקציה למחיקת משימה
+  // פונקציה לטיפול במחיקת משימה
   const handleDeleteTask = async (taskId: string) => {
     if (window.confirm('האם אתה בטוח שברצונך למחוק משימה זו?')) {
       try {
         await taskService.deleteTask(taskId);
+        
         setTasks(tasks.filter(task => task.id !== taskId));
         
         if (onTaskDeleted) {
@@ -114,7 +153,7 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
         }
         
         toast({
-          title: 'המשימה נמחקה בהצלחה',
+          title: 'משימה נמחקה בהצלחה',
           status: 'success',
           duration: 3000,
           isClosable: true,
@@ -131,6 +170,12 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
         });
       }
     }
+  };
+  
+  // פונקציה לפתיחת מודל עריכת משימה
+  const handleEditTask = (task: Task) => {
+    setSelectedTask(task);
+    setIsTaskModalOpen(true);
   };
   
   // פונקציה לסינון המשימות
@@ -157,7 +202,7 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
       case 'todo':
       case 'לביצוע':
         return 'gray';
-      case 'in progress':
+      case 'in_progress':
       case 'בתהליך':
         return 'blue';
       case 'review':
@@ -168,6 +213,42 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
         return 'green';
       default:
         return 'gray';
+    }
+  };
+  
+  // פונקציה לקבלת אייקון לפי סטטוס
+  const getStatusIcon = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'todo':
+      case 'לביצוע':
+        return FiClock;
+      case 'in_progress':
+      case 'בתהליך':
+        return FiActivity;
+      case 'review':
+      case 'לבדיקה':
+        return FiStar;
+      case 'done':
+      case 'הושלם':
+        return FiCheckCircle;
+      default:
+        return FiList;
+    }
+  };
+  
+  // פונקציה לקבלת טקסט סטטוס בעברית
+  const getStatusText = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'todo':
+        return 'לביצוע';
+      case 'in_progress':
+        return 'בתהליך';
+      case 'review':
+        return 'בבדיקה';
+      case 'done':
+        return 'הושלם';
+      default:
+        return status;
     }
   };
   
@@ -185,6 +266,37 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
         return 'green';
       default:
         return 'gray';
+    }
+  };
+  
+  // פונקציה לקבלת אייקון לפי עדיפות 
+  const getPriorityIcon = (priority: string) => {
+    switch (priority.toLowerCase()) {
+      case 'high':
+      case 'גבוהה':
+        return FiAlertCircle;
+      case 'medium':
+      case 'בינונית':
+        return FiFlag;
+      case 'low':
+      case 'נמוכה':
+        return FiCheck;
+      default:
+        return FiFlag;
+    }
+  };
+  
+  // פונקציה לקבלת טקסט עדיפות בעברית
+  const getPriorityText = (priority: string) => {
+    switch (priority.toLowerCase()) {
+      case 'high':
+        return 'גבוהה';
+      case 'medium':
+        return 'בינונית';
+      case 'low':
+        return 'נמוכה';
+      default:
+        return priority;
     }
   };
   
@@ -260,7 +372,7 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
   if (loading) {
     return (
       <Flex justify="center" align="center" p={8}>
-        <Spinner size="xl" />
+        <Spinner size="xl" thickness="4px" color="blue.500" />
       </Flex>
     );
   }
@@ -284,6 +396,8 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
             leftIcon={<FiPlus />}
             colorScheme="blue"
             onClick={handleCreateTask}
+            size={{ base: 'sm', md: 'md' }}
+            boxShadow="sm"
           >
             משימה חדשה
           </Button>
@@ -294,6 +408,7 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
               colorScheme="red"
               variant="outline"
               onClick={handleDeleteSelected}
+              size={{ base: 'sm', md: 'md' }}
             >
               מחק נבחרים ({selectedTasks.length})
             </Button>
@@ -302,184 +417,210 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
       </Flex>
       
       {/* הוספת משימה מהירה */}
-      <QuickAddTask projectId={projectId} onTaskCreated={handleTaskCreated} />
+      <Card variant="outline" mb={4} boxShadow="sm">
+        <CardBody>
+          <QuickAddTask projectId={projectId} onTaskCreated={handleTaskCreated} />
+        </CardBody>
+      </Card>
       
       {/* סינון וחיפוש */}
-      <Flex mb={4} gap={2} wrap="wrap">
-        <Input
-          placeholder="חיפוש משימות..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          width={{ base: "100%", md: "300px" }}
-        />
-        
-        <Select
-          placeholder="סנן לפי סטטוס"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          width={{ base: "100%", md: "200px" }}
-        >
-          <option value="todo">לביצוע</option>
-          <option value="in progress">בתהליך</option>
-          <option value="review">לבדיקה</option>
-          <option value="done">הושלם</option>
-        </Select>
-        
-        <Select
-          placeholder="סנן לפי עדיפות"
-          value={priorityFilter}
-          onChange={(e) => setPriorityFilter(e.target.value)}
-          width={{ base: "100%", md: "200px" }}
-        >
-          <option value="low">נמוכה</option>
-          <option value="medium">בינונית</option>
-          <option value="high">גבוהה</option>
-        </Select>
-        
-        <Select
-          placeholder="סנן לפי קטגוריה"
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          width={{ base: "100%", md: "200px" }}
-        >
-          <option value="">הכל</option>
-          <option value="פיתוח">פיתוח</option>
-          <option value="עיצוב">עיצוב</option>
-          <option value="תוכן">תוכן</option>
-          <option value="שיווק">שיווק</option>
-          <option value="תשתיות">תשתיות</option>
-          <option value="אחר">אחר</option>
-        </Select>
-      </Flex>
+      <Card variant="outline" mb={4} boxShadow="sm">
+        <CardBody>
+          <HStack mb={2} align="center">
+            <FiFilter />
+            <Text fontWeight="bold">סינון וחיפוש</Text>
+          </HStack>
+          <Divider mb={3} />
+          <Flex gap={2} wrap="wrap">
+            <Input
+              placeholder="חיפוש משימות..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              width={{ base: "100%", md: "300px" }}
+              mb={{ base: 2, md: 0 }}
+            />
+            
+            <Select
+              placeholder="סנן לפי סטטוס"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              width={{ base: "100%", md: "200px" }}
+              mb={{ base: 2, md: 0 }}
+            >
+              <option value="todo">לביצוע</option>
+              <option value="in_progress">בתהליך</option>
+              <option value="review">בבדיקה</option>
+              <option value="done">הושלם</option>
+            </Select>
+            
+            <Select
+              placeholder="סנן לפי עדיפות"
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              width={{ base: "100%", md: "200px" }}
+              mb={{ base: 2, md: 0 }}
+            >
+              <option value="low">נמוכה</option>
+              <option value="medium">בינונית</option>
+              <option value="high">גבוהה</option>
+            </Select>
+            
+            <Select
+              placeholder="סנן לפי קטגוריה"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              width={{ base: "100%", md: "200px" }}
+            >
+              <option value="">הכל</option>
+              <option value="פיתוח">פיתוח</option>
+              <option value="עיצוב">עיצוב</option>
+              <option value="תוכן">תוכן</option>
+              <option value="שיווק">שיווק</option>
+              <option value="תשתיות">תשתיות</option>
+              <option value="אחר">אחר</option>
+            </Select>
+          </Flex>
+        </CardBody>
+      </Card>
       
       {/* רשימת משימות */}
       {filteredTasks.length === 0 ? (
-        <Box textAlign="center" p={8} borderWidth="1px" borderRadius="md">
-          <Text mb={4}>אין משימות להצגה</Text>
-          <Button
-            leftIcon={<FiPlus />}
-            colorScheme="blue"
-            onClick={handleCreateTask}
-          >
-            צור משימה חדשה
-          </Button>
-        </Box>
+        <Card variant="outline" p={8} textAlign="center" boxShadow="md">
+          <CardBody>
+            <Text mb={4} fontSize="lg">אין משימות להצגה</Text>
+            <Button
+              leftIcon={<FiPlus />}
+              colorScheme="blue"
+              onClick={handleCreateTask}
+              size="md"
+            >
+              צור משימה חדשה
+            </Button>
+          </CardBody>
+        </Card>
       ) : (
-        <Box>
-          {/* כותרת הטבלה */}
-          <Flex
-            bg="gray.100"
-            p={3}
-            borderTopRadius="md"
-            fontWeight="bold"
-            display={{ base: "none", md: "flex" }}
-          >
-            <Checkbox
-              isChecked={selectedTasks.length === filteredTasks.length && filteredTasks.length > 0}
-              onChange={(e) => handleSelectAll(e.target.checked)}
-              mr={2}
-            />
-            <Box flex="2">כותרת</Box>
-            <Box flex="1">סטטוס</Box>
-            <Box flex="1">עדיפות</Box>
-            <Box flex="1">תאריך יעד</Box>
-            <Box flex="1">פעולות</Box>
-          </Flex>
-          
-          {/* רשימת המשימות */}
-          <VStack spacing={2} align="stretch">
-            {filteredTasks.map(task => (
-              <Flex
-                key={task.id}
-                p={3}
-                borderWidth="1px"
-                borderRadius="md"
-                align="center"
-                _hover={{ bg: "gray.50" }}
-              >
-                <Checkbox
-                  isChecked={selectedTasks.includes(task.id)}
-                  onChange={(e) => handleTaskSelection(task.id, e.target.checked)}
-                  mr={2}
-                />
-                
-                <Box flex={{ base: "1", md: "2" }}>
-                  <Text fontWeight="medium">
-                    {task.hierarchical_number && `${task.hierarchical_number}. `}
-                    {task.title}
-                  </Text>
-                  {task.description && (
-                    <Text fontSize="sm" color="gray.600" noOfLines={1}>
-                      {task.description}
+        <Card variant="outline" boxShadow="sm">
+          <CardBody p={0}>
+            {/* כותרת הטבלה */}
+            <Flex
+              bg="gray.100"
+              p={3}
+              borderTopRadius="md"
+              fontWeight="bold"
+              display={{ base: "none", md: "flex" }}
+            >
+              <Checkbox
+                isChecked={selectedTasks.length === filteredTasks.length && filteredTasks.length > 0}
+                onChange={(e) => handleSelectAll(e.target.checked)}
+                mr={2}
+              />
+              <Box flex="2">כותרת</Box>
+              <Box flex="1">סטטוס</Box>
+              <Box flex="1">עדיפות</Box>
+              <Box flex="1">תאריך יעד</Box>
+              <Box flex="1">פעולות</Box>
+            </Flex>
+            
+            {/* רשימת המשימות */}
+            <VStack spacing={0} align="stretch" divider={<Divider />}>
+              {filteredTasks.map(task => (
+                <Flex
+                  key={task.id}
+                  p={4}
+                  align="center"
+                  _hover={{ bg: hoverBgColor }}
+                  transition="background-color 0.2s"
+                  borderBottom="1px solid"
+                  borderBottomColor={borderColor}
+                >
+                  <Checkbox
+                    isChecked={selectedTasks.includes(task.id)}
+                    onChange={(e) => handleTaskSelection(task.id, e.target.checked)}
+                    mr={2}
+                  />
+                  
+                  <Box flex={{ base: "1", md: "2" }}>
+                    <Text fontWeight="semibold" fontSize="md">
+                      {task.hierarchical_number && (
+                        <Tag size="sm" mr={2} bgColor="blue.50" color="blue.800" fontSize="xs">
+                          {task.hierarchical_number}
+                        </Tag>
+                      )}
+                      {task.title}
                     </Text>
-                  )}
-                </Box>
-                
-                <Box flex="1" display={{ base: "none", md: "block" }}>
-                  <Badge colorScheme={getStatusColor(task.status)}>
-                    {task.status}
-                  </Badge>
-                </Box>
-                
-                <Box flex="1" display={{ base: "none", md: "block" }}>
-                  <Badge colorScheme={getPriorityColor(task.priority)}>
-                    {task.priority}
-                  </Badge>
-                </Box>
-                
-                <Box flex="1" display={{ base: "none", md: "block" }}>
-                  {task.due_date ? (
-                    <Text fontSize="sm">
-                      <FiCalendar style={{ display: "inline", marginLeft: "5px" }} />
-                      {formatDate(task.due_date)}
-                    </Text>
-                  ) : (
-                    <Text fontSize="sm" color="gray.500">לא נקבע</Text>
-                  )}
-                </Box>
-                
-                <Box flex="1">
-                  <HStack justify="flex-end">
-                    <IconButton
-                      icon={<FiEdit />}
-                      aria-label="ערוך משימה"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleEditTask(task)}
-                    />
-                    <IconButton
-                      icon={<FiTrash2 />}
-                      aria-label="מחק משימה"
-                      size="sm"
-                      variant="ghost"
-                      colorScheme="red"
-                      onClick={() => handleDeleteTask(task.id)}
-                    />
-                  </HStack>
-                </Box>
-              </Flex>
-            ))}
-          </VStack>
-        </Box>
+                    {task.description && (
+                      <Text fontSize="sm" color="gray.600" noOfLines={1} mt={1}>
+                        {task.description}
+                      </Text>
+                    )}
+                  </Box>
+                  
+                  <Box flex="1" display={{ base: "none", md: "block" }}>
+                    <Tag colorScheme={getStatusColor(task.status)} size="md" borderRadius="full">
+                      <TagLeftIcon as={getStatusIcon(task.status)} />
+                      <TagLabel>{getStatusText(task.status)}</TagLabel>
+                    </Tag>
+                  </Box>
+                  
+                  <Box flex="1" display={{ base: "none", md: "block" }}>
+                    <Tag colorScheme={getPriorityColor(task.priority)} size="md" borderRadius="full">
+                      <TagLeftIcon as={getPriorityIcon(task.priority)} />
+                      <TagLabel>{getPriorityText(task.priority)}</TagLabel>
+                    </Tag>
+                  </Box>
+                  
+                  <Box flex="1" display={{ base: "none", md: "block" }}>
+                    {task.due_date ? (
+                      <Tag size="md" colorScheme="purple" borderRadius="full">
+                        <TagLeftIcon as={FiCalendar} />
+                        <TagLabel>{formatDate(task.due_date)}</TagLabel>
+                      </Tag>
+                    ) : (
+                      <Text fontSize="sm" color="gray.500">לא נקבע</Text>
+                    )}
+                  </Box>
+                  
+                  <Box flex="1" textAlign="end">
+                    <Tooltip label="ערוך משימה">
+                      <IconButton
+                        icon={<FiEdit />}
+                        aria-label="ערוך משימה"
+                        colorScheme="blue"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditTask(task)}
+                        mr={1}
+                      />
+                    </Tooltip>
+                    <Tooltip label="מחק משימה">
+                      <IconButton
+                        icon={<FiTrash2 />}
+                        aria-label="מחק משימה"
+                        colorScheme="red"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteTask(task.id)}
+                      />
+                    </Tooltip>
+                  </Box>
+                </Flex>
+              ))}
+            </VStack>
+          </CardBody>
+        </Card>
       )}
       
-      {/* מודל יצירה/עריכת משימה */}
-      <TaskEditModal
-        isOpen={isTaskModalOpen}
-        onClose={() => setIsTaskModalOpen(false)}
-        task={selectedTask}
-        projectId={projectId}
-        onTaskCreated={handleTaskCreated}
-        onTaskUpdated={(updatedTask) => {
-          // עדכון המשימה ברשימה המקומית
-          setTasks(tasks.map(task => task.id === updatedTask.id ? updatedTask : task));
-          
-          // שליחת עדכון להורה
-          if (onTaskUpdated) {
-            onTaskUpdated(updatedTask);
-          }
-        }}
-      />
+      {/* מודל עריכת משימה */}
+      {isTaskModalOpen && (
+        <TaskEditModal
+          isOpen={isTaskModalOpen}
+          onClose={() => setIsTaskModalOpen(false)}
+          task={selectedTask}
+          projectId={projectId}
+          onTaskCreated={handleTaskCreated}
+          onTaskUpdated={handleTaskUpdated}
+        />
+      )}
     </Box>
   );
 };

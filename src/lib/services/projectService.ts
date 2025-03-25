@@ -50,11 +50,6 @@ export const projectService = {
   
   // יצירת פרויקט חדש
   async createProject(project: NewProject): Promise<Project> {
-    // וידוא שיש מזהה UUID
-    if (!project.id) {
-      project.id = crypto.randomUUID();
-    }
-    
     const { data, error } = await supabase
       .from('projects')
       .insert(project)
@@ -66,19 +61,10 @@ export const projectService = {
       throw new Error(error.message);
     }
     
-    // יצירת טבלאות ספציפיות לפרויקט ואתחול נתונים ראשוניים
-    try {
-      await supabase.rpc('init_project_tables_and_data', {
-        project_id: data.id,
-        create_default_stages: true,
-        create_default_tasks: true
-      });
-      console.log(`Project tables for project ${data.id} initialized successfully with default data`);
-    } catch (tableError) {
-      console.error(`Error initializing project tables for project ${data.id}:`, tableError);
-      // לא נזרוק שגיאה כאן כדי לא לעצור את יצירת הפרויקט
-      console.log('Project created successfully, but without dedicated tables. Some features may be limited.');
-    }
+    // הסרת הקריאה לאתחול הפרויקט מכאן
+    // הפונקציה init_project_tables_and_data נקראת מדף היצירה של הפרויקט
+    // עם מזהי המשימות שנבחרו
+    console.log(`Project ${data.id} created successfully. Tables will be initialized from the UI.`);
     
     return data;
   },

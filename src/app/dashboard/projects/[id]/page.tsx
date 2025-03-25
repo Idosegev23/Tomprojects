@@ -22,6 +22,7 @@ import {
   GridItem,
   Card,
   CardBody,
+  CardHeader,
   IconButton,
   useToast,
   HStack,
@@ -38,6 +39,14 @@ import {
   AlertDialogHeader,
   AlertDialogBody,
   AlertDialogFooter,
+  Tooltip,
+  SimpleGrid,
+  Icon,
+  Stat,
+  StatLabel,
+  StatNumber,
+  StatHelpText,
+  useColorModeValue,
 } from '@chakra-ui/react';
 import { 
   FiArrowLeft, 
@@ -55,6 +64,15 @@ import {
   FiCalendar as CalendarIcon,
   FiPlus,
   FiRefreshCw,
+  FiClock,
+  FiTarget,
+  FiFlag,
+  FiAlertCircle,
+  FiBarChart2,
+  FiCreditCard,
+  FiTrello,
+  FiActivity,
+  FiStar,
 } from 'react-icons/fi';
 import projectService from '@/lib/services/projectService';
 import taskService from '@/lib/services/taskService';
@@ -204,19 +222,6 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       case 'הושלם': return 'purple';
       case 'cancelled':
       case 'בוטל': return 'red';
-      default: return 'gray';
-    }
-  };
-  
-  // קבלת צבע לפי עדיפות
-  const getPriorityColor = (priority: string) => {
-    switch (priority.toLowerCase()) {
-      case 'high':
-      case 'גבוהה': return 'red';
-      case 'medium':
-      case 'בינונית': return 'orange';
-      case 'low': 
-      case 'נמוכה': return 'green';
       default: return 'gray';
     }
   };
@@ -461,255 +466,425 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   
   return (
     <Box>
-      {/* כותרת הפרויקט ומידע בסיסי */}
-      {project && (
-        <Box mb={6}>
-          <Flex 
-            direction={{ base: 'column', md: 'row' }} 
-            justify="space-between" 
-            align={{ base: 'flex-start', md: 'center' }} 
-            mb={4} 
-            gap={3}
-          >
-            <HStack>
-              <IconButton
-                aria-label="חזור לרשימת הפרויקטים"
-                icon={<FiArrowLeft />}
-                onClick={() => router.push('/dashboard/projects')}
-                variant="ghost"
-              />
-              <Heading size={{ base: 'md', md: 'lg' }}>{project.name}</Heading>
-              <Badge colorScheme={getStatusColor(project.status)} fontSize="md" px={2} py={1}>
-                {project.status}
-              </Badge>
-            </HStack>
-            
-            {isMobile ? (
-              <Menu closeOnSelect={true}>
-                <MenuButton 
-                  as={IconButton} 
-                  icon={<FiMoreVertical />} 
-                  variant="outline"
-                  aria-label="פעולות נוספות"
-                />
-                <MenuList>
-                  <MenuItem 
-                    icon={<FiRefreshCw />} 
-                    onClick={handleSyncProjectData} 
-                    isDisabled={loading}
-                  >
-                    סנכרון נתוני פרויקט
-                  </MenuItem>
-                  <MenuItem 
-                    icon={<FiEdit />} 
-                    onClick={() => router.push(`/dashboard/projects/${id}/edit`)}
-                  >
-                    ערוך פרויקט
-                  </MenuItem>
-                  <MenuItem 
-                    icon={<FiTrash2 />} 
-                    onClick={onOpen}
-                    color="red.500"
-                  >
-                    מחק פרויקט
-                  </MenuItem>
-                </MenuList>
-              </Menu>
-            ) : (
-              <HStack>
-                <Button
-                  leftIcon={<FiRefreshCw />}
-                  size="sm"
-                  colorScheme="blue"
-                  onClick={handleSyncProjectData}
-                  isLoading={loading}
-                >
-                  סנכרון נתוני פרויקט
-                </Button>
-                <ActionButtons projectId={id} />
-              </HStack>
-            )}
-          </Flex>
-          
-          <Text mb={2}>{project.name}</Text>
-          
-          <Grid 
-            templateColumns={{ 
-              base: 'repeat(1, 1fr)', 
-              sm: 'repeat(2, 1fr)', 
-              md: 'repeat(4, 1fr)' 
-            }} 
-            gap={4} 
-            mb={4}
-          >
-            <GridItem>
-              <Card>
-                <CardBody>
-                  <Text fontWeight="bold" mb={1}>תאריך התחלה</Text>
-                  <Text>{formatDate(project.planned_start_date)}</Text>
-                </CardBody>
-              </Card>
-            </GridItem>
-            <GridItem>
-              <Card>
-                <CardBody>
-                  <Text fontWeight="bold" mb={1}>תאריך סיום</Text>
-                  <Text>{formatDate(project.planned_end_date)}</Text>
-                </CardBody>
-              </Card>
-            </GridItem>
-            <GridItem>
-              <Card>
-                <CardBody>
-                  <Text fontWeight="bold" mb={1}>התקדמות</Text>
-                  <Progress value={progress} colorScheme="green" size="sm" mb={1} />
-                  <Text textAlign="center">{progress}%</Text>
-                </CardBody>
-              </Card>
-            </GridItem>
-            <GridItem>
-              <Card>
-                <CardBody>
-                  <Text fontWeight="bold" mb={1}>יזם</Text>
-                  <Text>{project.entrepreneur || 'לא הוגדר'}</Text>
-                </CardBody>
-              </Card>
-            </GridItem>
-            <GridItem>
-              <Card>
-                <CardBody>
-                  <Text fontWeight="bold" mb={1}>משימות</Text>
-                  <Text>{tasks.length}</Text>
-                </CardBody>
-              </Card>
-            </GridItem>
-          </Grid>
+      {loading ? (
+        <Flex justify="center" align="center" minH="50vh" direction="column" gap={3}>
+          <Spinner size="xl" thickness="4px" color="blue.500" speed="0.65s" />
+          <Text>טוען נתוני פרויקט...</Text>
+        </Flex>
+      ) : error ? (
+        <Box p={5} borderWidth="1px" borderRadius="lg" bg="red.50">
+          <Heading size="md" color="red.600" mb={2}>
+            <Icon as={FiAlertCircle} mr={2} />
+            שגיאה בטעינת נתוני הפרויקט
+          </Heading>
+          <Text>{error}</Text>
+          <Button mt={4} onClick={() => router.push('/dashboard/projects')}>
+            חזרה לרשימת הפרויקטים
+          </Button>
         </Box>
-      )}
-      
-      {/* טאבים לתצוגות שונות */}
-      <Tabs 
-        index={tabIndex} 
-        onChange={setTabIndex} 
-        variant="enclosed" 
-        mb={4}
-        isLazy
-      >
-        <TabList overflowX="auto" overflowY="hidden" pb={2}>
-          <Tab><HStack><FiList /><Text>רשימה</Text></HStack></Tab>
-          <Tab><HStack><FiColumns /><Text>קנבן</Text></HStack></Tab>
-          <Tab><HStack><FiCalendar /><Text>גאנט</Text></HStack></Tab>
-          <Tab><HStack><FiUsers /><Text>עץ</Text></HStack></Tab>
-        </TabList>
-        
-        <TabPanels>
-          {/* תצוגת רשימה */}
-          <TabPanel>
-            <Box>
-              <Flex 
-                direction={{ base: 'column', md: 'row' }} 
-                justify="space-between" 
-                align={{ base: 'flex-start', md: 'center' }} 
-                mb={4}
-                gap={2}
-              >
-                <Heading size={{ base: 'sm', md: 'md' }} mb={{ base: 2, md: 0 }}>רשימת משימות</Heading>
-                <Button
-                  leftIcon={<FiPlus />}
-                  colorScheme="blue"
-                  size={{ base: 'sm', md: 'md' }}
-                  onClick={() => {
-                    setSelectedTask(null);
-                    setIsTaskModalOpen(true);
-                  }}
-                >
-                  משימה חדשה
-                </Button>
-              </Flex>
-              {tasks.length > 0 ? (
-                <TaskList 
-                  projectId={id}
-                  onTaskCreated={handleTaskCreated}
-                  onTaskUpdated={handleTaskUpdated}
-                  onTaskDeleted={handleDeleteTask}
-                />
+      ) : project && (
+        <>
+          {/* כותרת הפרויקט ומידע בסיסי */}
+          <Box mb={6}>
+            <Flex 
+              direction={{ base: 'column', md: 'row' }} 
+              justify="space-between" 
+              align={{ base: 'flex-start', md: 'center' }} 
+              mb={4} 
+              gap={3}
+            >
+              <HStack spacing={2}>
+                <Tooltip label="חזרה לרשימת הפרויקטים">
+                  <IconButton
+                    aria-label="חזור לרשימת הפרויקטים"
+                    icon={<FiArrowLeft />}
+                    onClick={() => router.push('/dashboard/projects')}
+                    variant="ghost"
+                    size="md"
+                    colorScheme="blue"
+                  />
+                </Tooltip>
+                <Heading size={{ base: 'md', md: 'lg' }}>{project.name}</Heading>
+                <Tooltip label={`סטטוס: ${project.status}`}>
+                  <Badge 
+                    colorScheme={getStatusColor(project.status)} 
+                    fontSize="md" 
+                    px={2} 
+                    py={1}
+                    borderRadius="full"
+                  >
+                    {project.status}
+                  </Badge>
+                </Tooltip>
+              </HStack>
+              
+              {isMobile ? (
+                <Menu closeOnSelect={true}>
+                  <MenuButton 
+                    as={IconButton} 
+                    icon={<FiMoreVertical />} 
+                    variant="outline"
+                    aria-label="פעולות נוספות"
+                  />
+                  <MenuList>
+                    <MenuItem 
+                      icon={<FiRefreshCw />} 
+                      onClick={handleSyncProjectData} 
+                      isDisabled={loading}
+                    >
+                      סנכרון נתוני פרויקט
+                    </MenuItem>
+                    <MenuItem 
+                      icon={<FiEdit />} 
+                      onClick={() => router.push(`/dashboard/projects/${id}/edit`)}
+                    >
+                      ערוך פרויקט
+                    </MenuItem>
+                    <MenuItem 
+                      icon={<FiTrash2 />} 
+                      onClick={onOpen}
+                      color="red.500"
+                    >
+                      מחק פרויקט
+                    </MenuItem>
+                  </MenuList>
+                </Menu>
               ) : (
-                <Text>אין משימות בפרויקט זה</Text>
+                <HStack>
+                  <Tooltip label="סנכרון נתוני הפרויקט מהתבניות">
+                    <Button
+                      leftIcon={<FiRefreshCw />}
+                      size="sm"
+                      colorScheme="blue"
+                      onClick={handleSyncProjectData}
+                      isLoading={loading}
+                    >
+                      סנכרון נתוני פרויקט
+                    </Button>
+                  </Tooltip>
+                  <ActionButtons projectId={id} />
+                </HStack>
               )}
-            </Box>
-          </TabPanel>
-          
-          {/* תצוגת קנבן */}
-          <TabPanel>
-            <Box overflowX="auto">
-              <TaskKanban 
-                tasks={tasks} 
-                stages={stages}
-                onEditTask={handleEditTask}
-                onDeleteTask={handleDeleteTask}
-                onStatusChange={handleStatusChange}
-                onStageChange={handleStageChange}
-              />
-            </Box>
-          </TabPanel>
-          
-          {/* תצוגת גאנט */}
-          <TabPanel>
-            <Box overflowX="auto">
-              <TaskGantt 
-                tasks={tasks} 
-                onTaskDrop={handleTaskDrop}
-              />
-            </Box>
-          </TabPanel>
-          
-          {/* תצוגת עץ */}
-          <TabPanel>
-            {tasks.length > 0 ? (
-              <Box overflowX="auto">
-                <TaskTree 
-                  tasks={tasks} 
-                  projectId={id}
-                  onTaskEdited={handleEditTask}
-                  onTaskDeleted={handleDeleteTask}
-                />
-              </Box>
-            ) : (
-              <Text>אין משימות בפרויקט זה</Text>
+            </Flex>
+            
+            {project.description && (
+              <Card mb={4} variant="outline" bg={useColorModeValue('gray.50', 'gray.700')}>
+                <CardBody>
+                  <HStack mb={2}>
+                    <Icon as={InfoIcon} color="blue.500" />
+                    <Text fontWeight="bold">תיאור הפרויקט</Text>
+                  </HStack>
+                  <Text>{project.description}</Text>
+                </CardBody>
+              </Card>
             )}
-          </TabPanel>
-        </TabPanels>
-      </Tabs>
-      
-      {/* מודל עריכת משימה */}
-      {isTaskModalOpen && (
-        <TaskEditModal
-          isOpen={isTaskModalOpen}
-          onClose={() => setIsTaskModalOpen(false)}
-          task={selectedTask}
-          projectId={id}
-          onTaskCreated={handleTaskCreated}
-          onTaskUpdated={handleTaskUpdated}
-        />
-      )}
-      
-      {/* מודל שיוך משימות */}
-      {isAssignTasksModalOpen && (
-        <AssignTasksModal
-          isOpen={isAssignTasksModalOpen}
-          onClose={() => setIsAssignTasksModalOpen(false)}
-          projectId={id}
-          onTasksAssigned={(tasks) => {
-            setTasks(prev => [...prev, ...tasks]);
-            toast({
-              title: 'משימות שויכו בהצלחה',
-              status: 'success',
-              duration: 3000,
-              isClosable: true,
-              position: 'top-right',
-            });
-          }}
-        />
+            
+            <SimpleGrid 
+              columns={{ base: 1, sm: 2, md: 4 }}
+              spacing={4} 
+              mb={4}
+            >
+              <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
+                <CardBody>
+                  <Stat>
+                    <StatLabel>
+                      <HStack>
+                        <Icon as={FiCalendar} color="blue.500" />
+                        <Text>תאריך התחלה</Text>
+                      </HStack>
+                    </StatLabel>
+                    <StatNumber fontSize="lg">{formatDate(project.planned_start_date)}</StatNumber>
+                  </Stat>
+                </CardBody>
+              </Card>
+              
+              <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
+                <CardBody>
+                  <Stat>
+                    <StatLabel>
+                      <HStack>
+                        <Icon as={FiTarget} color="purple.500" />
+                        <Text>תאריך סיום</Text>
+                      </HStack>
+                    </StatLabel>
+                    <StatNumber fontSize="lg">{formatDate(project.planned_end_date)}</StatNumber>
+                  </Stat>
+                </CardBody>
+              </Card>
+              
+              <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
+                <CardBody>
+                  <Stat>
+                    <StatLabel>
+                      <HStack>
+                        <Icon as={FiBarChart2} color="green.500" />
+                        <Text>התקדמות</Text>
+                      </HStack>
+                    </StatLabel>
+                    <StatNumber fontSize="lg">{progress}%</StatNumber>
+                    <Progress 
+                      value={progress} 
+                      colorScheme={progress < 30 ? 'red' : progress < 70 ? 'orange' : 'green'} 
+                      size="sm" 
+                      mt={2} 
+                      borderRadius="full"
+                    />
+                  </Stat>
+                </CardBody>
+              </Card>
+              
+              <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
+                <CardBody>
+                  <Stat>
+                    <StatLabel>
+                      <HStack>
+                        <Icon as={FiCreditCard} color="orange.500" />
+                        <Text>משימות</Text>
+                      </HStack>
+                    </StatLabel>
+                    <StatNumber fontSize="lg">{tasks.length}</StatNumber>
+                    <StatHelpText>{tasks.filter(t => t.status === 'done').length} הושלמו</StatHelpText>
+                  </Stat>
+                </CardBody>
+              </Card>
+
+              {project.entrepreneur && (
+                <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
+                  <CardBody>
+                    <Stat>
+                      <StatLabel>
+                        <HStack>
+                          <Icon as={FiUsers} color="teal.500" />
+                          <Text>יזם</Text>
+                        </HStack>
+                      </StatLabel>
+                      <StatNumber fontSize="lg">{project.entrepreneur}</StatNumber>
+                    </Stat>
+                  </CardBody>
+                </Card>
+              )}
+            </SimpleGrid>
+          </Box>
+          
+          {/* טאבים לתצוגות שונות */}
+          <Card variant="outline" shadow="sm" mb={4}>
+            <CardBody p={0}>
+              <Tabs 
+                index={tabIndex} 
+                onChange={setTabIndex} 
+                variant="enclosed" 
+                isLazy
+                colorScheme="blue"
+              >
+                <TabList overflowX="auto" overflowY="hidden">
+                  <Tooltip label="הצג את כל המשימות כרשימה">
+                    <Tab><HStack><FiList /><Text>רשימה</Text></HStack></Tab>
+                  </Tooltip>
+                  <Tooltip label="הצג משימות לפי שלבים בלוח קנבן">
+                    <Tab><HStack><FiColumns /><Text>קנבן</Text></HStack></Tab>
+                  </Tooltip>
+                  <Tooltip label="הצג לוח זמנים של המשימות">
+                    <Tab><HStack><FiCalendar /><Text>גאנט</Text></HStack></Tab>
+                  </Tooltip>
+                  <Tooltip label="הצג את מבנה המשימות בצורת עץ">
+                    <Tab><HStack><FiUsers /><Text>עץ</Text></HStack></Tab>
+                  </Tooltip>
+                </TabList>
+                
+                <TabPanels>
+                  {/* תצוגת רשימה */}
+                  <TabPanel>
+                    <Box>
+                      {tasks.length > 0 ? (
+                        <TaskList 
+                          projectId={id}
+                          onTaskCreated={handleTaskCreated}
+                          onTaskUpdated={handleTaskUpdated}
+                          onTaskDeleted={handleDeleteTask}
+                        />
+                      ) : (
+                        <Card p={8} textAlign="center" variant="outline">
+                          <CardBody>
+                            <Icon as={FiCreditCard} w={12} h={12} color="gray.400" mb={4} />
+                            <Heading size="md" mb={2}>אין משימות בפרויקט זה</Heading>
+                            <Text mb={6} color="gray.500">
+                              התחל ליצור משימות כדי לנהל את הפרויקט שלך
+                            </Text>
+                            <Button
+                              leftIcon={<FiPlus />}
+                              colorScheme="blue"
+                              onClick={() => {
+                                setSelectedTask(null);
+                                setIsTaskModalOpen(true);
+                              }}
+                            >
+                              צור משימה חדשה
+                            </Button>
+                          </CardBody>
+                        </Card>
+                      )}
+                    </Box>
+                  </TabPanel>
+                  
+                  {/* תצוגת קנבן */}
+                  <TabPanel>
+                    <Box>
+                      {stages.length > 0 ? (
+                        <TaskKanban
+                          projectId={id}
+                          stages={stages}
+                          tasks={tasks}
+                          onTaskUpdated={handleTaskUpdated}
+                          onTaskDeleted={handleTaskDeleted}
+                          onStageChange={handleStageChange}
+                          onStatusChange={handleStatusChange}
+                        />
+                      ) : (
+                        <Card p={8} textAlign="center" variant="outline">
+                          <CardBody>
+                            <Icon as={FiTrello} w={12} h={12} color="gray.400" mb={4} />
+                            <Heading size="md" mb={2}>אין שלבים מוגדרים בפרויקט</Heading>
+                            <Text mb={6} color="gray.500">
+                              בצע סנכרון של נתוני הפרויקט כדי לטעון את השלבים מהתבניות
+                            </Text>
+                            <Button
+                              leftIcon={<FiRefreshCw />}
+                              colorScheme="blue"
+                              onClick={handleSyncProjectData}
+                              isLoading={loading}
+                            >
+                              סנכרון נתוני פרויקט
+                            </Button>
+                          </CardBody>
+                        </Card>
+                      )}
+                    </Box>
+                  </TabPanel>
+                  
+                  {/* תצוגת גאנט */}
+                  <TabPanel>
+                    <Box>
+                      {tasks.length > 0 ? (
+                        <TaskGantt
+                          tasks={tasks}
+                          onTaskDrop={handleTaskDrop}
+                          onTaskUpdated={handleTaskUpdated}
+                        />
+                      ) : (
+                        <Card p={8} textAlign="center" variant="outline">
+                          <CardBody>
+                            <Icon as={FiActivity} w={12} h={12} color="gray.400" mb={4} />
+                            <Heading size="md" mb={2}>אין משימות להצגה בגאנט</Heading>
+                            <Text mb={6} color="gray.500">
+                              צור משימות עם תאריכי התחלה וסיום כדי להציג אותן בתצוגת גאנט
+                            </Text>
+                            <Button
+                              leftIcon={<FiPlus />}
+                              colorScheme="blue"
+                              onClick={() => {
+                                setSelectedTask(null);
+                                setIsTaskModalOpen(true);
+                              }}
+                            >
+                              צור משימה חדשה
+                            </Button>
+                          </CardBody>
+                        </Card>
+                      )}
+                    </Box>
+                  </TabPanel>
+                  
+                  {/* תצוגת עץ */}
+                  <TabPanel>
+                    <Box>
+                      {tasks.length > 0 ? (
+                        <TaskTree
+                          projectId={id}
+                          tasks={tasks}
+                          onTaskUpdated={handleTaskUpdated}
+                          onTaskDeleted={handleTaskDeleted}
+                        />
+                      ) : (
+                        <Card p={8} textAlign="center" variant="outline">
+                          <CardBody>
+                            <Icon as={FiStar} w={12} h={12} color="gray.400" mb={4} />
+                            <Heading size="md" mb={2}>אין משימות להצגה בעץ המשימות</Heading>
+                            <Text mb={6} color="gray.500">
+                              צור משימות עם קשרי הורה-ילד כדי להציג אותן בתצוגת עץ
+                            </Text>
+                            <Button
+                              leftIcon={<FiPlus />}
+                              colorScheme="blue"
+                              onClick={() => {
+                                setSelectedTask(null);
+                                setIsTaskModalOpen(true);
+                              }}
+                            >
+                              צור משימה חדשה
+                            </Button>
+                          </CardBody>
+                        </Card>
+                      )}
+                    </Box>
+                  </TabPanel>
+                </TabPanels>
+              </Tabs>
+            </CardBody>
+          </Card>
+
+          {/* מודל עריכת משימה */}
+          {isTaskModalOpen && (
+            <TaskEditModal
+              isOpen={isTaskModalOpen}
+              onClose={() => setIsTaskModalOpen(false)}
+              task={selectedTask}
+              projectId={id}
+              onTaskCreated={handleTaskCreated}
+              onTaskUpdated={handleTaskUpdated}
+            />
+          )}
+          
+          {/* מודל הקצאת משימות */}
+          {isAssignTasksModalOpen && (
+            <AssignTasksModal
+              isOpen={isAssignTasksModalOpen}
+              onClose={() => setIsAssignTasksModalOpen(false)}
+              projectId={id}
+              onTasksAssigned={handleTaskCreated}
+            />
+          )}
+          
+          {/* דיאלוג אישור מחיקת פרויקט */}
+          <AlertDialog
+            isOpen={isOpen}
+            leastDestructiveRef={cancelRef}
+            onClose={onClose}
+          >
+            <AlertDialogOverlay>
+              <AlertDialogContent>
+                <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                  מחיקת פרויקט
+                </AlertDialogHeader>
+                
+                <AlertDialogBody>
+                  האם אתה בטוח שברצונך למחוק את הפרויקט <b>{project.name}</b>?
+                  <Text mt={2} color="red.500">
+                    פעולה זו תמחק את כל המשימות והשלבים המשויכים לפרויקט, ולא ניתן לבטל אותה.
+                  </Text>
+                </AlertDialogBody>
+                
+                <AlertDialogFooter>
+                  <Button ref={cancelRef} onClick={onClose}>
+                    ביטול
+                  </Button>
+                  <Button colorScheme="red" onClick={handleDeleteProject} ml={3}>
+                    מחק פרויקט
+                  </Button>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialogOverlay>
+          </AlertDialog>
+        </>
       )}
     </Box>
   );
