@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -31,6 +31,13 @@ import {
   MenuList,
   MenuItem,
   useBreakpointValue,
+  useDisclosure,
+  AlertDialog,
+  AlertDialogOverlay,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogBody,
+  AlertDialogFooter,
 } from '@chakra-ui/react';
 import { 
   FiArrowLeft, 
@@ -85,6 +92,9 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   const { user } = useAuthContext();
   const isMobile = useBreakpointValue({ base: true, md: false });
   const isTablet = useBreakpointValue({ base: true, lg: false });
+  
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const cancelRef = useRef<HTMLButtonElement>(null);
   
   // טעינת נתוני הפרויקט
   useEffect(() => {
@@ -385,38 +395,64 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   };
   
   // סנכרון משימות הפרויקט
-  const handleSyncTasks = async () => {
+  const handleSyncProjectData = async () => {
+    if (loading) return;
+    
     try {
       setLoading(true);
       
-      // קריאה לפונקציה לסנכרון משימות הפרויקט
+      // 1. תחילה נסנכרן את השלבים
+      const stagesResponse = await fetch('/api/projects/sync-stages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ projectId: id }),
+      });
+      
+      if (!stagesResponse.ok) {
+        const stagesError = await stagesResponse.json();
+        throw new Error(stagesError.error || 'שגיאה בסנכרון שלבים');
+      }
+      
+      const stagesResult = await stagesResponse.json();
+      console.log('תוצאת סנכרון שלבים:', stagesResult);
+      
+      // 2. לאחר מכן נסנכרן את המשימות
       await projectService.syncProjectTasks(id);
       
-      // רענון רשימת המשימות
+      // רענון רשימת המשימות והשלבים
+      const updatedStages = await stageService.getProjectStages(id);
+      setStages(updatedStages);
+      
       const updatedTasks = await taskService.getTasksByProject(id);
       setTasks(updatedTasks);
       
       // עדכון התקדמות הפרויקט
-      const updatedProgress = await projectService.calculateProjectProgress(id);
-      setProgress(updatedProgress);
+      const updatedProject = await projectService.getProjectById(id);
+      if (updatedProject) {
+        setProject(updatedProject);
+      }
       
+      // הצגת הודעת הצלחה
       toast({
-        title: 'משימות הפרויקט סונכרנו בהצלחה',
+        title: 'נתוני הפרויקט סונכרנו בהצלחה',
+        description: `סונכרנו ${stagesResult.project_stages_count || 0} שלבים ו-${updatedTasks.length || 0} משימות`,
         status: 'success',
-        duration: 3000,
-        isClosable: true,
-        position: 'top-right',
-      });
-    } catch (error) {
-      console.error('Error syncing project tasks:', error);
-      
-      toast({
-        title: 'שגיאה בסנכרון משימות הפרויקט',
-        description: error instanceof Error ? error.message : 'אירעה שגיאה בסנכרון המשימות',
-        status: 'error',
         duration: 5000,
         isClosable: true,
-        position: 'top-right',
+        position: 'top',
+      });
+    } catch (error) {
+      console.error('שגיאה בסנכרון נתוני פרויקט:', error);
+      
+      toast({
+        title: 'שגיאה בסנכרון',
+        description: error instanceof Error ? error.message : 'אירעה שגיאה לא צפויה',
+        status: 'error', 
+        duration: 5000,
+        isClosable: true,
+        position: 'top',
       });
     } finally {
       setLoading(false);
@@ -459,10 +495,10 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                 <MenuList>
                   <MenuItem 
                     icon={<FiRefreshCw />} 
-                    onClick={handleSyncTasks} 
+                    onClick={handleSyncProjectData} 
                     isDisabled={loading}
                   >
-                    סנכרון משימות
+                    סנכרון נתוני פרויקט
                   </MenuItem>
                   <MenuItem 
                     icon={<FiEdit />} 
@@ -472,7 +508,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                   </MenuItem>
                   <MenuItem 
                     icon={<FiTrash2 />} 
-                    onClick={handleDeleteProject}
+                    onClick={onOpen}
                     color="red.500"
                   >
                     מחק פרויקט
@@ -485,27 +521,12 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                   leftIcon={<FiRefreshCw />}
                   size="sm"
                   colorScheme="blue"
-                  onClick={handleSyncTasks}
+                  onClick={handleSyncProjectData}
                   isLoading={loading}
                 >
-                  סנכרון משימות
+                  סנכרון נתוני פרויקט
                 </Button>
-                <Button
-                  leftIcon={<FiEdit />}
-                  size="sm"
-                  onClick={() => router.push(`/dashboard/projects/${id}/edit`)}
-                >
-                  ערוך פרויקט
-                </Button>
-                <Button
-                  leftIcon={<FiTrash2 />}
-                  size="sm"
-                  colorScheme="red"
-                  variant="outline"
-                  onClick={handleDeleteProject}
-                >
-                  מחק פרויקט
-                </Button>
+                <ActionButtons projectId={id} />
               </HStack>
             )}
           </Flex>
@@ -691,5 +712,140 @@ export default function ProjectPage({ params }: ProjectPageProps) {
         />
       )}
     </Box>
+  );
+}
+
+function ActionButtons({ projectId }: { projectId: string }) {
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isSyncingStages, setIsSyncingStages] = useState(false);
+  const router = useRouter();
+  const toast = useToast();
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true);
+      
+      // מחיקת הפרויקט
+      await projectService.deleteProject(projectId);
+      
+      toast({
+        title: 'פרויקט נמחק',
+        description: 'הפרויקט נמחק בהצלחה',
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+      });
+      
+      // ניווט בחזרה לרשימת הפרויקטים
+      router.push('/dashboard/projects');
+    } catch (error) {
+      console.error('שגיאה במחיקת פרויקט:', error);
+      
+      toast({
+        title: 'שגיאה במחיקת פרויקט',
+        description: error instanceof Error ? error.message : 'אירעה שגיאה לא צפויה',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setIsDeleting(false);
+      onClose();
+    }
+  };
+
+  const handleSyncStages = async () => {
+    try {
+      setIsSyncingStages(true);
+      
+      // קריאה לפונקציית Edge לסנכרון השלבים
+      const response = await fetch('/api/projects/sync-stages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ projectId }),
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'אירעה שגיאה בסנכרון השלבים');
+      }
+      
+      toast({
+        title: 'שלבים סונכרנו בהצלחה',
+        description: `סונכרנו ${result.project_stages_count} שלבים לפרויקט זה`,
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+      });
+      
+      // רענון הדף כדי להציג את השלבים החדשים
+      router.refresh();
+    } catch (error) {
+      console.error('שגיאה בסנכרון שלבים:', error);
+      
+      toast({
+        title: 'שגיאה בסנכרון שלבים',
+        description: error instanceof Error ? error.message : 'אירעה שגיאה לא צפויה',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setIsSyncingStages(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        colorScheme="red"
+        variant="outline"
+        leftIcon={<FiTrash2 />}
+        onClick={onOpen}
+        size="sm"
+      >
+        מחק פרויקט
+      </Button>
+      
+      <Button
+        colorScheme="teal"
+        leftIcon={<FiRefreshCw />}
+        onClick={handleSyncStages}
+        isLoading={isSyncingStages}
+        loadingText="מסנכרן שלבים..."
+        ml={2}
+        size="sm"
+      >
+        סנכרן שלבים
+      </Button>
+
+      <AlertDialog
+        isOpen={isOpen}
+        leastDestructiveRef={cancelRef}
+        onClose={onClose}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader>מחיקת פרויקט</AlertDialogHeader>
+            <AlertDialogBody>
+              האם אתה בטוח שברצונך למחוק את הפרויקט? פעולה זו אינה הפיכה.
+            </AlertDialogBody>
+            <AlertDialogFooter>
+              <Button ref={cancelRef} onClick={onClose}>
+                ביטול
+              </Button>
+              <Button colorScheme="red" onClick={handleDelete} ml={3} isLoading={isDeleting}>
+                מחק
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
+    </>
   );
 }

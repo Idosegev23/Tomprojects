@@ -1,0 +1,74 @@
+-- מיגרציה לתיקון שדות חסרים בטבלאות פרויקט
+-- תאריך: 29-03-2025
+
+-- עדכון טבלת המשימות להוסיף את כל השדות החסרים
+DROP FUNCTION IF EXISTS create_project_table(uuid);
+
+CREATE OR REPLACE FUNCTION create_project_table(project_id uuid)
+RETURNS void AS $$
+DECLARE
+  table_name text := 'project_' || project_id::text || '_tasks';
+  constraint_name text := 'proj_' || replace(project_id::text, '-', '') || '_fkey';
+BEGIN
+  -- בדיקה אם הטבלה כבר קיימת
+  IF NOT check_table_exists(table_name) THEN
+    -- יצירת טבלה חדשה עם המבנה המלא הנדרש
+    EXECUTE format('
+      CREATE TABLE %I (
+        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        title text NOT NULL,
+        description text,
+        project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        stage_id uuid REFERENCES stages(id) ON DELETE SET NULL,
+        parent_task_id uuid,
+        hierarchical_number text,
+        due_date date,
+        status text DEFAULT ''todo'',
+        priority text DEFAULT ''medium'',
+        category text,
+        responsible uuid,
+        dropbox_folder text,
+        created_at timestamptz DEFAULT now(),
+        updated_at timestamptz DEFAULT now(),
+        
+        -- שדות נוספים שחסרים בהגדרה המקורית
+        estimated_hours numeric,
+        actual_hours numeric, 
+        start_date date,
+        completed_date date,
+        budget numeric,
+        dependencies text[],
+        assignees text[],
+        watchers text[],
+        labels text[],
+        is_template boolean DEFAULT false,
+        original_task_id uuid
+      )', table_name);
+
+    -- הוספת אילוץ חוץ בנפרד (עם שם אילוץ מקוצר ובטוח יותר)
+    EXECUTE format('
+      ALTER TABLE %I 
+      ADD CONSTRAINT %I 
+      FOREIGN KEY (project_id) 
+      REFERENCES projects(id) 
+      ON DELETE CASCADE
+    ', table_name, constraint_name);
+
+    -- הענקת הרשאות גישה מלאות לכל התפקידים
+    EXECUTE format('
+      GRANT ALL PRIVILEGES ON TABLE %I TO anon;
+      GRANT ALL PRIVILEGES ON TABLE %I TO authenticated;
+      GRANT ALL PRIVILEGES ON TABLE %I TO service_role;
+    ', table_name, table_name, table_name);
+
+    -- יצירת אינדקסים
+    EXECUTE format('CREATE INDEX %I ON %I (project_id)', table_name || '_project_id_idx', table_name);
+    EXECUTE format('CREATE INDEX %I ON %I (stage_id)', table_name || '_stage_id_idx', table_name);
+    EXECUTE format('CREATE INDEX %I ON %I (status)', table_name || '_status_idx', table_name);
+    EXECUTE format('CREATE INDEX %I ON %I (priority)', table_name || '_priority_idx', table_name);
+    EXECUTE format('CREATE INDEX %I ON %I (hierarchical_number)', table_name || '_hierarchical_number_idx', table_name);
+  END IF;
+
+  RAISE NOTICE 'Table % created successfully', table_name;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER; 

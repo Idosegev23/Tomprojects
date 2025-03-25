@@ -41,6 +41,7 @@ export interface Database {
           name: string
           description: string | null
           entrepreneur_id: string | null
+          owner: string | null
           status: string
           priority: string
           department: string | null
@@ -59,6 +60,7 @@ export interface Database {
           name: string
           description?: string | null
           entrepreneur_id?: string | null
+          owner?: string | null
           status?: string
           priority?: string
           department?: string | null
