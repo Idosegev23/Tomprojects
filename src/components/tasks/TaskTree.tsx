@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Box, 
   Flex, 
@@ -16,9 +16,13 @@ import {
   MenuItem,
   MenuDivider,
   MenuOptionGroup,
-  MenuItemOption
+  MenuItemOption,
+  Tooltip,
+  useDisclosure,
+  Spinner,
+  Button
 } from '@chakra-ui/react';
-import { FiChevronDown, FiChevronRight, FiEdit, FiTrash2, FiMoreVertical } from 'react-icons/fi';
+import { FiChevronDown, FiChevronRight, FiEdit, FiTrash2, FiMoreVertical, FiPlus, FiCalendar, FiMove } from 'react-icons/fi';
 import { Task } from '@/types/supabase';
 import taskService from '@/lib/services/taskService';
 import SubtaskInput from '@/components/tasks/SubtaskInput';
@@ -34,25 +38,25 @@ interface TaskNodeProps {
 }
 
 // הפונקציה לקבלת צבע לפי סטטוס
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'todo':
-      case 'לביצוע':
-        return 'gray';
-      case 'in_progress':
-      case 'בתהליך':
-        return 'blue';
-      case 'review':
-      case 'בבדיקה':
-        return 'orange';
-      case 'done':
-      case 'הושלם':
-        return 'green';
-      default:
-        return 'gray';
-    }
-  };
-  
+const getStatusColor = (status: string) => {
+  switch (status.toLowerCase()) {
+    case 'todo':
+    case 'לביצוע':
+      return 'gray';
+    case 'in_progress':
+    case 'בתהליך':
+      return 'blue';
+    case 'review':
+    case 'בבדיקה':
+      return 'orange';
+    case 'done':
+    case 'הושלם':
+      return 'green';
+    default:
+      return 'gray';
+  }
+};
+
 // הפונקציה לקבלת תווית הסטטוס
 const getStatusLabel = (status: string): string => {
   switch (status.toLowerCase()) {
@@ -88,6 +92,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const lineColor = useColorModeValue('gray.300', 'gray.600');
+  const hoverBgColor = useColorModeValue('gray.50', 'gray.700');
   
   const toast = useToast();
   
@@ -105,10 +110,16 @@ const TaskNode: React.FC<TaskNodeProps> = ({
     
     // וידוא שהעץ יהיה פתוח לאחר יצירת תת-משימה
     setIsExpanded(true);
+    setIsAddingSubtask(false);
     
     if (onEditTask) {
       onEditTask(task);
     }
+  };
+  
+  // פונקציה לביטול הוספת תת-משימה
+  const handleCancelAddSubtask = () => {
+    setIsAddingSubtask(false);
   };
   
   return (
@@ -145,16 +156,28 @@ const TaskNode: React.FC<TaskNodeProps> = ({
       )}
       
         <Box
-        p={3}
-          bg={bgColor}
-        borderWidth="1px"
+          p={3}
+          bg={isHovered ? hoverBgColor : bgColor}
+          borderWidth="1px"
           borderColor={borderColor}
           borderRadius="md"
           boxShadow="sm"
-          _hover={{ boxShadow: 'md' }}
           position="relative"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
+          cursor="pointer"
+          _hover={{ boxShadow: 'md' }}
+          onClick={(e) => {
+            // מניעת הרחבה/כיווץ אם לחצנו על כפתור אחר
+            if (
+              (e.target as HTMLElement).tagName !== 'BUTTON' && 
+              !(e.target as HTMLElement).closest('button')
+            ) {
+              if (onEditTask) {
+                onEditTask(task);
+              }
+            }
+          }}
         >
           <Flex justifyContent="space-between" alignItems="center">
             <Flex alignItems="center" flex="1">
@@ -165,7 +188,10 @@ const TaskNode: React.FC<TaskNodeProps> = ({
                   size="sm"
                   aria-label={isExpanded ? "כווץ" : "הרחב"}
                   mr={2}
-                  onClick={() => setIsExpanded(!isExpanded)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsExpanded(!isExpanded);
+                  }}
                 />
               )}
               
@@ -181,91 +207,172 @@ const TaskNode: React.FC<TaskNodeProps> = ({
                 )}
                 
               <Box flex="1">
-                <Heading 
-                  size="sm" 
-                  fontWeight="semibold"
-                  textDecoration={task.status === 'done' ? 'line-through' : 'none'}
-                  opacity={task.status === 'done' ? 0.8 : 1}
-                >
-                  {task.title}
-                </Heading>
+                <Flex alignItems="center">
+                  <Heading 
+                    size="sm" 
+                    fontWeight="semibold"
+                    textDecoration={task.status === 'done' ? 'line-through' : 'none'}
+                    opacity={task.status === 'done' ? 0.8 : 1}
+                  >
+                    {task.title}
+                  </Heading>
+                  
+                  {/* תאריך יעד */}
+                  {task.due_date && (
+                    <Tooltip 
+                      label={`תאריך יעד: ${new Date(task.due_date).toLocaleDateString('he-IL')}`} 
+                      placement="top"
+                    >
+                      <Badge 
+                        ml={2} 
+                        colorScheme={isTaskOverdue(task) ? 'red' : 'blue'}
+                        variant="outline"
+                        display="flex"
+                        alignItems="center"
+                      >
+                        <FiCalendar style={{ marginLeft: '4px' }} />
+                        {new Date(task.due_date).toLocaleDateString('he-IL')}
+                      </Badge>
+                    </Tooltip>
+                  )}
+                </Flex>
                 {task.description && (
-                  <Text fontSize="sm" color="gray.600" noOfLines={2} mt={1}>
+                  <Text 
+                    fontSize="sm" 
+                    color="gray.600" 
+                    noOfLines={2} 
+                    mt={1}
+                    opacity={isHovered ? 1 : 0.8}
+                  >
                     {task.description}
                   </Text>
                 )}
               </Box>
               </Flex>
             
-            <HStack spacing={1} opacity={isHovered ? 1 : 0.3} transition="opacity 0.2s">
-              <Menu closeOnSelect={true}>
-                <MenuButton
-                  as={IconButton}
-                  icon={<FiMoreVertical />}
-                  variant="ghost"
+            {/* כפתורי פעולה */}
+            <HStack spacing={1}>
+              {/* כפתור הוספת תת-משימה - תמיד גלוי */}
+              <Tooltip label="הוסף תת-משימה">
+                <IconButton
+                  icon={<FiPlus />}
+                  aria-label="הוסף תת-משימה"
                   size="sm"
-                  aria-label="פעולות נוספות"
+                  variant="ghost"
+                  visibility="visible"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsAddingSubtask(!isAddingSubtask);
+                  }}
                 />
-                <MenuList>
-                  <MenuItem 
-                    icon={<FiEdit />} 
-                    onClick={() => onEditTask && onEditTask(task)}
-                  >
-                    ערוך
-                  </MenuItem>
-                  <MenuItem 
-                    icon={<FiTrash2 />} 
-                    onClick={() => onDeleteTask && onDeleteTask(task.id)}
-                    color="red.500"
-                  >
-                    מחק
-                  </MenuItem>
-                  
-                  <MenuDivider />
-                  
-                  <MenuOptionGroup 
-                    title="שנה סטטוס" 
-                    type="radio" 
-                    defaultValue={task.status}
-                    onChange={(value) => {
-                      onStatusChange && onStatusChange(task.id, value as string);
-                      // סגירת התפריט אחרי בחירה
-                      setTimeout(() => {
-                        document.body.click(); // סימולציה של לחיצה מחוץ לתפריט 
-                      }, 100);
-                    }}
-                  >
-                    <MenuItemOption value="todo">לביצוע</MenuItemOption>
-                    <MenuItemOption value="in_progress">בתהליך</MenuItemOption>
-                    <MenuItemOption value="review">בבדיקה</MenuItemOption>
-                    <MenuItemOption value="done">הושלם</MenuItemOption>
-                  </MenuOptionGroup>
-                </MenuList>
-              </Menu>
+              </Tooltip>
+              
+              {/* כפתור גרירה יתווסף בהמשך */}
+              <Tooltip label="גרור לסידור מחדש">
+                <IconButton
+                  icon={<FiMove />}
+                  aria-label="גרור"
+                  size="sm"
+                  variant="ghost"
+                  visibility={isHovered ? "visible" : "hidden"}
+                  cursor="grab"
+                />
+              </Tooltip>
+            
+              {/* כפתורי עריכה ומחיקה - מוצגים בריחוף */}
+              <HStack spacing={1} opacity={isHovered ? 1 : 0} transition="opacity 0.2s">
+                <Menu>
+                  <MenuButton
+                    as={IconButton}
+                    icon={<FiMoreVertical />}
+                    variant="ghost"
+                    size="sm"
+                    aria-label="אפשרויות נוספות"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <MenuList>
+                    <MenuItem 
+                      icon={<FiEdit />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onEditTask) {
+                          onEditTask(task);
+                        }
+                      }}
+                    >
+                      ערוך משימה
+                    </MenuItem>
+                    <MenuDivider />
+                    <MenuOptionGroup 
+                      title="שנה סטטוס" 
+                      type="radio" 
+                      value={task.status}
+                      onChange={(value) => {
+                        if (onStatusChange) {
+                          onStatusChange(task.id, value as string);
+                        }
+                      }}
+                    >
+                      <MenuItemOption value="todo">לביצוע</MenuItemOption>
+                      <MenuItemOption value="in_progress">בתהליך</MenuItemOption>
+                      <MenuItemOption value="review">בבדיקה</MenuItemOption>
+                      <MenuItemOption value="done">הושלם</MenuItemOption>
+                    </MenuOptionGroup>
+                    <MenuDivider />
+                    <MenuItem
+                      icon={<FiTrash2 />}
+                      color="red.500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onDeleteTask) {
+                          onDeleteTask(task.id);
+                        }
+                      }}
+                    >
+                      מחק משימה
+                    </MenuItem>
+                  </MenuList>
+                </Menu>
+              </HStack>
             </HStack>
-              </Flex>
-            </Box>
+          </Flex>
+        </Box>
+        
+        {/* טופס להוספת תת-משימה */}
+        <Collapse in={isAddingSubtask} animateOpacity>
+          <Box mt={2} ml={indentWidth + 8} mr={4} p={3} borderWidth="1px" borderRadius="md" bg="gray.50">
+            <SubtaskInput 
+              parentTaskId={task.id} 
+              projectId={task.project_id}
+              onSubtaskCreated={handleSubtaskCreated}
+              onCancel={handleCancelAddSubtask}
+            />
+          </Box>
+        </Collapse>
+        
+        {/* תת-משימות */}
+        <Collapse in={isExpanded && React.Children.count(children) > 0} animateOpacity>
+          <Box mt={2}>
+            {children}
+          </Box>
+        </Collapse>
       </Box>
-      
-      {/* תיבת הזנה להוספת תת-משימה */}
-      {isHovered && !isAddingSubtask && (
-        <Box pl={level > 0 ? `${indentWidth + 24}px` : `24px`}>
-          <SubtaskInput 
-            parentTaskId={task.id} 
-            projectId={task.project_id} 
-            onSubtaskCreated={handleSubtaskCreated} 
-          />
-        </Box>
-      )}
-      
-      {/* תתי-משימות */}
-      <Collapse in={isExpanded} animateOpacity>
-        <Box pl={4}>
-          {children}
-        </Box>
-      </Collapse>
     </Box>
   );
+};
+
+// בדיקה האם משימה עברה את תאריך היעד
+const isTaskOverdue = (task: Task): boolean => {
+  if (!task.due_date) return false;
+  if (task.status === 'done') return false;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const dueDate = new Date(task.due_date);
+  dueDate.setHours(0, 0, 0, 0);
+  
+  return dueDate < today;
 };
 
 interface TaskTreeProps {
@@ -275,6 +382,11 @@ interface TaskTreeProps {
   onTaskDeleted?: (taskId: string) => void;
   onTaskStatusChanged?: (taskId: string, newStatus: string) => void;
   searchTerm?: string;
+  onReorderTasks?: (taskId: string, fromIndex: number, toIndex: number) => void;
+  onTaskDropped?: (taskId: string, fromColumn: string, toColumn: string) => void;
+  loading?: boolean;
+  errorMessage?: string;
+  filterTerm?: string;
 }
 
 // קומפוננטה להצגת עץ משימות
@@ -284,7 +396,12 @@ const TaskTree: React.FC<TaskTreeProps> = ({
   onTaskEdited,
   onTaskDeleted,
   onTaskStatusChanged,
+  onReorderTasks,
+  onTaskDropped,
   searchTerm = '',
+  loading = false,
+  errorMessage = '',
+  filterTerm = ''
 }) => {
   const [taskTree, setTaskTree] = useState<(Task & { children?: Task[] })[]>([]);
   const [filteredTree, setFilteredTree] = useState<(Task & { children?: Task[] })[]>([]);
@@ -465,8 +582,22 @@ const TaskTree: React.FC<TaskTreeProps> = ({
     filterTasks();
   }, [taskTree, searchTerm]);
   
+  // פונקציה לטיפול בגרירה ושינוי סדר (תשמש בעתיד)
+  const handleReorderTask = (taskId: string, fromIndex: number, toIndex: number) => {
+    if (onReorderTasks) {
+      onReorderTasks(taskId, fromIndex, toIndex);
+    }
+  };
+  
+  // פונקציה לטיפול בהעברת משימה לקטגוריה אחרת (תשמש בעתיד)
+  const handleDropTask = (taskId: string, fromColumn: string, toColumn: string) => {
+    if (onTaskDropped) {
+      onTaskDropped(taskId, fromColumn, toColumn);
+    }
+  };
+  
   // פונקציה רקורסיבית להצגת עץ המשימות
-  const renderTaskTree = (tasks: (Task & { children?: Task[] })[], level = 0) => {
+  const renderTaskTree = (tasks: (Task & { children?: Task[] })[] = [], level = 0) => {
     return tasks.map(task => {
       const children = task.children || [];
       return (
@@ -485,15 +616,70 @@ const TaskTree: React.FC<TaskTreeProps> = ({
     });
   };
   
+  // פונקציה להוספת משימה חדשה לרמה העליונה
+  const handleAddRootTask = () => {
+    // חלונית של הוספת משימה חדשה תוצג בממשק ראשי
+    console.log('הוספת משימה ראשית חדשה');
+  };
+  
   return (
-    <Box>
-      {filteredTree.length === 0 ? (
-        <Box p={4} textAlign="center">
-          <Text>לא נמצאו משימות מתאימות</Text>
+    <Box position="relative">
+      {loading && (
+        <Box 
+          position="absolute"
+          inset="0"
+          bg="whiteAlpha.700"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          zIndex={10}
+        >
+          <Spinner size="xl" />
         </Box>
-      ) : (
-        renderTaskTree(filteredTree)
       )}
+      
+      {errorMessage && (
+        <Box 
+          p={4} 
+          bg="red.50" 
+          color="red.600" 
+          borderRadius="md" 
+          textAlign="center"
+          mb={4}
+        >
+          {errorMessage}
+        </Box>
+      )}
+      
+      {tasks.length === 0 && !loading && !errorMessage && (
+        <Box 
+          p={4} 
+          bg="gray.50" 
+          borderRadius="md" 
+          textAlign="center"
+          mb={4}
+        >
+          <Text fontSize="lg" fontWeight="medium">אין משימות להצגה</Text>
+          <Text fontSize="sm" color="gray.600" mt={2}>
+            {filterTerm ? 
+              'נסה לשנות את פרמטרי הסינון' : 
+              'לחץ על "הוסף משימה" כדי להתחיל'}
+          </Text>
+          
+          <Button
+            mt={4}
+            colorScheme="blue"
+            leftIcon={<FiPlus />}
+            onClick={handleAddRootTask}
+          >
+            הוסף משימה חדשה
+          </Button>
+        </Box>
+      )}
+
+      <Box>
+        {renderTaskTree(filteredTree)}
+      </Box>
     </Box>
   );
 };

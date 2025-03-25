@@ -43,14 +43,21 @@ import { AddIcon, DeleteIcon, ChevronDownIcon, ChevronRightIcon, EditIcon, Chevr
 import { Task, Stage } from '@/types/supabase';
 import taskService from '@/lib/services/taskService';
 import stageService from '@/lib/services/stageService';
+import SubtaskInput from '@/components/tasks/SubtaskInput';
+
+// הרחבת הטיפוס של המשימה כדי להכיל את כל השדות הדרושים
+interface ExtendedTask extends Task {
+  dropbox_folder?: string;
+  hierarchical_number?: string;
+}
 
 interface TaskEditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  task: Task | null;
+  task: ExtendedTask | null;
   projectId: string;
-  onTaskCreated?: (task: Task) => void;
-  onTaskUpdated?: (task: Task) => void;
+  onTaskCreated?: (task: ExtendedTask) => void;
+  onTaskUpdated?: (task: ExtendedTask) => void;
 }
 
 const TaskEditModal: React.FC<TaskEditModalProps> = ({
@@ -62,19 +69,20 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   onTaskUpdated,
 }) => {
   const isEditMode = !!task;
-  const [formData, setFormData] = useState<Partial<Task>>({
+  const [formData, setFormData] = useState<Partial<ExtendedTask>>({
     title: '',
     description: '',
     status: 'todo',
     priority: 'medium',
     start_date: '',
     due_date: '',
-    estimated_hours: 0,
     project_id: projectId,
     parent_task_id: null,
     stage_id: null,
     category: '',
-    is_global_template: false,
+    responsible: null,
+    dropbox_folder: '',
+    hierarchical_number: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -88,6 +96,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   const [milestones, setMilestones] = useState<Stage[]>([]);
   const [loadingMilestones, setLoadingMilestones] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   
   const toast = useToast();
   
@@ -96,7 +105,6 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     if (task) {
       setFormData({
         ...task,
-        estimated_hours: task.estimated_hours || 0,
         start_date: task.start_date ? task.start_date.split('T')[0] : '',
         due_date: task.due_date ? task.due_date.split('T')[0] : '',
       });
@@ -115,12 +123,13 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         priority: 'medium',
         start_date: '',
         due_date: '',
-        estimated_hours: 0,
         project_id: projectId,
         parent_task_id: null,
         stage_id: null,
         category: '',
-        is_global_template: false,
+        responsible: null,
+        dropbox_folder: '',
+        hierarchical_number: '',
       });
       setIsSubtask(false);
       setSubtasks([]);
@@ -205,12 +214,6 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     }
   };
   
-  // טיפול בשינוי מספר
-  const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value === '' ? 0 : parseFloat(value) }));
-  };
-  
   // טיפול בשינוי סוג המשימה (רגילה/תת-משימה)
   const handleSubtaskToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
     const isChecked = e.target.checked;
@@ -220,12 +223,6 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
       // אם זו לא תת-משימה, מאפסים את משימת האב
       setFormData(prev => ({ ...prev, parent_task_id: null }));
     }
-  };
-  
-  // טיפול בשינוי הצגה ברשימה הכללית
-  const handleGlobalTemplateToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const isChecked = e.target.checked;
-    setFormData(prev => ({ ...prev, is_global_template: isChecked }));
   };
   
   // פונקציה לוולידציה של הטופס
@@ -250,106 +247,66 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   
   // שמירת המשימה
   const handleSubmit = async () => {
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      return;
+    }
+    
+    setLoading(true);
     
     try {
-      setLoading(true);
-      
-      // הכנת הנתונים לשמירה
-      const taskData = {
+      let taskData: Partial<ExtendedTask> = {
         ...formData,
         project_id: projectId,
       };
       
-      let savedTask: Task;
+      // אם זו לא תת-משימה, מוודאים שאין משימת אב
+      if (!isSubtask) {
+        taskData.parent_task_id = null;
+      }
       
-      if (isEditMode) {
+      let result;
+      
+      if (isEditMode && task) {
         // עדכון משימה קיימת
-        savedTask = await taskService.updateTask(task!.id, taskData);
+        result = await taskService.updateTask(task.id, taskData);
         
-        toast({
-          title: 'המשימה עודכנה בהצלחה',
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-        });
-        
-        if (onTaskUpdated) {
-          onTaskUpdated(savedTask);
+        if (result) {
+          toast({
+            title: "המשימה עודכנה בהצלחה",
+            status: "success",
+            duration: 3000,
+            isClosable: true,
+          });
+          
+          if (onTaskUpdated) {
+            onTaskUpdated(result as ExtendedTask);
+          }
         }
       } else {
         // יצירת משימה חדשה
-        savedTask = await taskService.createTask(taskData as any);
+        result = await taskService.createTask(taskData);
         
-        toast({
-          title: 'המשימה נוצרה בהצלחה',
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-        });
-        
-        if (onTaskCreated) {
-          onTaskCreated(savedTask);
+        if (result) {
+          toast({
+            title: "המשימה נוצרה בהצלחה",
+            status: "success",
+            duration: 3000,
+            isClosable: true,
+          });
+          
+          if (onTaskCreated) {
+            onTaskCreated(result as ExtendedTask);
+          }
         }
       }
       
       onClose();
     } catch (error) {
       console.error('Error saving task:', error);
-      
       toast({
-        title: isEditMode ? 'שגיאה בעדכון המשימה' : 'שגיאה ביצירת המשימה',
-        description: error instanceof Error ? error.message : 'אירעה שגיאה לא ידועה',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // הוספת תת-משימה חדשה
-  const handleAddSubtask = async () => {
-    if (!newSubtaskTitle.trim() || !task) return;
-    
-    try {
-      setLoading(true);
-      
-      const newSubtask: Partial<Task> = {
-        title: newSubtaskTitle,
-        description: '',
-        status: 'todo',
-        priority: formData.priority,
-        project_id: projectId,
-        parent_task_id: task.id,
-        stage_id: formData.stage_id,
-      };
-      
-      const savedSubtask = await taskService.createTask(newSubtask as any);
-      
-      toast({
-        title: 'תת-המשימה נוצרה בהצלחה',
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-      });
-      
-      // עדכון רשימת תתי-המשימות
-      setSubtasks(prev => [...prev, savedSubtask]);
-      setNewSubtaskTitle('');
-      
-      // עדכון המשימה הראשית אם צריך
-      if (onTaskUpdated) {
-        onTaskUpdated(task);
-      }
-    } catch (error) {
-      console.error('Error creating subtask:', error);
-      
-      toast({
-        title: 'שגיאה ביצירת תת-המשימה',
-        description: error instanceof Error ? error.message : 'אירעה שגיאה לא ידועה',
-        status: 'error',
+        title: "שגיאה בשמירת המשימה",
+        description: "אירעה שגיאה בעת שמירת המשימה. אנא נסה שנית.",
+        status: "error",
         duration: 5000,
         isClosable: true,
       });
@@ -360,7 +317,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   
   // מחיקת תת-משימה
   const handleDeleteSubtask = async (subtaskId: string) => {
-    if (!confirm('האם אתה בטוח שברצונך למחוק את תת-המשימה הזו?')) return;
+    if (!window.confirm('האם אתה בטוח שברצונך למחוק את תת-המשימה הזו?')) return;
     
     try {
       setLoading(true);
@@ -379,7 +336,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
       
       // עדכון המשימה הראשית אם צריך
       if (task && onTaskUpdated) {
-        onTaskUpdated(task);
+        onTaskUpdated(task as ExtendedTask);
       }
     } catch (error) {
       console.error('Error deleting subtask:', error);
@@ -396,113 +353,54 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     }
   };
   
-  // פתיחה/סגירה של תת-משימה בתצוגת העץ
-  const toggleSubtask = (subtaskId: string) => {
-    setExpandedSubtasks(prev => ({
-      ...prev,
-      [subtaskId]: !prev[subtaskId]
-    }));
-  };
-  
-  // רינדור של תת-משימה בתצוגת העץ
-  const renderSubtaskItem = (subtask: Task, level: number = 0) => {
-    const isExpanded = expandedSubtasks[subtask.id] || false;
-    const childSubtasks = subtasks.filter(st => st.parent_task_id === subtask.id);
-    const hasChildren = childSubtasks.length > 0;
+  // פונקציה לטיפול בתת-משימה שנוצרה
+  const handleSubtaskCreated = (createdTask: Task) => {
+    // עדכון רשימת תתי-המשימות
+    setSubtasks(prev => [...prev, createdTask]);
     
-    return (
-      <Box key={subtask.id} mr={level * 4} mb={2}>
-        <Flex align="center" p={2} borderWidth="1px" borderRadius="md" bg={useColorModeValue('gray.50', 'gray.700')}>
-          {hasChildren && (
-            <IconButton
-              icon={isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
-              size="sm"
-              variant="ghost"
-              aria-label={isExpanded ? 'כווץ' : 'הרחב'}
-              onClick={() => toggleSubtask(subtask.id)}
-              mr={2}
-            />
-          )}
-          {!hasChildren && <Box w={8} />}
-          
-          <Text flex="1" fontWeight="medium" isTruncated>
-            {subtask.hierarchical_number && (
-              <Badge mr={2} colorScheme="blue">{subtask.hierarchical_number}</Badge>
-            )}
-            {subtask.title}
-          </Text>
-          
-          <Badge colorScheme={getStatusColor(subtask.status)} mr={2}>
-            {getStatusLabel(subtask.status)}
-          </Badge>
-          
-          <Tooltip label="ערוך תת-משימה">
-            <IconButton
-              icon={<EditIcon />}
-              size="sm"
-              aria-label="ערוך"
-              variant="ghost"
-              onClick={() => {
-                if (onClose && onTaskUpdated) {
-                  onClose();
-                  setTimeout(() => {
-                    onTaskUpdated(subtask);
-                  }, 100);
-                }
-              }}
-              mr={1}
-            />
-          </Tooltip>
-          
-          <Tooltip label="מחק תת-משימה">
-            <IconButton
-              icon={<DeleteIcon />}
-              size="sm"
-              aria-label="מחק"
-              variant="ghost"
-              colorScheme="red"
-              onClick={() => handleDeleteSubtask(subtask.id)}
-            />
-          </Tooltip>
-        </Flex>
-        
-        {hasChildren && isExpanded && (
-          <Box mr={4} borderLeftWidth="1px" borderLeftColor="gray.200" pr={2}>
-            {childSubtasks.map(child => renderSubtaskItem(child, level + 1))}
-          </Box>
-        )}
-      </Box>
-    );
+    // סגירת טופס הוספת תת-משימה
+    setIsAddingSubtask(false);
+    
+    toast({
+      title: 'תת-משימה נוצרה בהצלחה',
+      status: 'success',
+      duration: 3000,
+      isClosable: true,
+    });
   };
   
-  // פונקציה עזר לקבלת צבע לפי סטטוס
-  const getStatusColor = (status: string): string => {
+  // פונקציות עזר להצגת סטטוס
+  const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'todo':
       case 'לביצוע':
-        return 'gray.300';
+        return 'gray';
       case 'in_progress':
       case 'בתהליך':
-        return 'blue.500';
+        return 'blue';
       case 'review':
-      case 'לבדיקה':
-        return 'orange.400';
+      case 'בבדיקה':
+        return 'orange';
       case 'done':
       case 'הושלם':
-        return 'green.500';
+        return 'green';
       default:
-        return 'gray.400';
+        return 'gray';
     }
   };
-  
-  // פונקציה עזר לקבלת תווית לפי סטטוס
+
   const getStatusLabel = (status: string): string => {
     switch (status.toLowerCase()) {
-      case 'todo': return 'לביצוע';
-      case 'in_progress': return 'בתהליך';
-      case 'review': return 'בבדיקה';
-      case 'done': return 'הושלם';
-      default: return status;
+      case 'todo':
+        return 'לביצוע';
+      case 'in_progress':
+        return 'בתהליך';
+      case 'review':
+        return 'בבדיקה';
+      case 'done':
+        return 'הושלם';
+      default:
+        return status;
     }
   };
 
@@ -526,64 +424,49 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} size="xl" scrollBehavior="inside">
       <ModalOverlay />
-      <ModalContent>
-        <ModalHeader>{isEditMode ? 'עריכת משימה' : 'יצירת משימה חדשה'}</ModalHeader>
+      <ModalContent maxW="800px">
+        <ModalHeader>{isEditMode ? 'עריכת משימה' : 'משימה חדשה'}</ModalHeader>
         <ModalCloseButton />
-        
         <ModalBody>
-          <Tabs isFitted variant="enclosed" index={activeTab} onChange={setActiveTab}>
-            <TabList mb="1em">
+          <Tabs index={activeTab} onChange={setActiveTab}>
+            <TabList>
               <Tab>פרטי משימה</Tab>
               {isEditMode && <Tab>תתי-משימות</Tab>}
-              <Tab>הגדרות נוספות</Tab>
+              <Tab>הגדרות מתקדמות</Tab>
             </TabList>
             
             <TabPanels>
-              <TabPanel p={0}>
+              {/* טאב פרטי משימה */}
+              <TabPanel>
                 <VStack spacing={4} align="stretch">
-                  {/* שדות חובה בראש הטופס */}
                   <FormControl isRequired isInvalid={!!errors.title}>
                     <FormLabel>כותרת</FormLabel>
-                    <Input
-                      name="title"
-                      value={formData.title || ''}
-                      onChange={handleChange}
+                    <Input 
+                      name="title" 
+                      value={formData.title || ''} 
+                      onChange={handleChange} 
                       placeholder="הזן כותרת למשימה"
-                      size="lg"
-                      autoFocus
                     />
-                    <FormErrorMessage>{errors.title}</FormErrorMessage>
+                    {errors.title && <FormErrorMessage>{errors.title}</FormErrorMessage>}
                   </FormControl>
                   
                   <FormControl>
                     <FormLabel>תיאור</FormLabel>
-                    <Textarea
-                      name="description"
-                      value={formData.description || ''}
-                      onChange={handleChange}
+                    <Textarea 
+                      name="description" 
+                      value={formData.description || ''} 
+                      onChange={handleChange} 
                       placeholder="הזן תיאור מפורט למשימה"
-                      rows={3}
+                      minH="100px"
                     />
                   </FormControl>
                   
-                  {/* סטטוס ועדיפות בשורה אחת */}
-                  <Flex gap={4} direction={{ base: 'column', md: 'row' }}>
-                    <FormControl flex="1">
+                  <HStack spacing={4}>
+                    <FormControl>
                       <FormLabel>סטטוס</FormLabel>
-                      <Select 
-                        name="status" 
-                        value={formData.status || 'todo'} 
-                        onChange={(e) => {
-                          handleChange(e);
-                          // הסרת פוקוס מהתפריט אחרי בחירה
-                          (e.target as HTMLSelectElement).blur();
-                        }}
-                        bg={getStatusColor(formData.status || 'todo')}
-                        color={formData.status === 'todo' ? 'black' : 'white'}
-                        fontWeight="medium"
-                      >
+                      <Select name="status" value={formData.status || 'todo'} onChange={handleChange}>
                         <option value="todo">לביצוע</option>
                         <option value="in_progress">בתהליך</option>
                         <option value="review">בבדיקה</option>
@@ -591,259 +474,231 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                       </Select>
                     </FormControl>
                     
-                    <FormControl flex="1">
+                    <FormControl>
                       <FormLabel>עדיפות</FormLabel>
-                      <Select 
-                        name="priority" 
-                        value={formData.priority || 'medium'} 
-                        onChange={(e) => {
-                          handleChange(e);
-                          // הסרת פוקוס מהתפריט אחרי בחירה
-                          (e.target as HTMLSelectElement).blur();
-                        }}
-                        bg={getPriorityColor(formData.priority || 'medium')}
-                        color={formData.priority === 'low' ? 'black' : 'white'}
-                        fontWeight="medium"
-                      >
+                      <Select name="priority" value={formData.priority || 'medium'} onChange={handleChange}>
                         <option value="low">נמוכה</option>
                         <option value="medium">בינונית</option>
                         <option value="high">גבוהה</option>
                         <option value="urgent">דחופה</option>
                       </Select>
                     </FormControl>
-                  </Flex>
+                  </HStack>
                   
-                  {/* תאריכים */}
-                  <Flex gap={4} direction={{ base: 'column', md: 'row' }}>
-                    <FormControl flex="1">
+                  <HStack spacing={4}>
+                    <FormControl>
                       <FormLabel>תאריך התחלה</FormLabel>
-                      <Input
-                        name="start_date"
-                        type="date"
-                        value={formData.start_date || ''}
+                      <Input 
+                        type="date" 
+                        name="start_date" 
+                        value={formData.start_date || ''} 
                         onChange={handleChange}
                       />
                     </FormControl>
                     
-                    <FormControl flex="1" isInvalid={!!errors.due_date}>
+                    <FormControl isInvalid={!!errors.due_date}>
                       <FormLabel>תאריך יעד</FormLabel>
-                      <Input
-                        name="due_date"
-                        type="date"
-                        value={formData.due_date || ''}
+                      <Input 
+                        type="date" 
+                        name="due_date" 
+                        value={formData.due_date || ''} 
                         onChange={handleChange}
                       />
-                      <FormErrorMessage>{errors.due_date}</FormErrorMessage>
+                      {errors.due_date && <FormErrorMessage>{errors.due_date}</FormErrorMessage>}
                     </FormControl>
-                  </Flex>
+                  </HStack>
                   
-                  {/* מידע נוסף - מקופל בברירת מחדל */}
-                  <Box>
-                    <Flex justify="center" mt={2} mb={2}>
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
-                        rightIcon={isAdvancedOpen ? <ChevronUpIcon /> : <ChevronDownIcon />}
+                  <FormControl>
+                    <FormLabel>קטגוריה</FormLabel>
+                    <Select 
+                      name="category" 
+                      value={formData.category || ''} 
+                      onChange={handleChange}
+                      placeholder="בחר קטגוריה"
+                    >
+                      <option value="planning">תכנון</option>
+                      <option value="development">פיתוח</option>
+                      <option value="design">עיצוב</option>
+                      <option value="marketing">שיווק</option>
+                      <option value="content">תוכן</option>
+                      <option value="qa">בדיקות איכות</option>
+                      <option value="production">ייצור</option>
+                      <option value="other">אחר</option>
+                    </Select>
+                  </FormControl>
+                  
+                  <FormControl>
+                    <FormLabel>שלב בפרויקט</FormLabel>
+                    <Select 
+                      name="stage_id" 
+                      value={formData.stage_id || ''} 
+                      onChange={handleChange}
+                      placeholder="בחר שלב"
+                      isDisabled={loadingMilestones}
+                    >
+                      {milestones.map(milestone => (
+                        <option key={milestone.id} value={milestone.id}>
+                          {milestone.title}
+                        </option>
+                      ))}
+                    </Select>
+                    {loadingMilestones && <Spinner size="sm" ml={2} />}
+                  </FormControl>
+                  
+                  <FormControl>
+                    <FormLabel>אחראי</FormLabel>
+                    <Input 
+                      name="responsible" 
+                      value={formData.responsible || ''} 
+                      onChange={handleChange}
+                      placeholder="הזן אחראי למשימה"
+                    />
+                  </FormControl>
+                  
+                  <FormControl>
+                    <FormLabel>תיקיה בדרופבוקס</FormLabel>
+                    <Input 
+                      name="dropbox_folder" 
+                      value={formData.dropbox_folder || ''} 
+                      onChange={handleChange}
+                      placeholder="נתיב לתיקיה בדרופבוקס"
+                    />
+                  </FormControl>
+                  
+                  <FormControl display="flex" alignItems="center">
+                    <FormLabel mb={0}>הגדר כתת-משימה</FormLabel>
+                    <Switch 
+                      isChecked={isSubtask} 
+                      onChange={handleSubtaskToggle}
+                    />
+                  </FormControl>
+                  
+                  {isSubtask && (
+                    <FormControl isInvalid={!!errors.parent_task_id}>
+                      <FormLabel>משימת אב</FormLabel>
+                      <Select 
+                        name="parent_task_id" 
+                        value={formData.parent_task_id || ''} 
+                        onChange={handleChange}
+                        placeholder="בחר משימת אב"
                       >
-                        {isAdvancedOpen ? 'הסתר שדות נוספים' : 'הצג שדות נוספים'}
-                      </Button>
-                    </Flex>
-                    
-                    <Collapse in={isAdvancedOpen} animateOpacity>
-                      <VStack spacing={4} align="stretch">
-                        {/* מילסטון (שלב) */}
-                        {loadingMilestones ? (
-                          <Flex justify="center" p={4}>
-                            <Spinner size="sm" />
-                          </Flex>
-                        ) : milestones.length > 0 ? (
-                          <FormControl isInvalid={!!errors.stage_id}>
-                            <FormLabel>שלב בפרויקט</FormLabel>
-                            <Select
-                              name="stage_id"
-                              value={formData.stage_id || ''}
-                              onChange={(e) => {
-                                handleChange(e);
-                                // הסרת פוקוס מהתפריט אחרי בחירה
-                                (e.target as HTMLSelectElement).blur();
-                              }}
-                              placeholder="בחר שלב בפרויקט"
-                            >
-                              {milestones.map(stage => (
-                                <option key={stage.id} value={stage.id}>
-                                  {stage.title}
-                                </option>
-                              ))}
-                            </Select>
-                            <FormErrorMessage>{errors.stage_id}</FormErrorMessage>
-                          </FormControl>
-                        ) : null}
-                        
-                        {/* קטגוריה */}
-                        <FormControl>
-                          <FormLabel>קטגוריה</FormLabel>
-                          <Select
-                            name="category"
-                            value={formData.category || ''}
-                            onChange={(e) => {
-                              handleChange(e);
-                              // הסרת פוקוס מהתפריט אחרי בחירה
-                              (e.target as HTMLSelectElement).blur();
-                            }}
-                            placeholder="בחר קטגוריה"
-                          >
-                            <option value="פיתוח">פיתוח</option>
-                            <option value="עיצוב">עיצוב</option>
-                            <option value="תוכן">תוכן</option>
-                            <option value="שיווק">שיווק</option>
-                            <option value="תשתיות">תשתיות</option>
-                            <option value="אחר">אחר</option>
-                          </Select>
-                        </FormControl>
-                        
-                        <FormControl>
-                          <FormLabel>שעות מוערכות</FormLabel>
-                          <Input
-                            name="estimated_hours"
-                            type="number"
-                            value={formData.estimated_hours || 0}
-                            onChange={handleNumberChange}
-                            min={0}
-                            step={0.5}
-                          />
-                        </FormControl>
-                        
-                        {/* הגדרת תת-משימה */}
-                        <FormControl display="flex" alignItems="center">
-                          <FormLabel htmlFor="is-subtask" mb="0">
-                            זוהי תת-משימה
-                          </FormLabel>
-                          <Switch
-                            id="is-subtask"
-                            isChecked={isSubtask}
-                            onChange={handleSubtaskToggle}
-                          />
-                        </FormControl>
-                        
-                        {/* בחירת משימת אב */}
-                        {isSubtask && (
-                          <FormControl isInvalid={!!errors.parent_task_id}>
-                            <FormLabel>משימת אב</FormLabel>
-                            <Select
-                              name="parent_task_id"
-                              value={formData.parent_task_id || ''}
-                              onChange={handleChange}
-                              placeholder="בחר משימת אב"
-                            >
-                              {parentTasks.map(parentTask => (
-                                <option key={parentTask.id} value={parentTask.id}>
-                                  {parentTask.title}
-                                </option>
-                              ))}
-                            </Select>
-                            <FormErrorMessage>{errors.parent_task_id}</FormErrorMessage>
-                          </FormControl>
-                        )}
-                      </VStack>
-                    </Collapse>
-                  </Box>
+                        {parentTasks.map(parentTask => (
+                          <option key={parentTask.id} value={parentTask.id}>
+                            {parentTask.title}
+                          </option>
+                        ))}
+                      </Select>
+                      {errors.parent_task_id && <FormErrorMessage>{errors.parent_task_id}</FormErrorMessage>}
+                    </FormControl>
+                  )}
                 </VStack>
               </TabPanel>
               
+              {/* טאב תתי-משימות (רק במצב עריכה) */}
               {isEditMode && (
-                <TabPanel p={0}>
+                <TabPanel>
                   <VStack spacing={4} align="stretch">
-                    <Flex>
-                      <Heading size="sm" flex="1">תתי-משימות</Heading>
-                      <Text fontSize="sm" color="gray.500">
-                        {subtasks.filter(st => st.parent_task_id === task?.id).length} תתי-משימות ישירות
-                      </Text>
+                    <Flex justifyContent="space-between" alignItems="center">
+                      <Heading as="h3" size="md">תתי-משימות</Heading>
+                      <Button 
+                        size="sm" 
+                        leftIcon={<AddIcon />} 
+                        colorScheme="blue"
+                        onClick={() => setIsAddingSubtask(true)}
+                      >
+                        הוסף תת-משימה חדשה
+                      </Button>
                     </Flex>
                     
-                    <Divider />
+                    <Collapse in={isAddingSubtask} animateOpacity>
+                      <Box p={4} bg="gray.50" borderRadius="md" mb={4}>
+                        <SubtaskInput 
+                          parentTaskId={task?.id || ''} 
+                          projectId={projectId} 
+                          onSubtaskCreated={handleSubtaskCreated}
+                          onCancel={() => setIsAddingSubtask(false)}
+                        />
+                      </Box>
+                    </Collapse>
                     
-                    <HStack>
-                      <Input
-                        placeholder="הזן כותרת לתת-משימה חדשה"
-                        value={newSubtaskTitle}
-                        onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                        flex="1"
-                        autoFocus={activeTab === 1}
-                      />
-                      <Button
-                        leftIcon={<AddIcon />}
-                        colorScheme="blue"
-                        onClick={handleAddSubtask}
-                        isLoading={loading}
-                        isDisabled={!newSubtaskTitle.trim()}
-                      >
-                        הוסף
-                      </Button>
-                    </HStack>
-                    
-                    <Box maxH="300px" overflowY="auto" pr={2}>
-                      {loadingSubtasks ? (
-                        <Center p={4}>
-                          <Spinner />
-                        </Center>
-                      ) : subtasks.length === 0 ? (
-                        <Text color="gray.500" textAlign="center" p={4}>
-                          אין תתי-משימות. הוסף תת-משימה חדשה באמצעות הטופס למעלה.
-                        </Text>
-                      ) : (
-                        <VStack align="stretch" spacing={0}>
-                          {subtasks
-                            .filter(st => st.parent_task_id === task?.id)
-                            .map(subtask => renderSubtaskItem(subtask))}
-                        </VStack>
-                      )}
-                    </Box>
+                    {loadingSubtasks ? (
+                      <Center p={4}>
+                        <Spinner />
+                      </Center>
+                    ) : subtasks.length > 0 ? (
+                      <List spacing={3}>
+                        {subtasks.map(subtask => (
+                          <ListItem 
+                            key={subtask.id} 
+                            p={3} 
+                            borderWidth="1px" 
+                            borderRadius="md"
+                            _hover={{ bg: "gray.50" }}
+                          >
+                            <Flex justifyContent="space-between" alignItems="center">
+                              <HStack>
+                                <Badge colorScheme={getStatusColor(subtask.status || 'todo')}>
+                                  {getStatusLabel(subtask.status || 'todo')}
+                                </Badge>
+                                <Text fontWeight="medium">{subtask.title}</Text>
+                              </HStack>
+                              <HStack>
+                                <IconButton
+                                  icon={<EditIcon />}
+                                  aria-label="ערוך תת-משימה"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    onClose(); // סגירת המודל הנוכחי
+                                    if (onEditTask) onEditTask(subtask); // פתיחת מודל עריכה לתת-המשימה
+                                  }}
+                                />
+                                <IconButton
+                                  icon={<DeleteIcon />}
+                                  aria-label="מחק תת-משימה"
+                                  size="sm"
+                                  variant="ghost"
+                                  colorScheme="red"
+                                  onClick={() => handleDeleteSubtask(subtask.id)}
+                                />
+                              </HStack>
+                            </Flex>
+                          </ListItem>
+                        ))}
+                      </List>
+                    ) : (
+                      <Box p={4} textAlign="center" color="gray.500">
+                        אין תתי-משימות. לחץ על "הוסף תת-משימה חדשה" כדי ליצור תת-משימה ראשונה.
+                      </Box>
+                    )}
                   </VStack>
                 </TabPanel>
               )}
               
-              {/* לשונית הגדרות נוספות */}
-              <TabPanel p={0}>
+              {/* טאב הגדרות מתקדמות */}
+              <TabPanel>
                 <VStack spacing={4} align="stretch">
-                  {/* אפשרות להוספה לרשימה הכללית */}
-                  {projectId && !isEditMode && (
-                    <FormControl mt={4}>
-                      <HStack justify="space-between">
-                        <FormLabel fontSize="md" mb={0}>הוסף גם לרשימת המשימות הכללית</FormLabel>
-                        <Switch
-                          colorScheme="blue"
-                          size="md"
-                          isChecked={formData.is_global_template || false}
-                          onChange={handleGlobalTemplateToggle}
-                        />
-                      </HStack>
-                      <Text fontSize="sm" color="gray.600" mt={1}>
-                        אפשרות זו תאפשר לך להשתמש במשימה זו גם בפרויקטים עתידיים
-                      </Text>
-                    </FormControl>
-                  )}
+                  <Heading as="h3" size="sm" mb={2}>
+                    הגדרות מתקדמות
+                  </Heading>
                   
-                  {/* קטגוריה */}
-                  <FormControl mt={4}>
-                    <FormLabel>קטגוריה</FormLabel>
-                    <Select
-                      name="category"
-                      value={formData.category || ''}
-                      onChange={(e) => {
-                        handleChange(e);
-                        // הסרת פוקוס מהתפריט אחרי בחירה
-                        (e.target as HTMLSelectElement).blur();
-                      }}
-                      placeholder="בחר קטגוריה"
-                    >
-                      <option value="פיתוח">פיתוח</option>
-                      <option value="עיצוב">עיצוב</option>
-                      <option value="תוכן">תוכן</option>
-                      <option value="שיווק">שיווק</option>
-                      <option value="תשתיות">תשתיות</option>
-                      <option value="אחר">אחר</option>
-                    </Select>
+                  <FormControl>
+                    <FormLabel>מספר היררכי</FormLabel>
+                    <Input 
+                      name="hierarchical_number" 
+                      value={formData.hierarchical_number || ''} 
+                      onChange={handleChange}
+                      placeholder="הזן מספר היררכי (אופציונלי)"
+                    />
+                  </FormControl>
+                  
+                  <Divider my={2} />
+                  
+                  <FormControl display="flex" alignItems="center">
+                    <FormLabel htmlFor="reminder-setting" mb="0">
+                      הפעל תזכורות לקראת תאריך היעד
+                    </FormLabel>
+                    <Switch id="reminder-setting" />
                   </FormControl>
                 </VStack>
               </TabPanel>
@@ -855,12 +710,13 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
           <Button variant="ghost" mr={3} onClick={onClose}>
             ביטול
           </Button>
-          <Button
-            colorScheme="blue"
+          <Button 
+            colorScheme="blue" 
             onClick={handleSubmit}
             isLoading={loading}
+            loadingText="שומר..."
           >
-            {isEditMode ? 'שמור שינויים' : 'צור משימה'}
+            {isEditMode ? 'עדכן משימה' : 'צור משימה'}
           </Button>
         </ModalFooter>
       </ModalContent>

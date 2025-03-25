@@ -8,8 +8,9 @@ import {
   Collapse,
   IconButton,
   Text,
+  HStack,
 } from '@chakra-ui/react';
-import { AddIcon, ChevronDownIcon, ChevronUpIcon } from '@chakra-ui/icons';
+import { AddIcon, ChevronDownIcon, ChevronUpIcon, CloseIcon } from '@chakra-ui/icons';
 import taskService from '@/lib/services/taskService';
 import { Task } from '@/types/supabase';
 
@@ -18,6 +19,7 @@ interface SubtaskInputProps {
   projectId: string;
   onSubtaskCreated?: (task: Task) => void;
   showExpanded?: boolean;
+  onCancel?: () => void;
 }
 
 const SubtaskInput: React.FC<SubtaskInputProps> = ({
@@ -25,6 +27,7 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
   projectId,
   onSubtaskCreated,
   showExpanded = false,
+  onCancel,
 }) => {
   const [isExpanded, setIsExpanded] = useState(showExpanded);
   const [title, setTitle] = useState('');
@@ -64,6 +67,11 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
       if (onSubtaskCreated) {
         onSubtaskCreated(createdTask);
       }
+      
+      // סגירת הטופס אם יש צורך
+      if (onCancel) {
+        setIsExpanded(false);
+      }
     } catch (error) {
       console.error('Error creating subtask:', error);
       toast({
@@ -75,6 +83,16 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
       });
     } finally {
       setLoading(false);
+    }
+  };
+  
+  // פונקציה לביטול הפעולה
+  const handleCancel = () => {
+    setTitle('');
+    setIsExpanded(false);
+    
+    if (onCancel) {
+      onCancel();
     }
   };
 
@@ -101,31 +119,35 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
           bg="gray.50"
         >
           <form onSubmit={handleAddSubtask}>
-            <Flex gap={2}>
+            <Flex gap={2} direction="column">
               <Input
                 placeholder="הזן כותרת לתת-משימה חדשה"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 bg="white"
-                size="sm"
+                size="md"
                 autoFocus
               />
-              <Button
-                size="sm"
-                colorScheme="blue"
-                type="submit"
-                isLoading={loading}
-                isDisabled={!title.trim()}
-              >
-                הוסף
-              </Button>
-              <IconButton
-                icon={<ChevronUpIcon />}
-                aria-label="סגור טופס"
-                size="sm"
-                variant="ghost"
-                onClick={() => setIsExpanded(false)}
-              />
+              <HStack justifyContent="space-between">
+                <Button
+                  size="sm"
+                  colorScheme="blue"
+                  type="submit"
+                  isLoading={loading}
+                  isDisabled={!title.trim()}
+                  leftIcon={<AddIcon />}
+                >
+                  הוסף תת-משימה
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleCancel}
+                  leftIcon={<CloseIcon />}
+                >
+                  בטל
+                </Button>
+              </HStack>
             </Flex>
           </form>
         </Box>

@@ -35,14 +35,16 @@ import {
   TabPanels,
   Tab,
   TabPanel,
-  useToast
+  useToast,
+  Divider
 } from '@chakra-ui/react';
 import { FiFolder, FiCheckSquare, FiFlag, FiCalendar, FiClock, FiAlertCircle } from 'react-icons/fi';
 import NextLink from 'next/link';
 import projectService from '@/lib/services/projectService';
-import stageService from '@/lib/services/stageService';
+import { stageService } from '@/lib/services/stageService';
 import taskService from '@/lib/services/taskService';
 import { Project, Stage, Task } from '@/types/supabase';
+import StageManager from '@/components/stages/StageManager';
 
 // טיפוס לאבן דרך עם משימות
 interface MilestoneWithTasks extends Stage {
@@ -214,6 +216,18 @@ export default function MilestonesPage() {
           </Select>
         </Box>
       </Flex>
+      
+      {/* רכיב ניהול שלבים - מוצג רק כאשר בוחרים פרויקט ספציפי */}
+      {selectedProject !== 'all' && (
+        <Box mb={8}>
+          <Heading size="md" mb={4}>ניהול שלבי הפרויקט</Heading>
+          <StageManager 
+            projectId={selectedProject} 
+            showTasks={true} 
+          />
+          <Divider my={6} />
+        </Box>
+      )}
       
       {/* תוכן */}
       {loading ? (

@@ -78,6 +78,7 @@ import projectService from '@/lib/services/projectService';
 import taskService from '@/lib/services/taskService';
 import stageService from '@/lib/services/stageService';
 import { Project, Task, Stage } from '@/types/supabase';
+import { ExtendedTask } from '@/types/extendedTypes';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 import TaskTree from '@/components/tasks/TaskTree';
 import TaskGantt from '@/components/tasks/TaskGantt';
@@ -85,6 +86,7 @@ import TaskList from '@/components/tasks/TaskList';
 import TaskEditModal from '@/components/tasks/TaskEditModal';
 import AssignTasksModal from '@/components/tasks/AssignTasksModal';
 import TaskKanban from '@/components/tasks/TaskKanban';
+import StageManager from '@/components/stages/StageManager';
 
 type ProjectPageProps = {
   params: {
@@ -226,22 +228,40 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     }
   };
   
-  // טיפול ביצירת משימה חדשה
+  // פונקציה להטיפול ביצירת משימה חדשה
   const handleTaskCreated = (newTask: Task) => {
-    setTasks([...tasks, newTask]);
+    setTasks(prev => [...prev, newTask]);
+    toast({
+      title: 'המשימה נוצרה בהצלחה',
+      status: 'success',
+      duration: 3000,
+      isClosable: true,
+    });
   };
   
-  // טיפול בעדכון משימה
+  // פונקציה לטיפול בעדכון משימה
   const handleTaskUpdated = (updatedTask: Task) => {
-    setTasks(tasks.map(task => task.id === updatedTask.id ? updatedTask : task));
+    setTasks(prev => prev.map(task => task.id === updatedTask.id ? updatedTask : task));
+    toast({
+      title: 'המשימה עודכנה בהצלחה',
+      status: 'success',
+      duration: 3000,
+      isClosable: true,
+    });
   };
   
-  // טיפול במחיקת משימה
+  // פונקציה לטיפול במחיקת משימה
   const handleTaskDeleted = (taskId: string) => {
-    setTasks(tasks.filter(task => task.id !== taskId));
+    setTasks(prev => prev.filter(task => task.id !== taskId));
+    toast({
+      title: 'המשימה נמחקה בהצלחה',
+      status: 'success',
+      duration: 3000,
+      isClosable: true,
+    });
   };
   
-  // טיפול בעריכת משימה
+  // פונקציה להצגת מודל עריכת משימה
   const handleEditTask = (task: Task) => {
     setSelectedTask(task);
     setIsTaskModalOpen(true);
@@ -687,7 +707,10 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                     <Tab><HStack><FiCalendar /><Text>גאנט</Text></HStack></Tab>
                   </Tooltip>
                   <Tooltip label="הצג את מבנה המשימות בצורת עץ">
-                    <Tab><HStack><FiUsers /><Text>עץ</Text></HStack></Tab>
+                    <Tab><HStack><FiTrello /><Text>עץ</Text></HStack></Tab>
+                  </Tooltip>
+                  <Tooltip label="ניהול שלבי הפרויקט">
+                    <Tab><HStack><FiFlag /><Text>שלבים</Text></HStack></Tab>
                   </Tooltip>
                 </TabList>
                 
@@ -795,36 +818,24 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                   
                   {/* תצוגת עץ */}
                   <TabPanel>
-                    <Box>
-                      {tasks.length > 0 ? (
-                        <TaskTree
-                          projectId={id}
-                          tasks={tasks}
-                          onTaskEdited={handleTaskUpdated}
-                          onTaskDeleted={handleTaskDeleted}
-                          onTaskStatusChanged={handleStatusChange}
-                        />
-                      ) : (
-                        <Card p={8} textAlign="center" variant="outline">
-                          <CardBody>
-                            <Icon as={FiStar} w={12} h={12} color="gray.400" mb={4} />
-                            <Heading size="md" mb={2}>אין משימות להצגה בעץ המשימות</Heading>
-                            <Text mb={6} color="gray.500">
-                              צור משימות עם קשרי הורה-ילד כדי להציג אותן בתצוגת עץ
-                            </Text>
-                            <Button
-                              leftIcon={<FiPlus />}
-                              colorScheme="blue"
-                              onClick={() => {
-                                setSelectedTask(null);
-                                setIsTaskModalOpen(true);
-                              }}
-                            >
-                              צור משימה חדשה
-                            </Button>
-                          </CardBody>
-                        </Card>
-                      )}
+                    <TaskTree 
+                      tasks={tasks} 
+                      projectId={id}
+                      onTaskEdited={handleEditTask}
+                      onTaskDeleted={handleDeleteTask}
+                      onTaskStatusChanged={handleStatusChange}
+                      loading={loading}
+                    />
+                  </TabPanel>
+                  
+                  {/* תצוגת שלבים */}
+                  <TabPanel>
+                    <Box py={4}>
+                      <Heading size="md" mb={4}>ניהול שלבי הפרויקט</Heading>
+                      <Text mb={4} color="gray.600">
+                        כאן תוכל לנהל את שלבי הפרויקט - להוסיף שלבים חדשים, לערוך או למחוק שלבים קיימים.
+                      </Text>
+                      <StageManager projectId={id} showTasks={true} />
                     </Box>
                   </TabPanel>
                 </TabPanels>
@@ -833,16 +844,14 @@ export default function ProjectPage({ params }: ProjectPageProps) {
           </Card>
 
           {/* מודל עריכת משימה */}
-          {isTaskModalOpen && (
-            <TaskEditModal
-              isOpen={isTaskModalOpen}
-              onClose={() => setIsTaskModalOpen(false)}
-              task={selectedTask}
-              projectId={id}
-              onTaskCreated={handleTaskCreated}
-              onTaskUpdated={handleTaskUpdated}
-            />
-          )}
+          <TaskEditModal
+            isOpen={isTaskModalOpen}
+            onClose={() => setIsTaskModalOpen(false)}
+            task={selectedTask as any}
+            projectId={id}
+            onTaskCreated={handleTaskCreated as any}
+            onTaskUpdated={handleTaskUpdated as any}
+          />
           
           {/* מודל הקצאת משימות */}
           {isAssignTasksModalOpen && (

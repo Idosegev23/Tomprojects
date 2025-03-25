@@ -43,10 +43,12 @@ import {
   FiCreditCard,
   FiStar,
   FiActivity,
-  FiList
+  FiList,
+  FiLayers,
 } from 'react-icons/fi';
-import { Task } from '@/types/supabase';
+import { Task, Stage } from '@/types/supabase';
 import taskService from '@/lib/services/taskService';
+import stageService from '@/lib/services/stageService';
 import TaskEditModal from '@/components/tasks/TaskEditModal';
 import QuickAddTask from '@/components/tasks/QuickAddTask';
 
@@ -57,14 +59,28 @@ interface TaskListProps {
   onTaskDeleted?: (taskId: string) => void;
 }
 
+// הרחבת ממשק Stage כדי לכלול את שדה color
+interface ExtendedStage extends Stage {
+  color?: string;
+  status?: string;
+}
+
+// הוספת ממשק מורחב עבור משימה עם שם השלב
+interface TaskWithStage extends Task {
+  stageName?: string;
+  stageColor?: string;
+}
+
 const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpdated, onTaskDeleted }) => {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<TaskWithStage[]>([]);
+  const [stages, setStages] = useState<ExtendedStage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [priorityFilter, setPriorityFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [stageFilter, setStageFilter] = useState<string>('');
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -74,19 +90,36 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const hoverBgColor = useColorModeValue('gray.50', 'gray.700');
   
-  // טעינת המשימות
+  // עדכון טעינת המשימות והשלבים
   useEffect(() => {
-    const loadTasks = async () => {
+    const loadData = async () => {
       try {
         setLoading(true);
+        
+        // טעינת שלבים
+        const stagesData = await stageService.getProjectStages(projectId);
+        setStages(stagesData as ExtendedStage[]);
+        
+        // טעינת משימות
         const tasksData = await taskService.getTasks({ projectId });
-        setTasks(tasksData);
+        
+        // הוספת שם השלב לכל משימה
+        const tasksWithStage: TaskWithStage[] = tasksData.map(task => {
+          const stage = stagesData.find(s => s.id === task.stage_id) as ExtendedStage | undefined;
+          return {
+            ...task,
+            stageName: stage?.title || 'ללא שלב',
+            stageColor: stage?.color || '',
+          };
+        });
+        
+        setTasks(tasksWithStage);
       } catch (err) {
-        console.error('Error loading tasks:', err);
-        setError('אירעה שגיאה בטעינת המשימות');
+        console.error('Error loading data:', err);
+        setError('אירעה שגיאה בטעינת הנתונים');
         
         toast({
-          title: 'שגיאה בטעינת משימות',
+          title: 'שגיאה בטעינת נתונים',
           description: err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה',
           status: 'error',
           duration: 5000,
@@ -97,7 +130,7 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
       }
     };
     
-    loadTasks();
+    loadData();
   }, [projectId, toast]);
   
   // פונקציה לפתיחת מודל יצירת משימה חדשה
@@ -108,7 +141,15 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
   
   // פונקציה לטיפול ביצירת משימה חדשה
   const handleTaskCreated = (newTask: Task) => {
-    setTasks([...tasks, newTask]);
+    // הוספת השלב למשימה החדשה
+    const stage = stages.find(s => s.id === newTask.stage_id);
+    const taskWithStage: TaskWithStage = {
+      ...newTask,
+      stageName: stage?.title || 'ללא שלב',
+      stageColor: stage?.color || '',
+    };
+    
+    setTasks([...tasks, taskWithStage]);
     
     if (onTaskCreated) {
       onTaskCreated(newTask);
@@ -124,7 +165,15 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
   
   // פונקציה לטיפול בעדכון משימה
   const handleTaskUpdated = (updatedTask: Task) => {
-    setTasks(tasks.map(task => (task.id === updatedTask.id ? updatedTask : task)));
+    // הוספת השלב למשימה המעודכנת
+    const stage = stages.find(s => s.id === updatedTask.stage_id);
+    const taskWithStage: TaskWithStage = {
+      ...updatedTask,
+      stageName: stage?.title || 'ללא שלב',
+      stageColor: stage?.color || '',
+    };
+    
+    setTasks(tasks.map(task => (task.id === updatedTask.id ? taskWithStage : task)));
     setSelectedTask(null);
     setIsTaskModalOpen(false);
     
@@ -193,7 +242,10 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
     // סינון לפי קטגוריה
     const matchesCategory = !categoryFilter || task.category === categoryFilter;
     
-    return matchesSearch && matchesStatus && matchesPriority && matchesCategory;
+    // סינון לפי שלב
+    const matchesStage = !stageFilter || task.stage_id === stageFilter;
+    
+    return matchesSearch && matchesStatus && matchesPriority && matchesCategory && matchesStage;
   });
   
   // פונקציה לקבלת צבע לפי סטטוס
@@ -479,7 +531,33 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
               <option value="תשתיות">תשתיות</option>
               <option value="אחר">אחר</option>
             </Select>
+            
+            <Box>
+              <Text fontWeight="bold" mb={2}>שלב</Text>
+              <Select 
+                placeholder="כל השלבים" 
+                value={stageFilter} 
+                onChange={(e) => setStageFilter(e.target.value)}
+                size="sm"
+              >
+                <option value="">ללא שלב</option>
+                {stages.map(stage => (
+                  <option key={stage.id} value={stage.id}>{stage.title}</option>
+                ))}
+              </Select>
+            </Box>
           </Flex>
+          <Button 
+            size="sm"
+            onClick={() => {
+              setStatusFilter('');
+              setPriorityFilter('');
+              setCategoryFilter('');
+              setStageFilter('');
+            }}
+          >
+            נקה סינון
+          </Button>
         </CardBody>
       </Card>
       
@@ -514,11 +592,12 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
                 onChange={(e) => handleSelectAll(e.target.checked)}
                 mr={2}
               />
-              <Box flex="2">כותרת</Box>
-              <Box flex="1">סטטוס</Box>
-              <Box flex="1">עדיפות</Box>
-              <Box flex="1">תאריך יעד</Box>
-              <Box flex="1">פעולות</Box>
+              <Box flex="2">משימה</Box>
+              <Box flex="1" display={{ base: "none", md: "block" }}>שלב</Box>
+              <Box flex="1" display={{ base: "none", md: "block" }}>סטטוס</Box>
+              <Box flex="1" display={{ base: "none", md: "block" }}>עדיפות</Box>
+              <Box flex="1" display={{ base: "none", md: "block" }}>תאריך יעד</Box>
+              <Box flex="1" display={{ base: "none", md: "block" }}>פעולות</Box>
             </Flex>
             
             {/* רשימת המשימות */}
@@ -546,13 +625,31 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
                           {task.hierarchical_number}
                         </Tag>
                       )}
-                      {task.title}
+                      <Text 
+                        fontWeight="bold"
+                        textDecoration={task.status === 'done' ? 'line-through' : 'none'}
+                        opacity={task.status === 'done' ? 0.7 : 1}
+                      >
+                        {task.title}
+                      </Text>
                     </Text>
                     {task.description && (
                       <Text fontSize="sm" color="gray.600" noOfLines={1} mt={1}>
                         {task.description}
                       </Text>
                     )}
+                  </Box>
+                  
+                  {/* שלב */}
+                  <Box flex="1" display={{ base: "none", md: "block" }}>
+                    <Tag 
+                      size="sm" 
+                      variant="subtle" 
+                      colorScheme={task.stageColor || "gray"}
+                    >
+                      <TagLeftIcon as={FiLayers} />
+                      <TagLabel>{task.stageName}</TagLabel>
+                    </Tag>
                   </Box>
                   
                   <Box flex="1" display={{ base: "none", md: "block" }}>
@@ -611,16 +708,17 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
       )}
       
       {/* מודל עריכת משימה */}
-      {isTaskModalOpen && (
-        <TaskEditModal
-          isOpen={isTaskModalOpen}
-          onClose={() => setIsTaskModalOpen(false)}
-          task={selectedTask}
-          projectId={projectId}
-          onTaskCreated={handleTaskCreated}
-          onTaskUpdated={handleTaskUpdated}
-        />
-      )}
+      <TaskEditModal 
+        isOpen={isTaskModalOpen} 
+        onClose={() => {
+          setIsTaskModalOpen(false);
+          setSelectedTask(null);
+        }} 
+        task={selectedTask as any} 
+        projectId={projectId}
+        onTaskCreated={handleTaskCreated as any} 
+        onTaskUpdated={handleTaskUpdated as any} 
+      />
     </Box>
   );
 };

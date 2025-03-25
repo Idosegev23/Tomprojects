@@ -41,7 +41,7 @@
   "devDependencies": {
     "@types/node": "^20.10.4",
     "@types/react": "^18.2.42",
-    "@types/react-beautiful-dnd": "^13.1.7",
+    "@types/react-beautiful-dnd": "^13.1.8",
     "@types/react-dom": "^18.2.17",
     "autoprefixer": "^10.4.16",
     "eslint": "^8.55.0",
