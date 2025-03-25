@@ -152,6 +152,25 @@ export const taskService = {
     // יצירת עותק של האובייקט task
     const cleanTask = { ...task };
     
+    // סינון שדה children אם קיים (לא קיים בטבלה בפועל)
+    if ('children' in cleanTask) {
+      delete (cleanTask as any).children;
+    }
+    
+    // וידוא שיש parent_task_id תקין, אם לא קיים שינוי לnull
+    if (cleanTask.parent_task_id === undefined) {
+      // בדיקת האם יש קשר הורה קיים במסד הנתונים
+      const { data: existingTask } = await supabase
+        .from('tasks')
+        .select('parent_task_id')
+        .eq('id', id)
+        .single();
+      
+      if (existingTask) {
+        cleanTask.parent_task_id = existingTask.parent_task_id;
+      }
+    }
+    
     // טיפול בשדות תאריך ריקים - הסרתם מהאובייקט
     const dateFields = ['start_date', 'due_date', 'completed_date'];
     for (const field of dateFields) {
