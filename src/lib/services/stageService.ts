@@ -13,27 +13,51 @@ const checkIfTableExists = async (tableName: string): Promise<boolean> => {
   const supabase = createClientComponentClient();
   
   try {
-    // ניסיון לבצע שאילתה פשוטה על הטבלה כדי לבדוק אם היא קיימת
-    console.log(`בודק אם הטבלה ${tableName} קיימת...`);
+    console.log(`בודק אם הטבלה ${tableName} קיימת באמצעות פונקציית rpc...`);
     
-    const { data, error } = await supabase
-      .from(tableName)
-      .select('count(*)')
-      .limit(1)
-      .maybeSingle();
+    // שימוש בפונקציית RPC ייעודית לבדיקת קיום טבלה
+    const { data, error } = await supabase.rpc('check_table_exists', {
+      table_name_param: tableName
+    });
+    
+    if (error) {
+      console.error(`שגיאה בבדיקת קיום הטבלה ${tableName} באמצעות RPC:`, error);
       
-    // אם נקבל שגיאה שמתייחסת לכך שהטבלה לא קיימת
-    if (error && (error.message.includes('does not exist') || error.code === '42P01')) {
-      console.log(`הטבלה ${tableName} לא קיימת.`);
-      return false;
+      // אם יש שגיאת RPC, ננסה בדיקה ישירה
+      try {
+        console.log(`מנסה שיטה חלופית לבדיקת קיום הטבלה ${tableName}...`);
+        
+        // ננסה לעשות שאילתה פשוטה על הטבלה
+        const { data: testData, error: testError } = await supabase
+          .from(tableName)
+          .select('count(*)')
+          .limit(1);
+          
+        if (testError) {
+          // אם קיבלנו שגיאה 400, סימן שהטבלה לא קיימת
+          if (testError.code === '42P01' || testError.message.includes('does not exist') || (testError as any).status === 400) {
+            console.log(`הטבלה ${tableName} לא קיימת (לפי בדיקה ישירה).`);
+            return false;
+          }
+          
+          // שגיאה אחרת - לא בטוח אם הטבלה קיימת
+          console.error(`שגיאה לא צפויה בבדיקת קיום הטבלה ${tableName}:`, testError);
+          return false;
+        }
+        
+        // אם לא התקבלה שגיאה, הטבלה קיימת
+        console.log(`הטבלה ${tableName} קיימת (לפי בדיקה ישירה).`);
+        return true;
+      } catch (testErr) {
+        console.error(`כשלון מוחלט בבדיקת קיום הטבלה ${tableName}:`, testErr);
+        return false;
+      }
     }
     
-    // אם לא התקבלה שגיאה, הטבלה קיימת
-    console.log(`הטבלה ${tableName} קיימת.`);
-    return true;
+    console.log(`הטבלה ${tableName} ${data ? 'קיימת' : 'לא קיימת'} (לפי RPC).`);
+    return !!data;
   } catch (err) {
-    // במקרה של שגיאה לא צפויה, נניח שהטבלה לא קיימת
-    console.error(`שגיאה בבדיקת קיום הטבלה ${tableName}:`, err);
+    console.error(`שגיאה בלתי צפויה בבדיקת קיום הטבלה ${tableName}:`, err);
     return false;
   }
 };

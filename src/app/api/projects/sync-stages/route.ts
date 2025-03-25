@@ -99,26 +99,30 @@ export async function POST(req: NextRequest) {
       
       try {
         // בדיקת טבלת המשימות
-        const { error: tasksError } = await supabase
-          .from(tasksTableName)
-          .select('count(*)')
-          .limit(1);
+        const { data: tasksExists, error: tasksCheckError } = await supabase
+          .rpc('check_table_exists', { table_name_param: tasksTableName });
           
-        tasksTableExists = !tasksError;
+        if (tasksCheckError) {
+          console.error(`שגיאה בבדיקת קיום טבלת המשימות ${tasksTableName}:`, tasksCheckError);
+        } else {
+          tasksTableExists = !!tasksExists;
+        }
       } catch (e) {
-        console.log(`טבלת המשימות ${tasksTableName} לא קיימת`);
+        console.log(`שגיאה בבדיקת טבלת המשימות ${tasksTableName}:`, e);
       }
       
       try {
         // בדיקת טבלת השלבים
-        const { error: stagesError } = await supabase
-          .from(stagesTableName)
-          .select('count(*)')
-          .limit(1);
+        const { data: stagesExists, error: stagesCheckError } = await supabase
+          .rpc('check_table_exists', { table_name_param: stagesTableName });
           
-        stagesTableExists = !stagesError;
+        if (stagesCheckError) {
+          console.error(`שגיאה בבדיקת קיום טבלת השלבים ${stagesTableName}:`, stagesCheckError);
+        } else {
+          stagesTableExists = !!stagesExists;
+        }
       } catch (e) {
-        console.log(`טבלת השלבים ${stagesTableName} לא קיימת`);
+        console.log(`שגיאה בבדיקת טבלת השלבים ${stagesTableName}:`, e);
       }
       
       // אם שתי הטבלאות קיימות, נבצע סנכרון
