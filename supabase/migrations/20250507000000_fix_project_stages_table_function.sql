@@ -28,7 +28,7 @@ BEGIN
       progress integer DEFAULT 0,
       color text,
       parent_stage_id uuid,
-      dependencies jsonb,
+      dependencies text[],
       sort_order integer,
       created_at timestamptz DEFAULT now(),
       updated_at timestamptz DEFAULT now(),
@@ -65,6 +65,14 @@ BEGIN
     CREATE INDEX %I ON %I (parent_stage_id);
   ', 
     table_name || '_parent_stage_id_idx',
+    table_name
+  );
+  
+  -- יצירת אינדקס על שדה hierarchical_number
+  EXECUTE format('
+    CREATE INDEX %I ON %I (hierarchical_number);
+  ', 
+    table_name || '_hierarchical_number_idx',
     table_name
   );
   

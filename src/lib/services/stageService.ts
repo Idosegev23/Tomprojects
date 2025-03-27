@@ -62,6 +62,44 @@ const checkIfTableExists = async (tableName: string): Promise<boolean> => {
   }
 };
 
+// פונקציית עזר - קבלת רשימת העמודות הקיימות בטבלה
+const getTableColumns = async (tableName: string): Promise<string[]> => {
+  const supabase = createClientComponentClient();
+  
+  try {
+    // נסיון שימוש בפונקציית RPC מוגדרת מראש
+    const { data, error } = await supabase.rpc('get_table_columns', {
+      table_name_param: tableName
+    });
+    
+    if (error) {
+      console.error(`שגיאה בקבלת עמודות של הטבלה ${tableName}:`, error);
+      
+      // אם אין פונקציית RPC מתאימה, ננסה להשתמש בפונקציה אחרת
+      try {
+        const { data: columnsData, error: columnsError } = await supabase.rpc('check_table_columns', {
+          p_table_name: tableName
+        });
+        
+        if (columnsError) {
+          console.error(`שגיאה בנסיון חלופי לקבלת עמודות הטבלה ${tableName}:`, columnsError);
+          return [];
+        }
+        
+        return columnsData || [];
+      } catch (altError) {
+        console.error(`שגיאה בנסיון חלופי לקבלת עמודות הטבלה ${tableName}:`, altError);
+        return [];
+      }
+    }
+    
+    return data || [];
+  } catch (err) {
+    console.error(`שגיאה בלתי צפויה בקבלת עמודות של הטבלה ${tableName}:`, err);
+    return [];
+  }
+};
+
 export const stageService = {
   // קריאת כל השלבים בפרויקט
   async getProjectStages(projectId: string): Promise<Stage[]> {
@@ -168,7 +206,7 @@ export const stageService = {
   },
   
   // יצירת שלב חדש
-  async createStage(projectId: string, stage: Partial<Stage>): Promise<Stage> {
+  async createStage(projectId: string, stage: any): Promise<Stage> {
     const projectPrefix = projectId ? `project_${projectId}` : "";
     const tableName = projectId ? `project_${projectId}_stages` : "stages";
     
@@ -195,6 +233,22 @@ export const stageService = {
       
       if (fixError) {
         console.error(`שגיאה בתיקון טבלת השלבים ${tableName}:`, fixError);
+        
+        // אם הפונקציה הראשונה נכשלה, ננסה את הפונקציה המיוחדת
+        try {
+          console.log(`מנסה להשתמש בפונקציה המיוחדת לתיקון טבלת השלבים ${tableName}...`);
+          const { data: fixSpecificResult, error: fixSpecificError } = await supabase.rpc('fix_specific_project_stages_table', {
+            project_id_param: projectId
+          });
+          
+          if (fixSpecificError) {
+            console.error(`שגיאה בתיקון מיוחד של טבלת השלבים ${tableName}:`, fixSpecificError);
+          } else {
+            console.log(`תיקון מיוחד של טבלת השלבים ${tableName} הושלם בהצלחה:`, fixSpecificResult);
+          }
+        } catch (specificError) {
+          console.error(`שגיאה לא צפויה בתיקון מיוחד של טבלת השלבים ${tableName}:`, specificError);
+        }
       } else {
         console.log(`תיקון טבלת השלבים ${tableName} הושלם בהצלחה:`, fixResult);
       }
@@ -203,12 +257,34 @@ export const stageService = {
     }
 
     try {
-      console.log(`מנסה ליצור שלב בטבלה ${tableName}`, stage);
+      // יצירת אובייקט שלב שמכיל רק את השדות הקיימים בטבלה
+      const validStageData = {
+        id: stage.id,
+        title: stage.title,
+        hierarchical_number: stage.hierarchical_number,
+        due_date: stage.due_date,
+        status: stage.status,
+        progress: stage.progress,
+        color: stage.color,
+        parent_stage_id: stage.parent_stage_id,
+        dependencies: stage.dependencies,
+        sort_order: stage.sort_order,
+        created_at: stage.created_at,
+        updated_at: stage.updated_at,
+        project_id: projectId
+      };
+      
+      // מסיר שדות שהם undefined כדי שלא תהיה התנגשות עם ערכי ברירת מחדל בדאטהבייס
+      const cleanedStageData = Object.fromEntries(
+        Object.entries(validStageData).filter(([_, value]) => value !== undefined)
+      );
+
+      console.log(`מנסה ליצור שלב בטבלה ${tableName} עם הנתונים:`, cleanedStageData);
 
       // שליחת הבקשה ליצירת השלב
       const { data, error } = await supabase
         .from(tableName)
-        .insert(stage)
+        .insert(cleanedStageData)
         .select()
         .single();
 
@@ -233,7 +309,7 @@ export const stageService = {
             // נסיון נוסף ליצירת השלב
             const { data: retryData, error: retryError } = await supabase
               .from(tableName)
-              .insert(stage)
+              .insert(cleanedStageData)
               .select()
               .single();
               
@@ -249,39 +325,115 @@ export const stageService = {
           }
         }
         
-        // אם השגיאה קשורה לעמודה 'dependencies' חסרה
-        if (error.message?.includes('dependencies') || error.message?.includes('column') || error.message?.includes('does not exist')) {
-          console.log('יתכן ויש בעיה עם מבנה הטבלה - מנסה לתקן באופן מפורש');
+        // אם השגיאה קשורה לעמודות חסרות
+        if (error.message?.includes('column') || error.message?.includes('does not exist')) {
+          console.log('יתכן ויש בעיה עם מבנה הטבלה - מנסה לבדוק אילו עמודות קיימות');
           
           try {
-            // נסיון נוסף לתקן את הטבלה באופן ספציפי עבור עמודת dependencies
-            const { data: fixTableResult, error: fixTableError } = await supabase.rpc('fix_project_stages_table', {
-              project_id_param: projectId
-            });
+            // נבדוק אילו עמודות קיימות בטבלה באמצעות הפונקציה שהגדרנו
+            const existingColumns = await getTableColumns(tableName);
             
-            if (fixTableError) {
-              console.error('שגיאה בתיקון טבלת השלבים:', fixTableError);
-              throw new Error('לא ניתן לתקן את טבלת השלבים: ' + fixTableError.message);
+            if (existingColumns.length > 0) {
+              console.log(`עמודות קיימות בטבלה ${tableName}:`, existingColumns);
+              
+              // יצירת אובייקט חדש רק עם העמודות הקיימות
+              const filteredStageData: any = {};
+              
+              for (const column of existingColumns) {
+                if (cleanedStageData.hasOwnProperty(column)) {
+                  filteredStageData[column] = (cleanedStageData as any)[column];
+                }
+              }
+              
+              console.log('מנסה ליצור שלב עם עמודות קיימות בלבד:', filteredStageData);
+              
+              // נסיון נוסף ליצירת השלב עם העמודות הקיימות בלבד
+              const { data: retryData, error: retryError } = await supabase
+                .from(tableName)
+                .insert(filteredStageData)
+                .select()
+                .single();
+                
+              if (retryError) {
+                console.error('שגיאה בנסיון השני ליצירת שלב:', retryError);
+                throw retryError;
+              }
+              
+              return retryData as Stage;
+            } else {
+              console.log(`לא הצלחנו לקבל את העמודות של הטבלה ${tableName}.`);
             }
+          } catch (columnCheckError) {
+            console.error('שגיאה בבדיקת מבנה הטבלה:', columnCheckError);
+          }
+          
+          // אם הבדיקה נכשלה, ננסה ליצור שלב עם שדות בסיסיים בלבד
+          const basicStageData = {
+            title: stage.title || 'שלב חדש',
+            project_id: projectId
+          };
+          
+          try {
+            console.log('מנסה ליצור שלב עם שדות בסיסיים בלבד:', basicStageData);
             
-            console.log('תיקון טבלת השלבים הושלם, מנסה ליצור שלב שוב');
-            
-            // נסיון נוסף ליצירת השלב
-            const { data: retryData, error: retryError } = await supabase
+            const { data: fallbackData, error: fallbackError } = await supabase
               .from(tableName)
-              .insert(stage)
+              .insert(basicStageData)
               .select()
               .single();
               
-            if (retryError) {
-              console.error('שגיאה בנסיון השני ליצירת שלב:', retryError);
-              throw retryError;
+            if (fallbackError) {
+              console.error('שגיאה בנסיון האחרון ליצירת שלב בטבלה הספציפית:', fallbackError);
+              
+              // נסיון אחרון - ליצור בטבלה הרגילה 'stages'
+              if (tableName !== 'stages') {
+                console.log('מנסה ליצור שלב בטבלה הרגילה stages');
+                
+                const { data: regularTableData, error: regularTableError } = await supabase
+                  .from('stages')
+                  .insert(basicStageData)
+                  .select()
+                  .single();
+                  
+                if (regularTableError) {
+                  console.error('שגיאה בנסיון ליצירת שלב בטבלה הרגילה:', regularTableError);
+                  throw regularTableError;
+                }
+                
+                return regularTableData as Stage;
+              }
+              
+              throw fallbackError;
             }
             
-            return retryData as Stage;
-          } catch (fixError) {
-            console.error('שגיאה בנסיון לתקן את הבעיה:', fixError);
-            throw new Error('לא ניתן ליצור שלב עקב בעיה עם מבנה הטבלה');
+            return fallbackData as Stage;
+          } catch (fallbackError) {
+            console.error('שגיאה בנסיון האחרון ליצירת שלב בטבלה הספציפית:', fallbackError);
+            
+            // נסיון אחרון - ליצור בטבלה הרגילה 'stages'
+            if (tableName !== 'stages') {
+              console.log('מנסה ליצור שלב בטבלה הרגילה stages');
+              
+              try {
+                const { data: regularTableData, error: regularTableError } = await supabase
+                  .from('stages')
+                  .insert(basicStageData)
+                  .select()
+                  .single();
+                  
+                if (regularTableError) {
+                  console.error('שגיאה בנסיון ליצירת שלב בטבלה הרגילה:', regularTableError);
+                  throw regularTableError;
+                }
+                
+                return regularTableData as Stage;
+              } catch (regularError) {
+                console.error('שגיאה מוחלטת בנסיון ליצירת שלב:', regularError);
+                throw new Error('לא ניתן ליצור שלב עקב בעיה עם מבנה הטבלה');
+              }
+            }
+            
+            throw fallbackError;
           }
         }
         

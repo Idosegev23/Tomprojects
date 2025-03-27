@@ -689,6 +689,7 @@ DECLARE
   has_dependencies boolean := false;
   has_sort_order boolean := false;
   has_order_num boolean := false;
+  has_hierarchical_number boolean := false;
   dependencies_type text;
   table_exists boolean;
 BEGIN
@@ -714,6 +715,8 @@ BEGIN
       has_sort_order := true;
     ELSIF cols_info.column_name = 'order_num' THEN
       has_order_num := true;
+    ELSIF cols_info.column_name = 'hierarchical_number' THEN
+      has_hierarchical_number := true;
     END IF;
   END LOOP;
 
@@ -732,6 +735,16 @@ BEGIN
       RAISE NOTICE 'שינוי סוג עמודת dependencies ל-text[] בטבלה %', table_name;
     EXCEPTION WHEN OTHERS THEN
       RAISE NOTICE 'שגיאה בשינוי סוג עמודת dependencies בטבלה %: %', table_name, SQLERRM;
+    END;
+  END IF;
+
+  -- וידוא שיש עמודת hierarchical_number
+  IF NOT has_hierarchical_number THEN
+    BEGIN
+      EXECUTE format('ALTER TABLE %I ADD COLUMN hierarchical_number text', table_name);
+      RAISE NOTICE 'הוספת עמודת hierarchical_number לטבלה %', table_name;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'שגיאה בהוספת עמודת hierarchical_number לטבלה %: %', table_name, SQLERRM;
     END;
   END IF;
 
@@ -881,4 +894,132 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 SELECT ensure_stages_history_table();
 
 -- הענקת הרשאות לפונקצייה
-GRANT EXECUTE ON FUNCTION ensure_stages_history_table() TO anon, authenticated, service_role; 
+GRANT EXECUTE ON FUNCTION ensure_stages_history_table() TO anon, authenticated, service_role;
+
+-- פונקציה לתיקון מיידי של טבלאות שלבים ספציפיות עם בעיות
+CREATE OR REPLACE FUNCTION fix_specific_project_stages_table(project_id_param text DEFAULT '2057a0b3-43cc-469b-b60a-6996bf9ddc38')
+RETURNS boolean AS $$
+DECLARE
+  table_name text := 'project_' || project_id_param || '_stages';
+  table_exists boolean;
+  sql_command text;
+BEGIN
+  -- בדיקה האם הטבלה קיימת
+  SELECT EXISTS (
+    SELECT FROM information_schema.tables 
+    WHERE table_schema = 'public' AND table_name = table_name
+  ) INTO table_exists;
+  
+  -- אם הטבלה קיימת, ננסה לתקן אותה
+  IF table_exists THEN
+    RAISE NOTICE 'טבלה % קיימת, מנסה לתקן', table_name;
+    
+    -- בדיקה לכל עמודה והוספה אם חסרה
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_schema = 'public' AND table_name = table_name AND column_name = 'hierarchical_number'
+    ) THEN
+      EXECUTE format('ALTER TABLE %I ADD COLUMN hierarchical_number text', table_name);
+      RAISE NOTICE 'הוספת עמודת hierarchical_number לטבלה %', table_name;
+    END IF;
+    
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_schema = 'public' AND table_name = table_name AND column_name = 'dependencies'
+    ) THEN
+      EXECUTE format('ALTER TABLE %I ADD COLUMN dependencies text[]', table_name);
+      RAISE NOTICE 'הוספת עמודת dependencies לטבלה %', table_name;
+    END IF;
+    
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_schema = 'public' AND table_name = table_name AND column_name = 'sort_order'
+    ) THEN
+      -- בדיקה אם יש עמודת order_num והסבה שלה ל-sort_order
+      IF EXISTS (
+        SELECT FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = table_name AND column_name = 'order_num'
+      ) THEN
+        EXECUTE format('ALTER TABLE %I RENAME COLUMN order_num TO sort_order', table_name);
+        RAISE NOTICE 'שינוי שם עמודה מ-order_num ל-sort_order בטבלה %', table_name;
+      ELSE
+        EXECUTE format('ALTER TABLE %I ADD COLUMN sort_order integer', table_name);
+        RAISE NOTICE 'הוספת עמודת sort_order לטבלה %', table_name;
+      END IF;
+    END IF;
+    
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_schema = 'public' AND table_name = table_name AND column_name = 'parent_stage_id'
+    ) THEN
+      EXECUTE format('ALTER TABLE %I ADD COLUMN parent_stage_id uuid', table_name);
+      RAISE NOTICE 'הוספת עמודת parent_stage_id לטבלה %', table_name;
+    END IF;
+    
+    RAISE NOTICE 'תיקון הטבלה % הסתיים בהצלחה', table_name;
+    RETURN true;
+  ELSE
+    -- אם הטבלה לא קיימת, יצירת טבלה חדשה
+    RAISE NOTICE 'טבלה % לא קיימת, יוצר טבלה חדשה', table_name;
+    
+    -- יצירת טבלה חדשה עם כל העמודות הנדרשות
+    sql_command := format('
+      CREATE TABLE %I (
+        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        title text NOT NULL,
+        project_id uuid NOT NULL,
+        hierarchical_number text,
+        due_date date,
+        status text DEFAULT ''pending'',
+        progress integer DEFAULT 0,
+        color text,
+        parent_stage_id uuid,
+        dependencies text[],
+        sort_order integer,
+        created_at timestamptz DEFAULT now(),
+        updated_at timestamptz DEFAULT now(),
+        CONSTRAINT %I FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      )',
+      table_name,
+      table_name || '_project_id_fkey'
+    );
+    
+    EXECUTE sql_command;
+    
+    -- הענקת הרשאות
+    EXECUTE format('
+      GRANT ALL ON TABLE %I TO postgres, service_role;
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE %I TO authenticated;
+      GRANT SELECT ON TABLE %I TO anon;
+    ', 
+      table_name, table_name, table_name
+    );
+    
+    -- ביטול RLS
+    EXECUTE format('
+      ALTER TABLE %I DISABLE ROW LEVEL SECURITY;
+    ', table_name);
+    
+    -- יצירת אינדקסים
+    EXECUTE format('CREATE INDEX %I ON %I (project_id)', table_name || '_project_id_idx', table_name);
+    EXECUTE format('CREATE INDEX %I ON %I (parent_stage_id)', table_name || '_parent_stage_id_idx', table_name);
+    EXECUTE format('CREATE INDEX %I ON %I (hierarchical_number)', table_name || '_hierarchical_number_idx', table_name);
+    EXECUTE format('CREATE INDEX %I ON %I (sort_order)', table_name || '_sort_order_idx', table_name);
+    
+    RAISE NOTICE 'יצירת הטבלה % הסתיימה בהצלחה', table_name;
+    RETURN true;
+  END IF;
+
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'שגיאה בתיקון/יצירת טבלת השלבים %: %', table_name, SQLERRM;
+  RETURN false;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- הענקת הרשאות לפונקציה החדשה
+GRANT EXECUTE ON FUNCTION fix_specific_project_stages_table(text) TO anon, authenticated, service_role;
+
+-- הפעלת הפונקציה לתיקון הטבלה הבעייתית
+SELECT fix_specific_project_stages_table();
+
+-- המשך הקוד הקיים... 
