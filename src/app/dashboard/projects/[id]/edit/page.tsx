@@ -236,7 +236,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
     
     try {
       // יצירת שלב חדש - ללא שדה order
-      const newStage = await stageService.createStage({
+      const newStage = await stageService.createStage(id, {
         project_id: id,
         title: newStageName,
       });

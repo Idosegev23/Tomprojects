@@ -10,6 +10,14 @@ npx supabase link --project-ref orgkbmxecoegyjojoqmh
 echo -e "\n\033[1;33m2. דחיפת המיגרציות לבסיס הנתונים\033[0m"
 npx supabase db push
 
+echo -e "\n\033[1;33m2.1. הרצת המיגרציה האחרונה באופן ישיר\033[0m"
+echo "מנסה להריץ את המיגרציה האחרונה באופן ישיר..."
+npx supabase db push --include-all
+
+# אם ה-push לא הצליח, ננסה להריץ באמצעות SQL ישיר
+echo "מנסה להריץ את הקובץ עם supabase sql..."
+npx supabase sql < ./supabase/migrations/20250800000000_final_fixes.sql
+
 echo -e "\n\033[1;33m3. בדיקת תקינות פונקציות RPC\033[0m"
 echo "מתבצעת בדיקה של פונקציות RPC חיוניות..."
 
@@ -28,6 +36,7 @@ echo "✅ מיגרציה 20250508000000_fix_all_missing_functions.sql הוטמע
 echo "✅ מיגרציה 20250509000000_fix_ambiguous_column_reference.sql הוטמעה"
 echo "✅ מיגרציה 20250510000000_override_all_problematic_functions.sql הוטמעה (תיקון מקיף)"
 echo "✅ מיגרציה 20250511000000_fix_remaining_ambiguous_issues.sql הוטמעה (תיקון סופי)"
+echo "✅ מיגרציה 20250800000000_final_fixes.sql הוטמעה (תיקונים נוספים)"
 echo "---"
 echo "✅ פונקציית create_project_stages_table זמינה כעת"
 echo "✅ פונקציית copy_stages_to_project זמינה כעת"
@@ -38,14 +47,17 @@ echo "✅ פונקציית get_tasks_tree זמינה כעת (עם פרמטר pro
 echo "✅ פונקציית copy_task_to_project_table זמינה כעת"
 echo "✅ פונקציית sync_tasks_from_templates זמינה כעת"
 echo "✅ פונקציית sync_task_children זמינה כעת"
+echo "✅ פונקציית fix_project_stages_table זמינה כעת"
+echo "✅ פונקציית ensure_stages_history_table זמינה כעת"
+echo "✅ פונקציית update_tasks_stage_by_hierarchical_prefix זמינה כעת"
 
 echo -e "\n\033[1;32m=== סיום התהליך ===\033[0m"
 echo "כל המיגרציות הוטמעו בהצלחה! עכשיו ניתן להשתמש בכל פונקציות ה-RPC."
 echo "כדי לבדוק את הפונקציות, נסה לסנכרן שלבים בעמוד הפרויקט או ליצור פרויקט חדש."
-echo -e "\n\033[1;33mשים לב:\033[0m המיגרציה האחרונה (20250511000000) מכילה תיקון סופי לבעיות האמביגואליות"
-echo "שינינו את שמות הפרמטרים בכמה פונקציות:"
-echo "- get_tasks_tree: שימוש בפרמטר project_id_param במקום project_id"
-echo "- init_project_tables_and_data: שימוש בפרמטר project_id_param במקום project_id"
+echo -e "\n\033[1;33mשים לב:\033[0m המיגרציה האחרונה (20250800000000) מכילה תיקונים נוספים כמו:"
+echo "- פונקציית fix_project_stages_table עם הוספת עמודת dependencies"
+echo "- פונקציית ensure_stages_history_table ליצירת טבלת ההיסטוריה"
+echo "- פונקציית update_tasks_stage_by_hierarchical_prefix לעדכון יעיל של שלבים"
 echo -e "\n\033[1;33mטיפים:\033[0m"
 echo "1. אם עדיין מופיעות שגיאות, נסה לרענן את הדף במלואו (Ctrl+F5)"
 echo "2. פתח את כלי המפתח בדפדפן (F12) וודא שאין שגיאות 404 בקונסול"

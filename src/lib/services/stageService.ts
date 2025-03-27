@@ -168,159 +168,130 @@ export const stageService = {
   },
   
   // יצירת שלב חדש
-  async createStage(stage: NewStage): Promise<Stage> {
-    const supabase = createClientComponentClient();
+  async createStage(projectId: string, stage: Partial<Stage>): Promise<Stage> {
+    const projectPrefix = projectId ? `project_${projectId}` : "";
+    const tableName = projectId ? `project_${projectId}_stages` : "stages";
     
-    if (!stage.project_id) {
-      console.error("createStage: מזהה פרויקט חסר");
-      throw new Error("מזהה פרויקט הוא שדה חובה");
-    }
-    
+    // בדיקה האם טבלת ההיסטוריה קיימת
     try {
-      // וידוא שטבלת היסטוריית השלבים קיימת ויש לה הרשאות מתאימות
-      console.log(`וידוא קיום טבלת היסטוריית שלבים והרשאות מתאימות...`);
-      try {
-        const { data: historyResult, error: historyError } = await supabase
-          .rpc('ensure_stages_history_table');
-          
-        if (historyError) {
-          console.warn(`שגיאה בוידוא טבלת היסטוריית שלבים: ${historyError.message}`);
-          // ממשיכים למרות השגיאה
-        } else {
-          console.log(`תוצאת וידוא טבלת היסטוריית שלבים: ${historyResult}`);
-        }
-      } catch (historyErr) {
-        console.warn(`שגיאה בקריאה לפונקציית ensure_stages_history_table: ${historyErr instanceof Error ? historyErr.message : 'שגיאה לא ידועה'}`);
-        // ממשיכים למרות השגיאה
-      }
-      
-      // קריאה לפונקציית התיקון לפני יצירת שלב חדש
-      console.log(`מתקן את מבנה טבלת השלבים לפרויקט ${stage.project_id}...`);
-      const { data: fixResult, error: fixError } = await supabase
-        .rpc('fix_project_stages_table', { project_id_param: stage.project_id });
-        
-      if (fixError) {
-        console.warn(`שגיאה בתיקון מבנה טבלת השלבים: ${fixError.message}`);
-        // ממשיכים למרות השגיאה
+      const { data: historyCheck, error: historyError } = await supabase.rpc('ensure_stages_history_table');
+      if (historyError) {
+        console.error('שגיאה בבדיקת טבלת היסטוריית שלבים:', historyError);
+        // ממשיכים בכל זאת, כי זה לא חיוני לעצם יצירת השלב
       } else {
-        console.log(`תוצאת תיקון מבנה טבלת השלבים: ${fixResult}`);
+        console.log('בדיקת טבלת היסטוריית שלבים הושלמה:', historyCheck);
       }
+    } catch (error) {
+      console.error('שגיאה לא צפויה בבדיקת טבלת היסטוריית שלבים:', error);
+      // ממשיכים בכל זאת
+    }
+
+    // נסיון לתקן את מבנה הטבלה ולוודא שכל העמודות קיימות
+    try {
+      console.log(`מנסה לתקן את מבנה הטבלה ${tableName}...`);
+      const { data: fixResult, error: fixError } = await supabase.rpc('fix_project_stages_table', {
+        project_id_param: projectId
+      });
       
-      // הוספת מזהה ייחודי אם לא סופק
-      const stageWithId = {
-        ...stage,
-        id: stage.id || uuidv4(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-      
-      // התאמת שמות השדות למבנה הטבלה המעודכן
-      const adaptedStage: any = {
-        id: stageWithId.id,
-        title: stageWithId.title || '',
-        project_id: stageWithId.project_id,
-        created_at: stageWithId.created_at,
-        updated_at: stageWithId.updated_at,
-        // שדות אופציונליים
-        description: stageWithId.description || null,
-        hierarchical_number: (stageWithId as any).hierarchical_number || null,
-        status: (stageWithId as any).status || 'active',
-        color: (stageWithId as any).color || null,
-        due_date: (stageWithId as any).due_date || null,
-        progress: (stageWithId as any).progress || 0,
-        sort_order: (stageWithId as any).sort_order || (stageWithId as any).order || 0,
-        parent_stage_id: (stageWithId as any).parent_stage_id || null,
-        dependencies: null // לשמור על הערך הריק כדי שלא תהיה טעות, השדה צריך להיות מסוג text[]
-      };
-      
-      // נבדוק אם הטבלה הייחודית קיימת
-      const projectStagesTableName = `project_${stage.project_id}_stages`;
-      
-      console.log(`ניסיון יצירת שלב בטבלת ${projectStagesTableName}`);
-      
-      try {
-        // נסיון יצירת השלב בטבלה הייחודית לפרויקט
-        const { data: projectSpecificData, error: projectSpecificError } = await supabase
-          .from(projectStagesTableName)
-          .insert(adaptedStage)
-          .select()
-          .single();
+      if (fixError) {
+        console.error(`שגיאה בתיקון טבלת השלבים ${tableName}:`, fixError);
+      } else {
+        console.log(`תיקון טבלת השלבים ${tableName} הושלם בהצלחה:`, fixResult);
+      }
+    } catch (error) {
+      console.error(`שגיאה לא צפויה בתיקון טבלת השלבים ${tableName}:`, error);
+    }
+
+    try {
+      console.log(`מנסה ליצור שלב בטבלה ${tableName}`, stage);
+
+      // שליחת הבקשה ליצירת השלב
+      const { data, error } = await supabase
+        .from(tableName)
+        .insert(stage)
+        .select()
+        .single();
+
+      if (error) {
+        console.error(`שגיאה ביצירת שלב בטבלה ${tableName}:`, error);
+        
+        // בדיקה אם השגיאה קשורה לטבלת ההיסטוריה
+        if (error.message?.includes('stages_history')) {
+          console.log('השגיאה קשורה לטבלת ההיסטוריה - מנסה לתקן ולנסות שוב');
           
-        if (projectSpecificError) {
-          // אם הייתה שגיאה בטבלה הייחודית, נרשום ונמשיך לניסיון בטבלה הכללית
-          console.error(`Error creating stage in project-specific table ${projectStagesTableName}:`, projectSpecificError);
-          throw projectSpecificError;
-        }
-        
-        console.log(`שלב נוצר בהצלחה בטבלת ${projectStagesTableName}:`, projectSpecificData);
-        return projectSpecificData;
-      }
-      catch (projectTableError) {
-        // אם היה כישלון ביצירה בטבלה הייחודית, ננסה ליצור בטבלה הכללית
-        console.log(`מנסה ליצור שלב בטבלה הכללית (stages) עבור פרויקט ${stage.project_id}`);
-        
-        // צריך להתאים את המבנה לטבלה הכללית
-        const generalStage = {
-          ...adaptedStage,
-          dependencies: null // בטבלה הכללית זה jsonb
-        };
-        
-        try {
-          const { data: generalData, error: generalError } = await supabase
-            .from('stages')
-            .insert(generalStage)
-            .select()
-            .single();
+          try {
+            // נסיון נוסף לתקן את טבלת ההיסטוריה
+            const { data: fixHistoryResult, error: fixHistoryError } = await supabase.rpc('ensure_stages_history_table');
             
-          if (generalError) {
-            console.error('Error creating stage in general stages table:', generalError);
-            
-            // אם השגיאה קשורה ל-stages_history, ננסה אופציה אחרת
-            if (generalError.message && generalError.message.includes('stages_history')) {
-              console.log('שגיאת הרשאות ל-stages_history זוהתה, מנסה לבצע הרשאות...');
-              
-              // ניסיון נוסף - להריץ את פונקציית וידוא ההרשאות עם קריאה מפורשת
-              try {
-                const { error: fixHistoryError } = await supabase.rpc('ensure_stages_history_table');
-                
-                if (fixHistoryError) {
-                  console.error('שגיאה בניסיון לתקן את טבלת היסטוריית השלבים:', fixHistoryError);
-                  throw new Error(`שגיאה ביצירת שלב: לא ניתן ליצור שלבים בגלל בעיית הרשאות ב-stages_history`);
-                }
-                
-                // ניסיון נוסף ליצירת השלב אחרי תיקון ההרשאות
-                const { data: retryData, error: retryError } = await supabase
-                  .from('stages')
-                  .insert(generalStage)
-                  .select()
-                  .single();
-                  
-                if (retryError) {
-                  console.error('שגיאה בניסיון חוזר ליצירת שלב:', retryError);
-                  throw new Error(`שגיאה ביצירת שלב: ${retryError.message}`);
-                }
-                
-                console.log('שלב נוצר בהצלחה בניסיון חוזר:', retryData);
-                return retryData;
-              } catch (fixErr) {
-                console.error('שגיאה בניסיון לתקן את טבלת היסטוריית השלבים:', fixErr);
-                throw new Error(`שגיאה ביצירת שלב: ${generalError.message}`);
-              }
-            } else {
-              throw new Error(`שגיאה ביצירת שלב: ${generalError.message}`);
+            if (fixHistoryError) {
+              console.error('שגיאה בתיקון טבלת היסטוריית שלבים:', fixHistoryError);
+              throw new Error('לא ניתן לתקן את טבלת ההיסטוריה: ' + fixHistoryError.message);
             }
+            
+            console.log('תיקון טבלת היסטוריית שלבים הושלם, מנסה ליצור שלב שוב');
+            
+            // נסיון נוסף ליצירת השלב
+            const { data: retryData, error: retryError } = await supabase
+              .from(tableName)
+              .insert(stage)
+              .select()
+              .single();
+              
+            if (retryError) {
+              console.error('שגיאה בנסיון השני ליצירת שלב:', retryError);
+              throw retryError;
+            }
+            
+            return retryData as Stage;
+          } catch (fixError) {
+            console.error('שגיאה בנסיון לתקן את הבעיה:', fixError);
+            throw new Error('לא ניתן ליצור שלב עקב בעיה עם טבלת ההיסטוריה');
           }
-          
-          console.log('שלב נוצר בהצלחה בטבלה הכללית:', generalData);
-          return generalData;
-        } catch (generalErr) {
-          console.error('Error in generalStage creation:', generalErr);
-          throw new Error(`שגיאה ביצירת שלב: ${generalErr instanceof Error ? generalErr.message : 'אירעה שגיאה לא ידועה'}`);
         }
+        
+        // אם השגיאה קשורה לעמודה 'dependencies' חסרה
+        if (error.message?.includes('dependencies') || error.message?.includes('column') || error.message?.includes('does not exist')) {
+          console.log('יתכן ויש בעיה עם מבנה הטבלה - מנסה לתקן באופן מפורש');
+          
+          try {
+            // נסיון נוסף לתקן את הטבלה באופן ספציפי עבור עמודת dependencies
+            const { data: fixTableResult, error: fixTableError } = await supabase.rpc('fix_project_stages_table', {
+              project_id_param: projectId
+            });
+            
+            if (fixTableError) {
+              console.error('שגיאה בתיקון טבלת השלבים:', fixTableError);
+              throw new Error('לא ניתן לתקן את טבלת השלבים: ' + fixTableError.message);
+            }
+            
+            console.log('תיקון טבלת השלבים הושלם, מנסה ליצור שלב שוב');
+            
+            // נסיון נוסף ליצירת השלב
+            const { data: retryData, error: retryError } = await supabase
+              .from(tableName)
+              .insert(stage)
+              .select()
+              .single();
+              
+            if (retryError) {
+              console.error('שגיאה בנסיון השני ליצירת שלב:', retryError);
+              throw retryError;
+            }
+            
+            return retryData as Stage;
+          } catch (fixError) {
+            console.error('שגיאה בנסיון לתקן את הבעיה:', fixError);
+            throw new Error('לא ניתן ליצור שלב עקב בעיה עם מבנה הטבלה');
+          }
+        }
+        
+        throw error;
       }
-    } catch (err) {
-      console.error('Error in createStage:', err);
-      throw new Error(`שגיאה ביצירת שלב: ${err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה'}`);
+
+      return data as Stage;
+    } catch (error) {
+      console.error(`שגיאה לא צפויה ביצירת שלב:`, error);
+      throw error;
     }
   },
   

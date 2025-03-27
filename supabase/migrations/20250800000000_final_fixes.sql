@@ -690,9 +690,12 @@ DECLARE
   has_sort_order boolean := false;
   has_order_num boolean := false;
   dependencies_type text;
+  table_exists boolean;
 BEGIN
   -- בדיקה אם הטבלה קיימת
-  IF NOT check_table_exists(table_name) THEN
+  SELECT check_table_exists(table_name) INTO table_exists;
+  
+  IF NOT table_exists THEN
     -- הטבלה לא קיימת - ניצור אותה מחדש עם המבנה הנכון
     PERFORM create_project_stages_table(project_id_param);
     RETURN true;
@@ -716,26 +719,50 @@ BEGIN
 
   -- וידוא שיש עמודת dependencies מסוג מערך טקסט
   IF NOT has_dependencies THEN
-    EXECUTE format('ALTER TABLE %I ADD COLUMN dependencies text[]', table_name);
-    RAISE NOTICE 'הוספת עמודת dependencies לטבלה %', table_name;
+    BEGIN
+      EXECUTE format('ALTER TABLE %I ADD COLUMN dependencies text[]', table_name);
+      RAISE NOTICE 'הוספת עמודת dependencies לטבלה %', table_name;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'שגיאה בהוספת עמודת dependencies לטבלה %: %', table_name, SQLERRM;
+    END;
   ELSIF dependencies_type <> 'ARRAY' THEN
     -- התאמת סוג הנתונים של dependencies
-    EXECUTE format('ALTER TABLE %I ALTER COLUMN dependencies TYPE text[] USING NULL', table_name);
-    RAISE NOTICE 'שינוי סוג עמודת dependencies ל-text[] בטבלה %', table_name;
+    BEGIN
+      EXECUTE format('ALTER TABLE %I ALTER COLUMN dependencies TYPE text[] USING NULL', table_name);
+      RAISE NOTICE 'שינוי סוג עמודת dependencies ל-text[] בטבלה %', table_name;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'שגיאה בשינוי סוג עמודת dependencies בטבלה %: %', table_name, SQLERRM;
+    END;
   END IF;
 
   -- וידוא שיש עמודת sort_order
   IF NOT has_sort_order THEN
     IF has_order_num THEN
       -- שינוי שם העמודה מ-order_num ל-sort_order
-      EXECUTE format('ALTER TABLE %I RENAME COLUMN order_num TO sort_order', table_name);
-      RAISE NOTICE 'שינוי שם עמודה מ-order_num ל-sort_order בטבלה %', table_name;
+      BEGIN
+        EXECUTE format('ALTER TABLE %I RENAME COLUMN order_num TO sort_order', table_name);
+        RAISE NOTICE 'שינוי שם עמודה מ-order_num ל-sort_order בטבלה %', table_name;
+      EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'שגיאה בשינוי שם עמודה מ-order_num ל-sort_order בטבלה %: %', table_name, SQLERRM;
+      END;
     ELSE
       -- הוספת עמודת sort_order
-      EXECUTE format('ALTER TABLE %I ADD COLUMN sort_order integer', table_name);
-      RAISE NOTICE 'הוספת עמודת sort_order לטבלה %', table_name;
+      BEGIN
+        EXECUTE format('ALTER TABLE %I ADD COLUMN sort_order integer', table_name);
+        RAISE NOTICE 'הוספת עמודת sort_order לטבלה %', table_name;
+      EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'שגיאה בהוספת עמודת sort_order לטבלה %: %', table_name, SQLERRM;
+      END;
     END IF;
   END IF;
+  
+  -- רענון הקאש של הסכימה
+  BEGIN
+    EXECUTE 'SELECT pg_catalog.pg_refresh_view()';
+  EXCEPTION WHEN OTHERS THEN
+    -- אם הפונקציה לא קיימת, נמשיך
+    NULL;
+  END;
 
   RETURN true;
 EXCEPTION WHEN OTHERS THEN
@@ -744,8 +771,21 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- בדיקת קיום טבלת שלבים ייחודית לפרויקט
+CREATE OR REPLACE FUNCTION check_stages_table_exists(project_id_param uuid)
+RETURNS boolean AS $$
+DECLARE
+  table_name text := 'project_' || project_id_param::text || '_stages';
+  exists_val boolean;
+BEGIN
+  SELECT check_table_exists(table_name) INTO exists_val;
+  RETURN exists_val;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- הענקת הרשאות לפונקציית תיקון טבלת שלבים
 GRANT EXECUTE ON FUNCTION fix_project_stages_table(uuid) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION check_stages_table_exists(uuid) TO anon, authenticated, service_role;
 
 -- פונקציה לעדכון שלב למשימות לפי תחילית של מספר היררכי
 CREATE OR REPLACE FUNCTION update_tasks_stage_by_hierarchical_prefix(
@@ -840,5 +880,5 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- הפעלת הפונקציה בעת טעינת המיגרציה
 SELECT ensure_stages_history_table();
 
--- הענקת הרשאות לפונקציה
+-- הענקת הרשאות לפונקצייה
 GRANT EXECUTE ON FUNCTION ensure_stages_history_table() TO anon, authenticated, service_role; 

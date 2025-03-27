@@ -33,11 +33,16 @@ import {
   NumberInputStepper,
   NumberIncrementStepper,
   NumberDecrementStepper,
+  IconButton,
+  Spacer,
+  Tooltip,
+  Switch,
 } from '@chakra-ui/react';
 import { Stage, Task } from '@/types/supabase';
 import { ExtendedStage } from '@/types/extendedTypes';
 import { stageService } from '@/lib/services/stageService';
 import taskService from '@/lib/services/taskService';
+import { projectService } from '@/lib/services/projectService';
 
 interface StageEditModalProps {
   isOpen: boolean;
@@ -71,6 +76,8 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
+  const [syncingTables, setSyncingTables] = useState(false);
+  const [runningFunctions, setRunningFunctions] = useState(false);
   const [projectTasks, setProjectTasks] = useState<Task[]>([]);
   const [matchingTasks, setMatchingTasks] = useState<Task[]>([]);
   const [availableHierarchyPrefixes, setAvailableHierarchyPrefixes] = useState<string[]>([]);
@@ -242,7 +249,7 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
         }
       } else {
         // יצירת שלב חדש
-        result = await stageService.createStage(stageData);
+        result = await stageService.createStage(projectId, stageData);
         
         if (result) {
           // עדכון המשימות ששייכות לשלב לפי המספר ההיררכי
@@ -321,6 +328,85 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
     }
   };
   
+  // סנכרון טבלאות הפרויקט
+  const handleSyncTables = async () => {
+    try {
+      setSyncingTables(true);
+      console.log(`מסנכרן טבלאות עבור פרויקט ${projectId}...`);
+      
+      const result = await projectService.syncProjectTables(projectId);
+      
+      console.log('תוצאת סנכרון טבלאות:', result);
+      
+      toast({
+        title: "טבלאות הפרויקט סונכרנו בהצלחה",
+        description: "כעת ניתן ליצור וערוך שלבים ללא בעיות",
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+      
+      // טעינה מחדש של המשימות לאחר הסנכרון
+      await loadProjectTasks();
+      
+    } catch (error) {
+      console.error('שגיאה בסנכרון טבלאות הפרויקט:', error);
+      
+      toast({
+        title: "שגיאה בסנכרון טבלאות",
+        description: error instanceof Error ? error.message : "אירעה שגיאה לא ידועה בסנכרון טבלאות",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setSyncingTables(false);
+    }
+  };
+  
+  // הפעלת פונקציות SQL במסד הנתונים
+  const handleRunFunctions = async () => {
+    try {
+      setRunningFunctions(true);
+      console.log(`מפעיל פונקציות SQL חיוניות...`);
+      
+      const response = await fetch('/api/db/apply-functions');
+      const result = await response.json();
+      
+      console.log('תוצאת הפעלת פונקציות:', result);
+      
+      if (result.success) {
+        toast({
+          title: "הפונקציות הופעלו בהצלחה",
+          description: "הפונקציות החיוניות הופעלו והן זמינות לשימוש במערכת",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+      } else {
+        toast({
+          title: "אזהרה בהפעלת פונקציות",
+          description: result.message || "חלק מהפונקציות לא הופעלו בהצלחה, בדוק את הלוגים",
+          status: "warning",
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error('שגיאה בהפעלת פונקציות SQL:', error);
+      
+      toast({
+        title: "שגיאה בהפעלת פונקציות",
+        description: error instanceof Error ? error.message : "אירעה שגיאה לא ידועה בהפעלת פונקציות SQL",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setRunningFunctions(false);
+    }
+  };
+  
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="xl" scrollBehavior="inside">
       <ModalOverlay />
@@ -328,6 +414,39 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
         <ModalHeader>{isEditMode ? 'עריכת שלב' : 'שלב חדש'}</ModalHeader>
         <ModalCloseButton />
         <ModalBody>
+          {/* כפתור סנכרון טבלאות */}
+          <Box mb={4}>
+            <Alert status="info" borderRadius="md">
+              <AlertIcon />
+              <Box flex="1">
+                <AlertTitle>אם אתה נתקל בבעיות ביצירת שלבים</AlertTitle>
+                <AlertDescription display="block">
+                  השתמש בכפתורים הבאים לתיקון בעיות בטבלאות ופונקציות
+                </AlertDescription>
+              </Box>
+              <HStack spacing={2}>
+                <Button
+                  colorScheme="blue"
+                  size="sm"
+                  onClick={handleSyncTables}
+                  isLoading={syncingTables}
+                  loadingText="מסנכרן..."
+                >
+                  סנכרן טבלאות
+                </Button>
+                <Button
+                  colorScheme="teal"
+                  size="sm"
+                  onClick={handleRunFunctions}
+                  isLoading={runningFunctions}
+                  loadingText="מפעיל..."
+                >
+                  הפעל פונקציות
+                </Button>
+              </HStack>
+            </Alert>
+          </Box>
+          
           <VStack spacing={4} align="stretch">
             <FormControl isRequired isInvalid={!!errors.title}>
               <FormLabel>כותרת</FormLabel>
