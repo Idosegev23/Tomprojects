@@ -786,4 +786,59 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- הענקת הרשאות
-GRANT EXECUTE ON FUNCTION update_tasks_stage_by_hierarchical_prefix(uuid, text, uuid) TO anon, authenticated, service_role; 
+GRANT EXECUTE ON FUNCTION update_tasks_stage_by_hierarchical_prefix(uuid, text, uuid) TO anon, authenticated, service_role;
+
+-- יצירת טבלת היסטוריית שלבים אם היא לא קיימת
+CREATE OR REPLACE FUNCTION ensure_stages_history_table()
+RETURNS boolean AS $$
+BEGIN
+  -- בדיקה האם הטבלה קיימת
+  IF NOT EXISTS (
+    SELECT FROM information_schema.tables 
+    WHERE table_schema = 'public'
+    AND table_name = 'stages_history'
+  ) THEN
+    -- יצירת הטבלה אם היא לא קיימת
+    CREATE TABLE IF NOT EXISTS stages_history (
+      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      stage_id uuid NOT NULL,
+      operation text NOT NULL, -- 'INSERT', 'UPDATE', 'DELETE'
+      changed_by text, -- מי ביצע את השינוי
+      old_data jsonb, -- נתונים לפני השינוי
+      new_data jsonb, -- נתונים אחרי השינוי
+      changed_at timestamptz DEFAULT now() -- מתי בוצע השינוי
+    );
+    
+    -- הענקת הרשאות לטבלה
+    GRANT ALL ON TABLE stages_history TO postgres, service_role;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE stages_history TO authenticated;
+    GRANT SELECT ON TABLE stages_history TO anon;
+    
+    -- ביטול RLS על הטבלה
+    ALTER TABLE stages_history DISABLE ROW LEVEL SECURITY;
+    
+    RAISE NOTICE 'טבלת היסטוריית שלבים נוצרה בהצלחה';
+  ELSE
+    -- הענקת הרשאות לטבלה הקיימת
+    GRANT ALL ON TABLE stages_history TO postgres, service_role;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE stages_history TO authenticated;
+    GRANT SELECT ON TABLE stages_history TO anon;
+    
+    -- ביטול RLS על הטבלה
+    ALTER TABLE stages_history DISABLE ROW LEVEL SECURITY;
+    
+    RAISE NOTICE 'הרשאות עודכנו לטבלת היסטוריית שלבים הקיימת';
+  END IF;
+  
+  RETURN true;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'שגיאה ביצירת טבלת היסטוריית שלבים: %', SQLERRM;
+  RETURN false;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- הפעלת הפונקציה בעת טעינת המיגרציה
+SELECT ensure_stages_history_table();
+
+-- הענקת הרשאות לפונקציה
+GRANT EXECUTE ON FUNCTION ensure_stages_history_table() TO anon, authenticated, service_role; 

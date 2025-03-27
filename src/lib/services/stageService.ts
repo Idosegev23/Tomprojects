@@ -177,6 +177,23 @@ export const stageService = {
     }
     
     try {
+      // וידוא שטבלת היסטוריית השלבים קיימת ויש לה הרשאות מתאימות
+      console.log(`וידוא קיום טבלת היסטוריית שלבים והרשאות מתאימות...`);
+      try {
+        const { data: historyResult, error: historyError } = await supabase
+          .rpc('ensure_stages_history_table');
+          
+        if (historyError) {
+          console.warn(`שגיאה בוידוא טבלת היסטוריית שלבים: ${historyError.message}`);
+          // ממשיכים למרות השגיאה
+        } else {
+          console.log(`תוצאת וידוא טבלת היסטוריית שלבים: ${historyResult}`);
+        }
+      } catch (historyErr) {
+        console.warn(`שגיאה בקריאה לפונקציית ensure_stages_history_table: ${historyErr instanceof Error ? historyErr.message : 'שגיאה לא ידועה'}`);
+        // ממשיכים למרות השגיאה
+      }
+      
       // קריאה לפונקציית התיקון לפני יצירת שלב חדש
       console.log(`מתקן את מבנה טבלת השלבים לפרויקט ${stage.project_id}...`);
       const { data: fixResult, error: fixError } = await supabase
@@ -248,19 +265,58 @@ export const stageService = {
           dependencies: null // בטבלה הכללית זה jsonb
         };
         
-        const { data: generalData, error: generalError } = await supabase
-          .from('stages')
-          .insert(generalStage)
-          .select()
-          .single();
+        try {
+          const { data: generalData, error: generalError } = await supabase
+            .from('stages')
+            .insert(generalStage)
+            .select()
+            .single();
+            
+          if (generalError) {
+            console.error('Error creating stage in general stages table:', generalError);
+            
+            // אם השגיאה קשורה ל-stages_history, ננסה אופציה אחרת
+            if (generalError.message && generalError.message.includes('stages_history')) {
+              console.log('שגיאת הרשאות ל-stages_history זוהתה, מנסה לבצע הרשאות...');
+              
+              // ניסיון נוסף - להריץ את פונקציית וידוא ההרשאות עם קריאה מפורשת
+              try {
+                const { error: fixHistoryError } = await supabase.rpc('ensure_stages_history_table');
+                
+                if (fixHistoryError) {
+                  console.error('שגיאה בניסיון לתקן את טבלת היסטוריית השלבים:', fixHistoryError);
+                  throw new Error(`שגיאה ביצירת שלב: לא ניתן ליצור שלבים בגלל בעיית הרשאות ב-stages_history`);
+                }
+                
+                // ניסיון נוסף ליצירת השלב אחרי תיקון ההרשאות
+                const { data: retryData, error: retryError } = await supabase
+                  .from('stages')
+                  .insert(generalStage)
+                  .select()
+                  .single();
+                  
+                if (retryError) {
+                  console.error('שגיאה בניסיון חוזר ליצירת שלב:', retryError);
+                  throw new Error(`שגיאה ביצירת שלב: ${retryError.message}`);
+                }
+                
+                console.log('שלב נוצר בהצלחה בניסיון חוזר:', retryData);
+                return retryData;
+              } catch (fixErr) {
+                console.error('שגיאה בניסיון לתקן את טבלת היסטוריית השלבים:', fixErr);
+                throw new Error(`שגיאה ביצירת שלב: ${generalError.message}`);
+              }
+            } else {
+              throw new Error(`שגיאה ביצירת שלב: ${generalError.message}`);
+            }
+          }
           
-        if (generalError) {
-          console.error('Error creating stage in general stages table:', generalError);
-          throw new Error(`שגיאה ביצירת שלב: ${generalError.message}`);
+          console.log('שלב נוצר בהצלחה בטבלה הכללית:', generalData);
+          return generalData;
+        } catch (generalErr) {
+          console.error('Error in generalStage creation:', generalErr);
+          throw new Error(`שגיאה ביצירת שלב: ${generalErr instanceof Error ? generalErr.message : 'אירעה שגיאה לא ידועה'}`);
         }
-        
-        console.log('שלב נוצר בהצלחה בטבלה הכללית:', generalData);
-        return generalData;
       }
     } catch (err) {
       console.error('Error in createStage:', err);
