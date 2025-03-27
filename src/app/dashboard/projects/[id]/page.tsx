@@ -668,6 +668,24 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                 </Card>
               )}
             </SimpleGrid>
+            
+            {/* כפתור סנכרון טבלאות */}
+            <Box mb={6} textAlign="center">
+              <Tooltip label="סנכרון טבלאות הפרויקט - מתקן בעיות של טבלאות כפולות ומוודא שכל המשימות מצביעות לשלבים הנכונים">
+                <Button
+                  leftIcon={<FiRefreshCw />}
+                  colorScheme="teal"
+                  size="md"
+                  onClick={handleSyncProjectData}
+                  isLoading={loading}
+                  loadingText="מסנכרן טבלאות..."
+                  shadow="md"
+                  width={{ base: 'full', md: 'auto' }}
+                >
+                  סנכרון וטיפול בטבלאות כפולות
+                </Button>
+              </Tooltip>
+            </Box>
           </Box>
           
           {/* טאבים לתצוגות שונות */}

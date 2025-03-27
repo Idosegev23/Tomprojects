@@ -21,10 +21,17 @@ import {
   Divider,
   Select,
   Spinner,
+  Text,
+  Checkbox,
+  CheckboxGroup,
+  Stack,
+  Badge,
+  Heading,
 } from '@chakra-ui/react';
-import { Stage } from '@/types/supabase';
+import { Stage, Task } from '@/types/supabase';
 import { ExtendedStage } from '@/types/extendedTypes';
 import { stageService } from '@/lib/services/stageService';
+import taskService from '@/lib/services/taskService';
 
 interface StageEditModalProps {
   isOpen: boolean;
@@ -56,6 +63,9 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [projectTasks, setProjectTasks] = useState<Task[]>([]);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   
   const toast = useToast();
   
@@ -80,7 +90,39 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
         order: 0,
       });
     }
+    
+    // טעינת המשימות של הפרויקט
+    loadProjectTasks();
   }, [stage, projectId]);
+  
+  // פונקציה לטעינת משימות הפרויקט
+  const loadProjectTasks = async () => {
+    try {
+      setLoadingTasks(true);
+      // קבלת כל המשימות של הפרויקט בסדר היררכי
+      const tasks = await taskService.getProjectSpecificTasks(projectId);
+      setProjectTasks(tasks);
+      
+      // אם מדובר בעריכת שלב קיים, נסמן את המשימות ששייכות לשלב
+      if (stage) {
+        const tasksInStage = tasks.filter(task => task.stage_id === stage.id);
+        setSelectedTaskIds(tasksInStage.map(task => task.id));
+      } else {
+        setSelectedTaskIds([]);
+      }
+    } catch (error) {
+      console.error('Error loading project tasks:', error);
+      toast({
+        title: 'שגיאה בטעינת משימות',
+        description: 'לא ניתן לטעון את משימות הפרויקט',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
   
   // טיפול בשינויים בטופס
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -95,6 +137,17 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
         return newErrors;
       });
     }
+  };
+  
+  // טיפול בשינוי בבחירת משימות
+  const handleTaskSelectionChange = (taskId: string) => {
+    setSelectedTaskIds(prev => {
+      if (prev.includes(taskId)) {
+        return prev.filter(id => id !== taskId);
+      } else {
+        return [...prev, taskId];
+      }
+    });
   };
   
   // פונקציה לוולידציה של הטופס
@@ -147,6 +200,9 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
         result = await stageService.updateStage(stage.id, stageData, projectId);
         
         if (result) {
+          // עדכון המשימות ששייכות לשלב
+          await updateTasksStage(result.id);
+          
           toast({
             title: "השלב עודכן בהצלחה",
             status: "success",
@@ -163,8 +219,12 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
         result = await stageService.createStage(stageData);
         
         if (result) {
+          // עדכון המשימות ששייכות לשלב
+          await updateTasksStage(result.id);
+          
           toast({
             title: "השלב נוצר בהצלחה",
+            description: `השלב "${result.title}" נוצר ו-${selectedTaskIds.length} משימות שויכו אליו`,
             status: "success",
             duration: 3000,
             isClosable: true,
@@ -191,10 +251,42 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
     }
   };
   
+  // עדכון שלב למשימות שנבחרו
+  const updateTasksStage = async (stageId: string) => {
+    try {
+      // מערך הבטחות לעדכון המשימות
+      const updatePromises = selectedTaskIds.map(taskId => 
+        taskService.updateTaskStage(taskId, stageId)
+      );
+      
+      // ביצוע כל הבקשות במקביל
+      await Promise.all(updatePromises);
+      
+      // אם זה שלב קיים, נמצא את המשימות ששייכות אליו ואינן ברשימת הנבחרות
+      if (isEditMode && stage) {
+        const tasksToRemoveStage = projectTasks
+          .filter(task => task.stage_id === stage.id && !selectedTaskIds.includes(task.id))
+          .map(task => task.id);
+        
+        // איפוס שלב למשימות שהוסרו
+        const removePromises = tasksToRemoveStage.map(taskId => 
+          taskService.updateTask(taskId, { stage_id: null })
+        );
+        
+        await Promise.all(removePromises);
+      }
+      
+      console.log(`Updated ${selectedTaskIds.length} tasks to stage ${stageId}`);
+    } catch (error) {
+      console.error('Error updating tasks stage:', error);
+      throw error;
+    }
+  };
+  
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="xl" scrollBehavior="inside">
       <ModalOverlay />
-      <ModalContent maxW="600px">
+      <ModalContent maxW="800px">
         <ModalHeader>{isEditMode ? 'עריכת שלב' : 'שלב חדש'}</ModalHeader>
         <ModalCloseButton />
         <ModalBody>
@@ -278,6 +370,56 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
                 step={1}
               />
             </FormControl>
+            
+            <Divider my={3} />
+            
+            {/* אזור בחירת משימות לשיוך לשלב */}
+            <Box>
+              <Heading size="sm" mb={3}>שיוך משימות לשלב</Heading>
+              <Text fontSize="sm" mb={3}>
+                בחר את המשימות שברצונך לשייך לשלב זה. המשימות מוצגות לפי מספור היררכי.
+              </Text>
+              
+              {loadingTasks ? (
+                <Flex justify="center" py={4}>
+                  <Spinner />
+                </Flex>
+              ) : projectTasks.length === 0 ? (
+                <Text color="gray.500" py={4}>
+                  לא נמצאו משימות בפרויקט זה
+                </Text>
+              ) : (
+                <Box maxH="300px" overflowY="auto" p={3} borderWidth="1px" borderRadius="md">
+                  <VStack align="stretch" spacing={2}>
+                    {projectTasks.map(task => (
+                      <Checkbox 
+                        key={task.id}
+                        isChecked={selectedTaskIds.includes(task.id)}
+                        onChange={() => handleTaskSelectionChange(task.id)}
+                        colorScheme="blue"
+                      >
+                        <HStack>
+                          <Text fontWeight={!task.parent_task_id ? "bold" : "normal"}>
+                            {task.hierarchical_number && (
+                              <Badge mr={2} colorScheme="blue">
+                                {task.hierarchical_number}
+                              </Badge>
+                            )}
+                            {task.title}
+                          </Text>
+                        </HStack>
+                      </Checkbox>
+                    ))}
+                  </VStack>
+                </Box>
+              )}
+              
+              {selectedTaskIds.length > 0 && (
+                <Text fontSize="sm" mt={2}>
+                  נבחרו {selectedTaskIds.length} משימות לשיוך לשלב זה
+                </Text>
+              )}
+            </Box>
           </VStack>
         </ModalBody>
         

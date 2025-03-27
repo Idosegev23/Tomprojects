@@ -1,5 +1,6 @@
 import supabase from '../supabase';
 import { Project, NewProject, UpdateProject } from '@/types/supabase';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 export const projectService = {
   // קריאת כל הפרויקטים
@@ -289,6 +290,71 @@ export const projectService = {
     } catch (error) {
       console.error('שגיאה בסנכרון טבלאות פרויקט:', error);
       throw error;
+    }
+  },
+
+  // בדיקה אם קיימות טבלאות כפולות לפרויקט
+  async checkDuplicateTables(projectId: string): Promise<{ hasDuplicates: boolean, details: any }> {
+    if (!projectId) {
+      throw new Error('מזהה פרויקט חסר');
+    }
+    
+    try {
+      const supabase = createClientComponentClient();
+      
+      // נחפש טבלאות שמכילות את ה-ID של הפרויקט בשמן
+      const tablePrefix = `project_${projectId}_`;
+      
+      // קריאה לפונקציית RPC שבודקת אילו טבלאות קיימות במערכת
+      const { data, error } = await supabase.rpc('list_tables_with_prefix', {
+        prefix_param: tablePrefix
+      });
+      
+      if (error) {
+        console.error('שגיאה בבדיקת טבלאות כפולות:', error);
+        
+        // אם פונקציית ה-RPC לא קיימת, נחזיר שלא נמצאו כפילויות
+        return { 
+          hasDuplicates: false, 
+          details: { 
+            error: error.message,
+            message: 'לא ניתן לבדוק טבלאות כפולות - הפונקציה list_tables_with_prefix חסרה'
+          }
+        };
+      }
+      
+      // ברירת מחדל (אם אין מידע): אין כפילויות
+      if (!data || !Array.isArray(data) || data.length === 0) {
+        return { hasDuplicates: false, details: { tableCount: 0, tables: [] } };
+      }
+      
+      // בדיקה אם יש יותר מטבלה אחת לכל סוג (tasks/stages)
+      const tasksTablesCount = data.filter(table => table.endsWith('_tasks')).length;
+      const stagesTablesCount = data.filter(table => table.endsWith('_stages')).length;
+      
+      const hasDuplicates = tasksTablesCount > 1 || stagesTablesCount > 1;
+      
+      return {
+        hasDuplicates,
+        details: {
+          tableCount: data.length,
+          tables: data,
+          tasksTablesCount,
+          stagesTablesCount,
+          message: hasDuplicates ? 
+            `נמצאו טבלאות כפולות: ${tasksTablesCount} טבלאות משימות, ${stagesTablesCount} טבלאות שלבים` : 
+            'לא נמצאו טבלאות כפולות'
+        }
+      };
+    } catch (error) {
+      console.error('שגיאה בבדיקת טבלאות כפולות:', error);
+      return { 
+        hasDuplicates: false, 
+        details: { 
+          error: error instanceof Error ? error.message : 'שגיאה לא ידועה',
+          message: 'שגיאה בבדיקת טבלאות כפולות'
+        }
+      };
     }
   }
 };

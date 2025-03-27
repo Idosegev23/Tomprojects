@@ -20,8 +20,21 @@ export async function POST(
     const supabase = createRouteHandlerClient({ cookies });
     
     console.log(`סנכרון מלא של טבלאות פרויקט ${projectId}`);
+
+    // שלב 1: ניקוי טבלאות כפולות אם יש כאלו
+    console.log('בודק ומנקה טבלאות כפולות...');
+    const { data: cleanupResult, error: cleanupError } = await supabase
+      .rpc('cleanup_duplicate_project_tables', { project_id_param: projectId });
+
+    if (cleanupError) {
+      console.error(`שגיאה בניקוי טבלאות כפולות לפרויקט ${projectId}:`, cleanupError);
+      console.log('ממשיך לשלב הסנכרון למרות השגיאה...');
+    } else {
+      console.log('תוצאת ניקוי טבלאות כפולות:', cleanupResult);
+    }
     
-    // קריאה לפונקציית סנכרון שלבים ומשימות
+    // שלב 2: קריאה לפונקציית סנכרון שלבים ומשימות
+    console.log('מבצע סנכרון שלבים ומשימות...');
     const { data: syncResult, error: syncError } = await supabase
       .rpc('sync_stages_and_tasks_by_project', { project_id_param: projectId });
       
@@ -40,7 +53,8 @@ export async function POST(
     return NextResponse.json({
       success: true,
       message: 'סנכרון טבלאות הפרויקט הושלם בהצלחה',
-      ...syncResult
+      cleanup_result: cleanupResult,
+      sync_result: syncResult
     });
     
   } catch (error: any) {

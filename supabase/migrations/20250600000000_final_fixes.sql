@@ -373,6 +373,24 @@ GRANT EXECUTE ON FUNCTION copy_task_to_project_table(uuid, uuid) TO anon, authen
 GRANT EXECUTE ON FUNCTION build_stages_from_selected_tasks(uuid) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION init_project_tables_and_data(uuid, boolean, boolean, uuid[]) TO anon, authenticated, service_role;
 
+-- פונקציה לקבלת רשימת טבלאות לפי תחילית
+CREATE OR REPLACE FUNCTION list_tables_with_prefix(prefix_param text)
+RETURNS text[] AS $$
+DECLARE
+  tables text[];
+BEGIN
+  SELECT ARRAY_AGG(tablename) INTO tables
+  FROM pg_tables
+  WHERE schemaname = 'public'
+  AND tablename LIKE prefix_param || '%';
+  
+  RETURN tables;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- הענקת הרשאות לפונקציית רשימת טבלאות
+GRANT EXECUTE ON FUNCTION list_tables_with_prefix(text) TO anon, authenticated, service_role;
+
 -- טריגר שיקרא לפונקציה init_project_tables_and_data בזמן יצירת פרויקט
 -- פונקציית הטריגר
 CREATE OR REPLACE FUNCTION project_after_insert_trigger()
@@ -406,9 +424,15 @@ DECLARE
   stage_ids uuid[];
   stage_id uuid;
   result json;
+  tasks_table_exists boolean;
+  stages_table_exists boolean;
+  stage_count_check record;
 BEGIN
   -- 1. וידוא שטבלאות הפרויקט קיימות
-  IF NOT check_table_exists(tasks_table_name) THEN
+  tasks_table_exists := check_table_exists(tasks_table_name);
+  stages_table_exists := check_table_exists(stages_table_name);
+  
+  IF NOT tasks_table_exists THEN
     RETURN json_build_object(
       'success', false, 
       'error', 'טבלת המשימות לא קיימת',
@@ -416,15 +440,16 @@ BEGIN
     );
   END IF;
   
-  IF NOT check_stages_table_exists(stages_table_name) THEN
+  IF NOT stages_table_exists THEN
     -- יצירת טבלת שלבים אם היא לא קיימת
     PERFORM create_project_stages_table(project_id_param);
+    stages_table_exists := true;
   END IF;
   
   -- 2. וידוא שיש שלבים בטבלת השלבים הייחודית
-  EXECUTE format('SELECT COUNT(*) = 0 FROM %I', stages_table_name) INTO stage_rec;
+  EXECUTE format('SELECT COUNT(*) FROM %I', stages_table_name) INTO stage_count_check;
   
-  IF stage_rec.count THEN
+  IF stage_count_check.count = 0 THEN
     -- אין שלבים בטבלה הייחודית, נעתיק שלבים מהטבלה הכללית
     PERFORM copy_stages_to_project_table(project_id_param);
   END IF;
@@ -496,4 +521,157 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- הענקת הרשאות
-GRANT EXECUTE ON FUNCTION sync_stages_and_tasks_by_project(uuid) TO anon, authenticated, service_role; 
+GRANT EXECUTE ON FUNCTION sync_stages_and_tasks_by_project(uuid) TO anon, authenticated, service_role;
+
+-- פונקציה לניקוי טבלאות כפולות
+CREATE OR REPLACE FUNCTION cleanup_duplicate_project_tables(project_id_param uuid)
+RETURNS json AS $$
+DECLARE
+  base_tasks_table_name text := 'project_' || project_id_param::text || '_tasks';
+  base_stages_table_name text := 'project_' || project_id_param::text || '_stages';
+  table_list text[];
+  table_name text;
+  duplicate_tasks_tables text[] := '{}';
+  duplicate_stages_tables text[] := '{}';
+  tasks_dropped integer := 0;
+  stages_dropped integer := 0;
+BEGIN
+  -- קבלת רשימת הטבלאות שמתחילות בתחילית של המזהה
+  table_list := list_tables_with_prefix('project_' || project_id_param::text);
+  
+  -- ברירת מחדל אם אין טבלאות
+  IF table_list IS NULL OR array_length(table_list, 1) IS NULL THEN
+    RETURN json_build_object(
+      'success', true,
+      'message', 'לא נמצאו טבלאות לפרויקט',
+      'project_id', project_id_param,
+      'tables_found', 0
+    );
+  END IF;
+  
+  -- זיהוי טבלאות כפולות של משימות
+  FOREACH table_name IN ARRAY table_list
+  LOOP
+    IF table_name LIKE '%\_tasks' AND table_name != base_tasks_table_name THEN
+      duplicate_tasks_tables := array_append(duplicate_tasks_tables, table_name);
+    ELSIF table_name LIKE '%\_stages' AND table_name != base_stages_table_name THEN
+      duplicate_stages_tables := array_append(duplicate_stages_tables, table_name);
+    END IF;
+  END LOOP;
+  
+  -- עוד בדיקה אם אין טבלאות כפולות
+  IF array_length(duplicate_tasks_tables, 1) IS NULL AND array_length(duplicate_stages_tables, 1) IS NULL THEN
+    RETURN json_build_object(
+      'success', true,
+      'message', 'לא נמצאו טבלאות כפולות',
+      'project_id', project_id_param,
+      'tables_found', array_length(table_list, 1)
+    );
+  END IF;
+  
+  -- טיפול בטבלאות משימות כפולות
+  IF array_length(duplicate_tasks_tables, 1) > 0 THEN
+    -- וידוא שטבלת המשימות העיקרית קיימת
+    IF NOT check_table_exists(base_tasks_table_name) THEN
+      PERFORM create_project_table(project_id_param);
+    END IF;
+    
+    -- העברת נתונים מטבלאות הכפולות לטבלה העיקרית
+    FOREACH table_name IN ARRAY duplicate_tasks_tables
+    LOOP
+      -- העתקת נתונים לטבלת המשימות העיקרית
+      BEGIN
+        EXECUTE format('
+          INSERT INTO %I (
+            id, title, description, project_id, stage_id, parent_task_id, 
+            hierarchical_number, due_date, status, priority, category, 
+            responsible, dropbox_folder, created_at, updated_at
+          )
+          SELECT 
+            id, title, description, project_id, stage_id, parent_task_id, 
+            hierarchical_number, due_date, status, priority, category, 
+            responsible, dropbox_folder, created_at, updated_at
+          FROM %I
+          ON CONFLICT (id) DO NOTHING',
+          base_tasks_table_name, table_name
+        );
+      EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'שגיאה בהעתקת נתונים מטבלה % לטבלה %: %', table_name, base_tasks_table_name, SQLERRM;
+      END;
+      
+      -- מחיקת הטבלה הכפולה
+      BEGIN
+        EXECUTE format('DROP TABLE IF EXISTS %I', table_name);
+        tasks_dropped := tasks_dropped + 1;
+        
+        RAISE NOTICE 'טבלת משימות כפולה % נמחקה', table_name;
+      EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'שגיאה במחיקת טבלה %: %', table_name, SQLERRM;
+      END;
+    END LOOP;
+  END IF;
+  
+  -- טיפול בטבלאות שלבים כפולות
+  IF array_length(duplicate_stages_tables, 1) > 0 THEN
+    -- וידוא שטבלת השלבים העיקרית קיימת
+    IF NOT check_table_exists(base_stages_table_name) THEN
+      PERFORM create_project_stages_table(project_id_param);
+    END IF;
+    
+    -- העברת נתונים מטבלאות הכפולות לטבלה העיקרית
+    FOREACH table_name IN ARRAY duplicate_stages_tables
+    LOOP
+      -- העתקת נתונים לטבלת השלבים העיקרית
+      BEGIN
+        EXECUTE format('
+          INSERT INTO %I (
+            id, title, hierarchical_number, due_date, status, progress, 
+            color, parent_stage_id, dependencies, sort_order, 
+            created_at, updated_at, project_id
+          )
+          SELECT 
+            id, title, hierarchical_number, due_date, status, progress, 
+            color, parent_stage_id, dependencies, sort_order, 
+            created_at, updated_at, project_id
+          FROM %I
+          ON CONFLICT (id) DO NOTHING',
+          base_stages_table_name, table_name
+        );
+      EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'שגיאה בהעתקת נתונים מטבלה % לטבלה %: %', table_name, base_stages_table_name, SQLERRM;
+      END;
+      
+      -- מחיקת הטבלה הכפולה
+      BEGIN
+        EXECUTE format('DROP TABLE IF EXISTS %I', table_name);
+        stages_dropped := stages_dropped + 1;
+        
+        RAISE NOTICE 'טבלת שלבים כפולה % נמחקה', table_name;
+      EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'שגיאה במחיקת טבלה %: %', table_name, SQLERRM;
+      END;
+    END LOOP;
+  END IF;
+  
+  -- עדכון תוצאה
+  RETURN json_build_object(
+    'success', true,
+    'message', 'ניקוי טבלאות כפולות הושלם בהצלחה',
+    'project_id', project_id_param,
+    'tables_found', array_length(table_list, 1),
+    'duplicate_tasks_tables', duplicate_tasks_tables,
+    'duplicate_stages_tables', duplicate_stages_tables,
+    'tasks_tables_dropped', tasks_dropped,
+    'stages_tables_dropped', stages_dropped
+  );
+EXCEPTION WHEN OTHERS THEN
+  RETURN json_build_object(
+    'success', false,
+    'error', SQLERRM,
+    'project_id', project_id_param
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- הענקת הרשאות לפונקציית ניקוי טבלאות כפולות
+GRANT EXECUTE ON FUNCTION cleanup_duplicate_project_tables(uuid) TO anon, authenticated, service_role; 
