@@ -81,7 +81,7 @@ import projectService from '@/lib/services/projectService';
 import taskService from '@/lib/services/taskService';
 import stageService from '@/lib/services/stageService';
 import { Project, Task, Stage } from '@/types/supabase';
-import { ExtendedTask } from '@/types/extendedTypes';
+import { ExtendedTask, ExtendedStage } from '@/types/extendedTypes';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 import TaskTree from '@/components/tasks/TaskTree';
 import TaskGantt from '@/components/tasks/TaskGantt';
@@ -152,13 +152,20 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       const tasksData = await taskService.getProjectSpecificTasks(id);
       
       // המרת נתוני המשימות לטיפוס המורחב
-      const enhancedTasks = tasksData.map(task => ({
-        ...task,
-        stageName: stagesData.find(stage => stage.id === task.stage_id)?.title || 'ללא שלב',
-        stageColor: stagesData.find(stage => stage.id === task.stage_id)?.color || 'gray',
-      })) as KanbanTask[];
+      const foundStage = (taskStageId: string | null) => stagesData.find(stage => stage.id === taskStageId);
       
-      setTasks(enhancedTasks);
+      const enhancedTasks = tasksData.map(task => {
+        const stage = foundStage(task.stage_id);
+        return {
+          ...task,
+          stageName: stage?.title || 'ללא שלב',
+          stageColor: 'gray', // ערך ברירת מחדל קבוע
+          // העתקה של שדות אחרים הנדרשים על ידי KanbanTask
+          assignees: task.assignees || null,
+        };
+      });
+      
+      setTasks(enhancedTasks as KanbanTask[]);
       
       // חישוב התקדמות הפרויקט
       const progressData = await projectService.calculateProjectProgress(id);
@@ -434,7 +441,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     }
   };
   
-  // סנכרון משימות הפרויקט
+  // טיפול בסנכרון משימות הפרויקט
   const handleSyncProjectData = async () => {
     if (loading) return;
     
@@ -449,8 +456,17 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       const updatedStages = await stageService.getProjectStages(id);
       setStages(updatedStages);
       
-      const updatedTasks = await taskService.getProjectSpecificTasks(id);
-      setTasks(updatedTasks);
+      const updatedTasksData = await taskService.getProjectSpecificTasks(id);
+      
+      // המרה נכונה לטיפוס KanbanTask
+      const enhancedTasks = updatedTasksData.map(task => ({
+        ...task,
+        stageName: updatedStages.find(stage => stage.id === task.stage_id)?.title || 'ללא שלב',
+        stageColor: 'gray',
+        assignees: task.assignees || null,
+      }));
+      
+      setTasks(enhancedTasks as KanbanTask[]);
       
       // עדכון התקדמות הפרויקט
       const updatedProject = await projectService.getProjectById(id);
@@ -738,8 +754,8 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                       {tasks.length > 0 ? (
                         <TaskList 
                           projectId={id}
-                          onTaskCreated={handleTaskCreated}
-                          onTaskUpdated={handleTaskUpdated}
+                          onTaskCreated={(newTask) => handleTaskCreated(newTask as KanbanTask)}
+                          onTaskUpdated={(updatedTask) => handleTaskUpdated(updatedTask as KanbanTask)}
                           onTaskDeleted={handleDeleteTask}
                         />
                       ) : (
@@ -772,11 +788,11 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                       {stages.length > 0 ? (
                         <TaskKanban
                           projectId={id}
-                          stages={stages}
-                          tasks={tasks}
-                          onTaskUpdated={handleTaskUpdated}
-                          onTaskDeleted={handleTaskDeleted}
-                          getProjectName={(projectId) => project.name}
+                          stages={stages as any}
+                          tasks={tasks as any}
+                          onTaskUpdated={(updatedTask) => handleTaskUpdated(updatedTask as KanbanTask)}
+                          onTaskDeleted={handleDeleteTask}
+                          getProjectName={(projectId) => project?.name || ""}
                         />
                       ) : (
                         <Card p={8} textAlign="center" variant="outline">
@@ -805,7 +821,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                     <Box>
                       {tasks.length > 0 ? (
                         <TaskGantt
-                          tasks={tasks}
+                          tasks={tasks as any}
                           onTaskDrop={handleTaskDrop}
                         />
                       ) : (
@@ -835,7 +851,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                   {/* תצוגת עץ */}
                   <TabPanel>
                     <TaskTree 
-                      tasks={tasks} 
+                      tasks={tasks as any} 
                       projectId={id}
                       onTaskEdited={handleEditTask}
                       onTaskDeleted={handleDeleteTask}
