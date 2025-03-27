@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useRef, Component, ReactNode } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import {
   Box,
   Container,
@@ -47,6 +47,8 @@ import {
   StatNumber,
   StatHelpText,
   useColorModeValue,
+  Avatar,
+  AvatarGroup,
 } from '@chakra-ui/react';
 import { 
   FiArrowLeft, 
@@ -74,6 +76,7 @@ import {
   FiActivity,
   FiStar,
 } from 'react-icons/fi';
+import { FaFire, FaMoneyBillWave, FaTable, FaUserAlt, FaUserCheck, FaUsers } from 'react-icons/fa';
 import projectService from '@/lib/services/projectService';
 import taskService from '@/lib/services/taskService';
 import stageService from '@/lib/services/stageService';
@@ -85,8 +88,9 @@ import TaskGantt from '@/components/tasks/TaskGantt';
 import TaskList from '@/components/tasks/TaskList';
 import TaskEditModal from '@/components/tasks/TaskEditModal';
 import AssignTasksModal from '@/components/tasks/AssignTasksModal';
-import TaskKanban from '@/components/tasks/TaskKanban';
+import TaskKanban from '@/components/tasks/kanban/TaskKanban';
 import StageManager from '@/components/stages/StageManager';
+import { Task as KanbanTask } from '@/components/tasks/kanban/types';
 
 type ProjectPageProps = {
   params: {
@@ -97,13 +101,13 @@ type ProjectPageProps = {
 export default function ProjectPage({ params }: ProjectPageProps) {
   const { id } = params;
   const [project, setProject] = useState<Project | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<KanbanTask[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [tabIndex, setTabIndex] = useState(0);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedTask, setSelectedTask] = useState<KanbanTask | null>(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isAssignTasksModalOpen, setIsAssignTasksModalOpen] = useState(false);
   
@@ -124,48 +128,57 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       return;
     }
     
-    const loadProjectData = async () => {
-      try {
-        setLoading(true);
-        
-        // טעינת פרטי הפרויקט
-        const projectData = await projectService.getProjectById(id);
-        if (!projectData) {
-          setError('הפרויקט לא נמצא');
-          return;
-        }
-        setProject(projectData);
-        
-        // טעינת השלבים של הפרויקט
-        const stagesData = await stageService.getProjectStages(id);
-        setStages(stagesData);
-        
-        // טעינת משימות הפרויקט
-        const tasksData = await taskService.getProjectSpecificTasks(id);
-        setTasks(tasksData);
-        
-        // חישוב התקדמות הפרויקט
-        const progressData = await projectService.calculateProjectProgress(id);
-        setProgress(progressData);
-      } catch (err) {
-        console.error('שגיאה בטעינת נתוני הפרויקט:', err);
-        setError('אירעה שגיאה בטעינת נתוני הפרויקט');
-        
-        toast({
-          title: 'שגיאה בטעינת נתונים',
-          description: err instanceof Error ? err.message : 'אירעה שגיאה בלתי צפויה',
-          status: 'error',
-          duration: 5000,
-          isClosable: true,
-          position: 'top-right',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-    
     loadProjectData();
-  }, [id, toast, router]);
+  }, [id]);
+  
+  // פונקציית טעינת נתוני הפרויקט
+  const loadProjectData = async () => {
+    try {
+      setLoading(true);
+      
+      // טעינת פרטי הפרויקט
+      const projectData = await projectService.getProjectById(id);
+      if (!projectData) {
+        setError('הפרויקט לא נמצא');
+        return;
+      }
+      setProject(projectData);
+      
+      // טעינת השלבים של הפרויקט
+      const stagesData = await stageService.getProjectStages(id);
+      setStages(stagesData);
+      
+      // טעינת משימות הפרויקט
+      const tasksData = await taskService.getProjectSpecificTasks(id);
+      
+      // המרת נתוני המשימות לטיפוס המורחב
+      const enhancedTasks = tasksData.map(task => ({
+        ...task,
+        stageName: stagesData.find(stage => stage.id === task.stage_id)?.title || 'ללא שלב',
+        stageColor: stagesData.find(stage => stage.id === task.stage_id)?.color || 'gray',
+      })) as KanbanTask[];
+      
+      setTasks(enhancedTasks);
+      
+      // חישוב התקדמות הפרויקט
+      const progressData = await projectService.calculateProjectProgress(id);
+      setProgress(progressData);
+    } catch (err) {
+      console.error('שגיאה בטעינת נתוני הפרויקט:', err);
+      setError('אירעה שגיאה בטעינת נתוני הפרויקט');
+      
+      toast({
+        title: 'שגיאה בטעינת נתונים',
+        description: err instanceof Error ? err.message : 'אירעה שגיאה בלתי צפויה',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+        position: 'top-right',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
   
   // מחיקת פרויקט
   const handleDeleteProject = async () => {
@@ -228,8 +241,8 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     }
   };
   
-  // פונקציה להטיפול ביצירת משימה חדשה
-  const handleTaskCreated = (newTask: Task) => {
+  // פונקציה להטיפול ביצירת משימה
+  const handleTaskCreated = (newTask: KanbanTask) => {
     setTasks(prev => [...prev, newTask]);
     toast({
       title: 'המשימה נוצרה בהצלחה',
@@ -240,13 +253,15 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   };
   
   // פונקציה לטיפול בעדכון משימה
-  const handleTaskUpdated = (updatedTask: Task) => {
-    setTasks(prev => prev.map(task => task.id === updatedTask.id ? updatedTask : task));
+  const handleTaskUpdated = (updatedTask: KanbanTask) => {
+    setTasks(prev => prev.map(task => 
+      task.id === updatedTask.id ? { ...task, ...updatedTask } : task
+    ));
     toast({
-      title: 'המשימה עודכנה בהצלחה',
-      status: 'success',
-      duration: 3000,
-      isClosable: true,
+      title: "משימה עודכנה",
+      status: "success",
+      duration: 2000,
+      isClosable: true
     });
   };
   
@@ -262,7 +277,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   };
   
   // פונקציה להצגת מודל עריכת משימה
-  const handleEditTask = (task: Task) => {
+  const handleEditTask = (task: KanbanTask) => {
     setSelectedTask(task);
     setIsTaskModalOpen(true);
   };
@@ -756,13 +771,12 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                     <Box>
                       {stages.length > 0 ? (
                         <TaskKanban
-                          projects={[project]}
+                          projectId={id}
                           stages={stages}
                           tasks={tasks}
-                          onEditTask={handleTaskUpdated}
-                          onDeleteTask={handleTaskDeleted}
-                          onStageChange={handleStageChange}
-                          onStatusChange={handleStatusChange}
+                          onTaskUpdated={handleTaskUpdated}
+                          onTaskDeleted={handleTaskDeleted}
+                          getProjectName={(projectId) => project.name}
                         />
                       ) : (
                         <Card p={8} textAlign="center" variant="outline">
