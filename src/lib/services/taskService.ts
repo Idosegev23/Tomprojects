@@ -346,6 +346,76 @@ export const taskService = {
     return this.updateTask(id, { stage_id: stageId, updated_at: new Date().toISOString() });
   },
   
+  // עדכון שלב למשימות לפי תחילית של מספר היררכי
+  async updateTasksStageByHierarchicalPrefix(hierarchicalPrefix: string, stageId: string, projectId: string): Promise<number> {
+    if (!hierarchicalPrefix || !projectId) {
+      throw new Error('נדרש מספר היררכי ומזהה פרויקט');
+    }
+    
+    const tableName = `project_${projectId}_tasks`;
+    
+    try {
+      // בדיקה אם הטבלה הספציפית קיימת
+      const { data: tableExists, error: tableCheckError } = await supabase
+        .rpc('check_table_exists', { table_name_param: tableName });
+        
+      if (tableCheckError) {
+        console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
+        throw new Error(`שגיאה בבדיקת קיום טבלה: ${tableCheckError.message}`);
+      }
+      
+      if (!tableExists) {
+        console.error(`Table ${tableName} does not exist`);
+        throw new Error(`טבלת המשימות ${tableName} אינה קיימת`);
+      }
+      
+      // עדכון כל המשימות שמתחילות במספר ההיררכי שסופק
+      const { data, error } = await supabase.rpc('update_tasks_stage_by_hierarchical_prefix', {
+        project_id_param: projectId,
+        hierarchical_prefix_param: hierarchicalPrefix,
+        stage_id_param: stageId
+      });
+      
+      if (error) {
+        console.error('Error updating tasks stage by hierarchical prefix:', error);
+        
+        // אם הפונקציה לא קיימת, ננסה לעשות זאת באופן ידני
+        console.log(`Falling back to manual update for tasks with hierarchical prefix ${hierarchicalPrefix}`);
+        
+        // שליפת המשימות המתאימות
+        const { data: tasks, error: fetchError } = await supabase
+          .from(tableName)
+          .select('id')
+          .like('hierarchical_number', `${hierarchicalPrefix}%`);
+          
+        if (fetchError) {
+          console.error('Error fetching tasks with hierarchical prefix:', fetchError);
+          throw new Error(`שגיאה בשליפת משימות לפי מספר היררכי: ${fetchError.message}`);
+        }
+        
+        if (!tasks || tasks.length === 0) {
+          console.log(`No tasks found with hierarchical prefix ${hierarchicalPrefix}`);
+          return 0;
+        }
+        
+        // עדכון כל המשימות
+        const updatePromises = tasks.map(task => 
+          this.updateTask(task.id, { stage_id: stageId })
+        );
+        
+        await Promise.all(updatePromises);
+        
+        return tasks.length;
+      }
+      
+      console.log(`Updated ${data} tasks with hierarchical prefix ${hierarchicalPrefix} to stage ${stageId}`);
+      return data || 0;
+    } catch (error) {
+      console.error('Error in updateTasksStageByHierarchicalPrefix:', error);
+      throw error;
+    }
+  },
+  
   // קבלת המספר ההיררכי הבא למשימת אב בפרויקט
   async getNextRootHierarchicalNumber(projectId: string | null): Promise<string> {
     // אם אין project_id, נחזיר "1" כברירת מחדל

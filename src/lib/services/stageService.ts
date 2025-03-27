@@ -177,6 +177,18 @@ export const stageService = {
     }
     
     try {
+      // קריאה לפונקציית התיקון לפני יצירת שלב חדש
+      console.log(`מתקן את מבנה טבלת השלבים לפרויקט ${stage.project_id}...`);
+      const { data: fixResult, error: fixError } = await supabase
+        .rpc('fix_project_stages_table', { project_id_param: stage.project_id });
+        
+      if (fixError) {
+        console.warn(`שגיאה בתיקון מבנה טבלת השלבים: ${fixError.message}`);
+        // ממשיכים למרות השגיאה
+      } else {
+        console.log(`תוצאת תיקון מבנה טבלת השלבים: ${fixResult}`);
+      }
+      
       // הוספת מזהה ייחודי אם לא סופק
       const stageWithId = {
         ...stage,
@@ -185,35 +197,24 @@ export const stageService = {
         updated_at: new Date().toISOString()
       };
       
-      // התאמת שמות השדות למבנה הטבלה - משתמשים ב-any כדי לעקוף את בדיקות הטיפוס
+      // התאמת שמות השדות למבנה הטבלה המעודכן
       const adaptedStage: any = {
         id: stageWithId.id,
         title: stageWithId.title || '',
         project_id: stageWithId.project_id,
         created_at: stageWithId.created_at,
         updated_at: stageWithId.updated_at,
-        // שדות אופציונליים שקיימים בטבלה
+        // שדות אופציונליים
         description: stageWithId.description || null,
-        hierarchical_number: null, // שדה נוסף שיש בטבלה של הפרויקט
-        due_date: null, // שדה נוסף שיש בטבלה של הפרויקט
-        status: 'active', // שדה נוסף שיש בטבלה של הפרויקט
-        progress: 0, // שדה נוסף שיש בטבלה של הפרויקט
-        color: null, // שדה נוסף שיש בטבלה של הפרויקט
-        parent_stage_id: null, // שדה נוסף שיש בטבלה של הפרויקט
-        dependencies: null, // שדה נוסף שיש בטבלה של הפרויקט
-        sort_order: 0 // שדה נוסף שיש בטבלה של הפרויקט
+        hierarchical_number: (stageWithId as any).hierarchical_number || null,
+        status: (stageWithId as any).status || 'active',
+        color: (stageWithId as any).color || null,
+        due_date: (stageWithId as any).due_date || null,
+        progress: (stageWithId as any).progress || 0,
+        sort_order: (stageWithId as any).sort_order || (stageWithId as any).order || 0,
+        parent_stage_id: (stageWithId as any).parent_stage_id || null,
+        dependencies: null // לשמור על הערך הריק כדי שלא תהיה טעות, השדה צריך להיות מסוג text[]
       };
-      
-      // העתקת שדות נוספים אם הם קיימים באובייקט המקורי
-      if ((stageWithId as any).hierarchical_number !== undefined) adaptedStage.hierarchical_number = (stageWithId as any).hierarchical_number;
-      if ((stageWithId as any).due_date !== undefined) adaptedStage.due_date = (stageWithId as any).due_date;
-      if ((stageWithId as any).status !== undefined) adaptedStage.status = (stageWithId as any).status;
-      if ((stageWithId as any).progress !== undefined) adaptedStage.progress = (stageWithId as any).progress;
-      if ((stageWithId as any).color !== undefined) adaptedStage.color = (stageWithId as any).color;
-      if ((stageWithId as any).parent_stage_id !== undefined) adaptedStage.parent_stage_id = (stageWithId as any).parent_stage_id;
-      if ((stageWithId as any).dependencies !== undefined) adaptedStage.dependencies = (stageWithId as any).dependencies;
-      if ((stageWithId as any).sort_order !== undefined) adaptedStage.sort_order = (stageWithId as any).sort_order;
-      if ((stageWithId as any).order !== undefined) adaptedStage.sort_order = (stageWithId as any).order;
       
       // נבדוק אם הטבלה הייחודית קיימת
       const projectStagesTableName = `project_${stage.project_id}_stages`;
@@ -241,9 +242,15 @@ export const stageService = {
         // אם היה כישלון ביצירה בטבלה הייחודית, ננסה ליצור בטבלה הכללית
         console.log(`מנסה ליצור שלב בטבלה הכללית (stages) עבור פרויקט ${stage.project_id}`);
         
+        // צריך להתאים את המבנה לטבלה הכללית
+        const generalStage = {
+          ...adaptedStage,
+          dependencies: null // בטבלה הכללית זה jsonb
+        };
+        
         const { data: generalData, error: generalError } = await supabase
           .from('stages')
-          .insert(adaptedStage)
+          .insert(generalStage)
           .select()
           .single();
           
@@ -255,9 +262,9 @@ export const stageService = {
         console.log('שלב נוצר בהצלחה בטבלה הכללית:', generalData);
         return generalData;
       }
-    } catch (error) {
-      console.error('Error in createStage:', error);
-      throw new Error(`שגיאה ביצירת שלב: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`);
+    } catch (err) {
+      console.error('Error in createStage:', err);
+      throw new Error(`שגיאה ביצירת שלב: ${err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה'}`);
     }
   },
   

@@ -22,11 +22,17 @@ import {
   Select,
   Spinner,
   Text,
-  Checkbox,
-  CheckboxGroup,
-  Stack,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
   Badge,
   Heading,
+  NumberInput,
+  NumberInputField,
+  NumberInputStepper,
+  NumberIncrementStepper,
+  NumberDecrementStepper,
 } from '@chakra-ui/react';
 import { Stage, Task } from '@/types/supabase';
 import { ExtendedStage } from '@/types/extendedTypes';
@@ -59,13 +65,15 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
     start_date: '',
     end_date: '',
     color: '',
-    order: 0,
+    hierarchical_number: '',
+    sort_order: 0,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [projectTasks, setProjectTasks] = useState<Task[]>([]);
-  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [matchingTasks, setMatchingTasks] = useState<Task[]>([]);
+  const [availableHierarchyPrefixes, setAvailableHierarchyPrefixes] = useState<string[]>([]);
   
   const toast = useToast();
   
@@ -87,7 +95,8 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
         start_date: '',
         end_date: '',
         color: '',
-        order: 0,
+        hierarchical_number: '',
+        sort_order: 0,
       });
     }
     
@@ -103,12 +112,25 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
       const tasks = await taskService.getProjectSpecificTasks(projectId);
       setProjectTasks(tasks);
       
-      // אם מדובר בעריכת שלב קיים, נסמן את המשימות ששייכות לשלב
-      if (stage) {
-        const tasksInStage = tasks.filter(task => task.stage_id === stage.id);
-        setSelectedTaskIds(tasksInStage.map(task => task.id));
-      } else {
-        setSelectedTaskIds([]);
+      // איסוף כל המספרים ההיררכיים הראשיים (המספר לפני הנקודה הראשונה)
+      const prefixes = new Set<string>();
+      tasks.forEach(task => {
+        if (task.hierarchical_number) {
+          // הוצאת הספרה הראשית (לפני הנקודה הראשונה)
+          const mainNumber = task.hierarchical_number.split('.')[0];
+          if (mainNumber) {
+            prefixes.add(mainNumber);
+          }
+        }
+      });
+      
+      // מיון המספרים
+      const sortedPrefixes = Array.from(prefixes).sort((a, b) => parseInt(a) - parseInt(b));
+      setAvailableHierarchyPrefixes(sortedPrefixes);
+      
+      // אם מדובר בעריכת שלב קיים, נמצא את המשימות ששייכות לו
+      if (stage && stage.hierarchical_number) {
+        updateMatchingTasks(stage.hierarchical_number);
       }
     } catch (error) {
       console.error('Error loading project tasks:', error);
@@ -124,9 +146,26 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
     }
   };
   
+  // עדכון המשימות שמתאימות למספר ההיררכי שנבחר
+  const updateMatchingTasks = (hierNumber: string) => {
+    if (!hierNumber || !projectTasks.length) return;
+    
+    // מציאת משימות שהמספר ההיררכי שלהן מתחיל במספר שנבחר
+    const matching = projectTasks.filter(task => 
+      task.hierarchical_number && task.hierarchical_number.startsWith(hierNumber)
+    );
+    
+    setMatchingTasks(matching);
+  };
+  
   // טיפול בשינויים בטופס
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    
+    if (name === 'hierarchical_number') {
+      updateMatchingTasks(value);
+    }
+    
     setFormData(prev => ({ ...prev, [name]: value }));
     
     // ניקוי שגיאות בעת שינוי
@@ -137,17 +176,6 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
         return newErrors;
       });
     }
-  };
-  
-  // טיפול בשינוי בבחירת משימות
-  const handleTaskSelectionChange = (taskId: string) => {
-    setSelectedTaskIds(prev => {
-      if (prev.includes(taskId)) {
-        return prev.filter(id => id !== taskId);
-      } else {
-        return [...prev, taskId];
-      }
-    });
   };
   
   // פונקציה לוולידציה של הטופס
@@ -181,6 +209,7 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
         title: formData.title || '',
         description: formData.description,
         project_id: projectId,
+        hierarchical_number: formData.hierarchical_number,
       };
       
       // נוסיף את השדות המורחבים באמצעות טיפוס casting
@@ -191,7 +220,7 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
       if (formData.start_date) stageData.start_date = formData.start_date;
       if (formData.end_date) stageData.end_date = formData.end_date;
       if (formData.color) stageData.color = formData.color;
-      if (formData.order !== undefined) stageData.order = formData.order;
+      if (formData.sort_order !== undefined) stageData.sort_order = formData.sort_order;
       
       let result;
       
@@ -200,7 +229,7 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
         result = await stageService.updateStage(stage.id, stageData, projectId);
         
         if (result) {
-          // עדכון המשימות ששייכות לשלב
+          // עדכון המשימות ששייכות לשלב לפי המספר ההיררכי
           await updateTasksStage(result.id);
           
           toast({
@@ -219,12 +248,12 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
         result = await stageService.createStage(stageData);
         
         if (result) {
-          // עדכון המשימות ששייכות לשלב
+          // עדכון המשימות ששייכות לשלב לפי המספר ההיררכי
           await updateTasksStage(result.id);
           
           toast({
             title: "השלב נוצר בהצלחה",
-            description: `השלב "${result.title}" נוצר ו-${selectedTaskIds.length} משימות שויכו אליו`,
+            description: `השלב "${result.title}" נוצר ו-${matchingTasks.length} משימות שויכו אליו`,
             status: "success",
             duration: 3000,
             isClosable: true,
@@ -251,32 +280,44 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
     }
   };
   
-  // עדכון שלב למשימות שנבחרו
+  // עדכון שלב למשימות לפי המספר ההיררכי
   const updateTasksStage = async (stageId: string) => {
     try {
-      // מערך הבטחות לעדכון המשימות
-      const updatePromises = selectedTaskIds.map(taskId => 
-        taskService.updateTaskStage(taskId, stageId)
+      if (!formData.hierarchical_number) return;
+      
+      // שימוש בפונקציה היעילה יותר לעדכון משימות לפי תחילית מספר היררכי
+      console.log(`Updating tasks with hierarchical prefix ${formData.hierarchical_number} to stage ${stageId}`);
+      
+      const updatedCount = await taskService.updateTasksStageByHierarchicalPrefix(
+        formData.hierarchical_number,
+        stageId,
+        projectId
       );
       
-      // ביצוע כל הבקשות במקביל
-      await Promise.all(updatePromises);
+      console.log(`Updated ${updatedCount} tasks to stage ${stageId}`);
       
-      // אם זה שלב קיים, נמצא את המשימות ששייכות אליו ואינן ברשימת הנבחרות
-      if (isEditMode && stage) {
-        const tasksToRemoveStage = projectTasks
-          .filter(task => task.stage_id === stage.id && !selectedTaskIds.includes(task.id))
-          .map(task => task.id);
+      // אם עדכנו שלב קיים, נטפל במשימות שהיו משויכות אליו קודם ואינן מתאימות למספר ההיררכי
+      if (isEditMode && stage && stage.id) {
+        console.log(`Cleaning up tasks that were assigned to stage ${stage.id} but no longer match hierarchical prefix`);
         
-        // איפוס שלב למשימות שהוסרו
-        const removePromises = tasksToRemoveStage.map(taskId => 
-          taskService.updateTask(taskId, { stage_id: null })
+        // מציאת משימות שמשויכות לשלב אבל לא מתחילות במספר ההיררכי החדש
+        const tasksInWrongStage = projectTasks.filter(task => 
+          task.stage_id === stage.id && 
+          (!task.hierarchical_number || !task.hierarchical_number.startsWith(formData.hierarchical_number || ''))
         );
         
-        await Promise.all(removePromises);
+        if (tasksInWrongStage.length > 0) {
+          console.log(`Found ${tasksInWrongStage.length} tasks in wrong stage, clearing their stage_id`);
+          
+          // איפוס שלב למשימות שכבר לא מתאימות
+          const removePromises = tasksInWrongStage.map(task => 
+            taskService.updateTask(task.id, { stage_id: null })
+          );
+          
+          await Promise.all(removePromises);
+        }
       }
       
-      console.log(`Updated ${selectedTaskIds.length} tasks to stage ${stageId}`);
     } catch (error) {
       console.error('Error updating tasks stage:', error);
       throw error;
@@ -361,64 +402,86 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
             
             <FormControl>
               <FormLabel>סדר</FormLabel>
-              <Input 
-                type="number" 
-                name="order" 
-                value={formData.order || 0} 
-                onChange={handleChange}
-                min={0}
-                step={1}
-              />
+              <NumberInput 
+                min={0} 
+                step={1} 
+                value={formData.sort_order || 0}
+                onChange={(val) => setFormData({...formData, sort_order: parseInt(val) || 0})}
+              >
+                <NumberInputField />
+                <NumberInputStepper>
+                  <NumberIncrementStepper />
+                  <NumberDecrementStepper />
+                </NumberInputStepper>
+              </NumberInput>
             </FormControl>
             
             <Divider my={3} />
             
-            {/* אזור בחירת משימות לשיוך לשלב */}
+            {/* אזור שיוך משימות אוטומטי לפי מספר היררכי */}
             <Box>
-              <Heading size="sm" mb={3}>שיוך משימות לשלב</Heading>
-              <Text fontSize="sm" mb={3}>
-                בחר את המשימות שברצונך לשייך לשלב זה. המשימות מוצגות לפי מספור היררכי.
-              </Text>
+              <Heading size="sm" mb={3}>שיוך משימות אוטומטי לפי מספור היררכי</Heading>
+              
+              <FormControl>
+                <FormLabel>מספר היררכי של השלב</FormLabel>
+                <Select 
+                  name="hierarchical_number" 
+                  value={formData.hierarchical_number || ''} 
+                  onChange={handleChange}
+                  placeholder="בחר מספר ראשי"
+                >
+                  {availableHierarchyPrefixes.map(prefix => (
+                    <option key={prefix} value={prefix}>
+                      {prefix} - כל המשימות המתחילות ב-{prefix}
+                    </option>
+                  ))}
+                </Select>
+                
+                <Text fontSize="sm" mt={2} color="gray.600">
+                  כל המשימות שמספרן ההיררכי מתחיל במספר זה ישויכו אוטומטית לשלב
+                </Text>
+              </FormControl>
               
               {loadingTasks ? (
                 <Flex justify="center" py={4}>
                   <Spinner />
                 </Flex>
-              ) : projectTasks.length === 0 ? (
-                <Text color="gray.500" py={4}>
-                  לא נמצאו משימות בפרויקט זה
-                </Text>
-              ) : (
-                <Box maxH="300px" overflowY="auto" p={3} borderWidth="1px" borderRadius="md">
-                  <VStack align="stretch" spacing={2}>
-                    {projectTasks.map(task => (
-                      <Checkbox 
-                        key={task.id}
-                        isChecked={selectedTaskIds.includes(task.id)}
-                        onChange={() => handleTaskSelectionChange(task.id)}
-                        colorScheme="blue"
-                      >
-                        <HStack>
-                          <Text fontWeight={!task.parent_task_id ? "bold" : "normal"}>
-                            {task.hierarchical_number && (
-                              <Badge mr={2} colorScheme="blue">
-                                {task.hierarchical_number}
-                              </Badge>
-                            )}
-                            {task.title}
-                          </Text>
-                        </HStack>
-                      </Checkbox>
-                    ))}
-                  </VStack>
+              ) : matchingTasks.length > 0 ? (
+                <Box mt={4}>
+                  <Alert status="info" borderRadius="md">
+                    <AlertIcon />
+                    <Box>
+                      <AlertTitle>משימות מתאימות: {matchingTasks.length}</AlertTitle>
+                      <AlertDescription>
+                        המשימות הבאות ישויכו לשלב זה באופן אוטומטי:
+                      </AlertDescription>
+                    </Box>
+                  </Alert>
+                  
+                  <Box maxH="200px" overflowY="auto" mt={3} p={3} borderWidth="1px" borderRadius="md">
+                    <VStack align="stretch" spacing={1}>
+                      {matchingTasks.map(task => (
+                        <Text key={task.id} fontSize="sm">
+                          <Badge mr={2} colorScheme="blue">
+                            {task.hierarchical_number}
+                          </Badge>
+                          {task.title}
+                        </Text>
+                      ))}
+                    </VStack>
+                  </Box>
                 </Box>
-              )}
-              
-              {selectedTaskIds.length > 0 && (
-                <Text fontSize="sm" mt={2}>
-                  נבחרו {selectedTaskIds.length} משימות לשיוך לשלב זה
-                </Text>
-              )}
+              ) : formData.hierarchical_number ? (
+                <Alert status="warning" mt={4} borderRadius="md">
+                  <AlertIcon />
+                  <Box>
+                    <AlertTitle>אין משימות מתאימות</AlertTitle>
+                    <AlertDescription>
+                      לא נמצאו משימות עם המספר ההיררכי {formData.hierarchical_number}
+                    </AlertDescription>
+                  </Box>
+                </Alert>
+              ) : null}
             </Box>
           </VStack>
         </ModalBody>

@@ -7,12 +7,20 @@ export interface ExtendedStage extends Stage {
   end_date?: string;
   color?: string;
   order?: number;
+  sort_order?: number;
+  hierarchical_number?: string;
+  progress?: number;
 }
 
 // טיפוס שמרחיב את Task כדי לכלול שדות נוספים
 export interface ExtendedTask extends Task {
   dropbox_folder?: string;
   // hierarchical_number מוגדר כ-string | null ב-Task המקורי
+}
+
+// טיפוס שמותאם למשימה עם ילדים
+export interface TaskWithChildren extends Task {
+  children: TaskWithChildren[];
 }
 
 // טיפוס שמתאים למודל של שלב עם משימות

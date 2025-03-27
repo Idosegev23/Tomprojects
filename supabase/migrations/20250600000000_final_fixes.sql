@@ -427,7 +427,11 @@ DECLARE
   tasks_table_exists boolean;
   stages_table_exists boolean;
   stage_count_check record;
+  fix_result boolean;
 BEGIN
+  -- 0. תיקון מבנה טבלת השלבים אם קיימת
+  fix_result := fix_project_stages_table(project_id_param);
+  
   -- 1. וידוא שטבלאות הפרויקט קיימות
   tasks_table_exists := check_table_exists(tasks_table_name);
   stages_table_exists := check_table_exists(stages_table_name);
@@ -674,4 +678,112 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- הענקת הרשאות לפונקציית ניקוי טבלאות כפולות
-GRANT EXECUTE ON FUNCTION cleanup_duplicate_project_tables(uuid) TO anon, authenticated, service_role; 
+GRANT EXECUTE ON FUNCTION cleanup_duplicate_project_tables(uuid) TO anon, authenticated, service_role;
+
+-- פונקציה לעדכון מבנה טבלת השלבים של פרויקט ספציפי
+CREATE OR REPLACE FUNCTION fix_project_stages_table(project_id_param uuid)
+RETURNS boolean AS $$
+DECLARE
+  table_name text := 'project_' || project_id_param::text || '_stages';
+  cols_info record;
+  has_dependencies boolean := false;
+  has_sort_order boolean := false;
+  has_order_num boolean := false;
+  dependencies_type text;
+BEGIN
+  -- בדיקה אם הטבלה קיימת
+  IF NOT check_table_exists(table_name) THEN
+    -- הטבלה לא קיימת - ניצור אותה מחדש עם המבנה הנכון
+    PERFORM create_project_stages_table(project_id_param);
+    RETURN true;
+  END IF;
+
+  -- בדיקת קיום עמודות ספציפיות
+  FOR cols_info IN 
+    SELECT column_name, data_type
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = table_name
+  LOOP
+    IF cols_info.column_name = 'dependencies' THEN
+      has_dependencies := true;
+      dependencies_type := cols_info.data_type;
+    ELSIF cols_info.column_name = 'sort_order' THEN
+      has_sort_order := true;
+    ELSIF cols_info.column_name = 'order_num' THEN
+      has_order_num := true;
+    END IF;
+  END LOOP;
+
+  -- וידוא שיש עמודת dependencies מסוג מערך טקסט
+  IF NOT has_dependencies THEN
+    EXECUTE format('ALTER TABLE %I ADD COLUMN dependencies text[]', table_name);
+    RAISE NOTICE 'הוספת עמודת dependencies לטבלה %', table_name;
+  ELSIF dependencies_type <> 'ARRAY' THEN
+    -- התאמת סוג הנתונים של dependencies
+    EXECUTE format('ALTER TABLE %I ALTER COLUMN dependencies TYPE text[] USING NULL', table_name);
+    RAISE NOTICE 'שינוי סוג עמודת dependencies ל-text[] בטבלה %', table_name;
+  END IF;
+
+  -- וידוא שיש עמודת sort_order
+  IF NOT has_sort_order THEN
+    IF has_order_num THEN
+      -- שינוי שם העמודה מ-order_num ל-sort_order
+      EXECUTE format('ALTER TABLE %I RENAME COLUMN order_num TO sort_order', table_name);
+      RAISE NOTICE 'שינוי שם עמודה מ-order_num ל-sort_order בטבלה %', table_name;
+    ELSE
+      -- הוספת עמודת sort_order
+      EXECUTE format('ALTER TABLE %I ADD COLUMN sort_order integer', table_name);
+      RAISE NOTICE 'הוספת עמודת sort_order לטבלה %', table_name;
+    END IF;
+  END IF;
+
+  RETURN true;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'שגיאה בתיקון מבנה טבלת השלבים %: %', table_name, SQLERRM;
+  RETURN false;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- הענקת הרשאות לפונקציית תיקון טבלת שלבים
+GRANT EXECUTE ON FUNCTION fix_project_stages_table(uuid) TO anon, authenticated, service_role;
+
+-- פונקציה לעדכון שלב למשימות לפי תחילית של מספר היררכי
+CREATE OR REPLACE FUNCTION update_tasks_stage_by_hierarchical_prefix(
+  project_id_param uuid,
+  hierarchical_prefix_param text,
+  stage_id_param uuid
+)
+RETURNS integer AS $$
+DECLARE
+  table_name text := 'project_' || project_id_param::text || '_tasks';
+  update_count integer;
+BEGIN
+  -- וידוא שטבלת המשימות קיימת
+  IF NOT check_table_exists(table_name) THEN
+    RAISE EXCEPTION 'טבלת המשימות % אינה קיימת', table_name;
+  END IF;
+  
+  -- עדכון כל המשימות שמתחילות במספר ההיררכי המבוקש
+  EXECUTE format('
+    UPDATE %I
+    SET stage_id = %L, updated_at = now()
+    WHERE hierarchical_number LIKE %L || ''%%''
+    AND project_id = %L',
+    table_name,
+    stage_id_param,
+    hierarchical_prefix_param,
+    project_id_param
+  );
+  
+  -- קבלת מספר השורות שעודכנו
+  GET DIAGNOSTICS update_count = ROW_COUNT;
+  
+  RETURN update_count;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'שגיאה בעדכון שלב למשימות לפי מספר היררכי: %', SQLERRM;
+  RETURN 0;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- הענקת הרשאות
+GRANT EXECUTE ON FUNCTION update_tasks_stage_by_hierarchical_prefix(uuid, text, uuid) TO anon, authenticated, service_role; 
