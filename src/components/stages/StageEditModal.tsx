@@ -203,17 +203,14 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
     setLoading(true);
     
     try {
-      // נכין את הנתונים הבסיסיים של Stage ללא השדות המורחבים
-      const baseStageData: Partial<Stage> = {
+      // נכין את הנתונים הבסיסיים
+      const stageData: any = {
         id: formData.id,
         title: formData.title || '',
         description: formData.description,
         project_id: projectId,
         hierarchical_number: formData.hierarchical_number,
       };
-      
-      // נוסיף את השדות המורחבים באמצעות טיפוס casting
-      const stageData = baseStageData as any;
       
       // נוסיף את השדות המורחבים רק אם הם קיימים
       if (formData.status) stageData.status = formData.status;
