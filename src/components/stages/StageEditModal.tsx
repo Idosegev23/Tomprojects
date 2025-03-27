@@ -353,7 +353,7 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
       if (tasksToUpdate.length === 0) return;
       
       const updates = tasksToUpdate.map(task => 
-        taskService.updateTask(task.id, { stage_id: stageId }, projectId)
+        taskService.updateTask(task.id, { stage_id: stageId }),
       );
       
       await Promise.all(updates);
