@@ -1,0 +1,1 @@
+SELECT routine_name FROM information_schema.routines WHERE routine_type = 'FUNCTION' AND specific_schema = 'public' AND routine_name IN ('create_project_stages_table', 'copy_stages_to_project', 'check_table_exists', 'check_stages_table_exists', 'get_project_tasks', 'get_tasks_tree', 'copy_task_to_project_table', 'sync_tasks_from_templates', 'sync_task_children');
