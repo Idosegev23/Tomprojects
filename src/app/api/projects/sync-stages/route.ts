@@ -147,37 +147,134 @@ export async function POST(req: NextRequest) {
     console.log('מעדכן מזהי שלבים במשימות...');
     let updatedTasksCount = 0;
     
-    for (const task of tasksWithStageId) {
-      const newStageId = stageIdMap.get(task.stage_id);
-      
-      if (newStageId) {
+    // קודם כל נוודא שכל השלבים מהטבלה הכללית אכן הועתקו
+    for (const stageId of uniqueStageIds) {
+      if (!stageIdMap.has(stageId)) {
         try {
-          const { error: updateError } = await supabase
-            .from(tasksTableName)
-            .update({ stage_id: newStageId })
-            .eq('id', task.id);
+          console.log(`שלב ${stageId} לא הועתק עדיין, מנסה להעתיק אותו ישירות...`);
+          
+          // נבדוק אם השלב קיים בטבלה הכללית
+          const { data: stageData, error: stageError } = await supabase
+            .from('stages')
+            .select('*')
+            .eq('id', stageId)
+            .single();
             
-          if (updateError) {
-            console.error(`שגיאה בעדכון מזהה שלב במשימה ${task.id}:`, updateError);
+          if (stageError || !stageData) {
+            console.error(`שלב ${stageId} לא נמצא בטבלה הכללית:`, stageError);
             continue;
           }
           
-          updatedTasksCount++;
+          // העתקת השלב לטבלה הייחודית
+          const adaptedStage = {
+            ...stageData,
+            project_id: projectId,
+            updated_at: new Date().toISOString()
+          };
+          
+          const { data: insertedStage, error: insertError } = await supabase
+            .from(stagesTableName)
+            .upsert(adaptedStage, { onConflict: 'id' })
+            .select()
+            .single();
+            
+          if (insertError) {
+            console.error(`שגיאה בהעתקת שלב ${stageId} לטבלה הספציפית:`, insertError);
+            continue;
+          }
+          
+          stageIdMap.set(stageId, insertedStage.id);
+          console.log(`שלב [${stageData.title || stageId}] הועתק בהצלחה`);
         } catch (error) {
-          console.error(`שגיאה בעדכון מזהה שלב במשימה ${task.id}:`, error);
+          console.error(`שגיאה בהעתקת שלב ${stageId}:`, error);
         }
       }
     }
     
-    console.log(`עודכנו ${updatedTasksCount} משימות עם מזהי שלבים חדשים`);
+    // עכשיו נעדכן את כל המשימות עם stage_id חדש
+    const { data: allTasks, error: allTasksError } = await supabase
+      .from(tasksTableName)
+      .select('id, stage_id, title');
+      
+    if (allTasksError) {
+      console.error('שגיאה בשליפת כל המשימות:', allTasksError);
+    } else if (allTasks && allTasks.length > 0) {
+      console.log(`נמצאו ${allTasks.length} משימות סה"כ לבדיקה`);
+      
+      // בדיקה האם המשימה מצביעה לשלב שקיים בטבלה הכללית
+      for (const task of allTasks) {
+        if (task.stage_id) {
+          // אם יש stage_id, נבדוק אם הוא שייך לטבלה הכללית
+          const stageExists = stageIdMap.has(task.stage_id);
+          
+          if (stageExists) {
+            // המשימה מצביעה לשלב שקיים בטבלה הכללית, נעדכן אותה
+            try {
+              // הנקודה המרכזית: אנחנו לא משנים את ה-ID של השלב, 
+              // אבל אנחנו עדיין צריכים לוודא שהמשימה מצביעה לשלב בטבלה הייחודית
+              
+              // בדיקה אם השלב קיים בטבלה הייחודית
+              const { data: stageExistsInProjectTable, error: stageExistsError } = await supabase
+                .from(stagesTableName)
+                .select('id')
+                .eq('id', task.stage_id)
+                .single();
+                
+              if (stageExistsError) {
+                // אם השלב לא קיים בטבלה הייחודית, נעדכן את המשימה לשלב חדש
+                console.error(`שלב ${task.stage_id} לא קיים בטבלה הייחודית, מעדכן משימה ${task.id} עם שלב אחר`);
+                
+                // בחירת שלב ברירת מחדל מהטבלה הייחודית
+                const { data: defaultStage, error: defaultStageError } = await supabase
+                  .from(stagesTableName)
+                  .select('id')
+                  .limit(1)
+                  .single();
+                  
+                if (defaultStageError || !defaultStage) {
+                  console.error(`לא נמצא שלב ברירת מחדל בטבלה הייחודית:`, defaultStageError);
+                  continue;
+                }
+                
+                // עדכון המשימה עם שלב ברירת מחדל
+                const { error: updateError } = await supabase
+                  .from(tasksTableName)
+                  .update({ stage_id: defaultStage.id })
+                  .eq('id', task.id);
+                  
+                if (updateError) {
+                  console.error(`שגיאה בעדכון משימה ${task.id} עם שלב ברירת מחדל:`, updateError);
+                  continue;
+                }
+                
+                updatedTasksCount++;
+              }
+            } catch (error) {
+              console.error(`שגיאה בטיפול במשימה ${task.id}:`, error);
+            }
+          }
+        }
+      }
+    }
     
-    // ניסיון להשלים את הסנכרון באמצעות קריאה לפונקציה הכללית
+    console.log(`עודכנו ${updatedTasksCount} משימות עם מזהי שלבים`);
+    
+    // נסיון נוסף לוודא סנכרון מלא - נקרא לפונקציית RPC
     try {
-      console.log('משלים סנכרון שלבים באמצעות stageService...');
-      const syncResult = await stageService.syncStagesToProjectTable(projectId);
-      console.log('סנכרון כללי הושלם:', syncResult);
+      const { data: syncData, error: syncError } = await supabase
+        .rpc('sync_stages_and_tasks_by_project', { project_id_param: projectId });
+        
+      if (syncError) {
+        console.error('שגיאה בסנכרון סופי:', syncError);
+      } else {
+        console.log('סנכרון סופי הושלם בהצלחה:', syncData);
+        // נעדכן את מספר המשימות שעודכנו אם זה חזר מהפונקציה
+        if (syncData && syncData.tasks_updated) {
+          updatedTasksCount = syncData.tasks_updated;
+        }
+      }
     } catch (error) {
-      console.error('שגיאה בסנכרון כללי:', error);
+      console.error('שגיאה בקריאה לפונקציית סנכרון:', error);
       // לא נכשיל את כל הפעולה אם זה נכשל
     }
     

@@ -426,31 +426,15 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     try {
       setLoading(true);
       
-      // 1. תחילה נסנכרן את השלבים
-      const stagesResponse = await fetch('/api/projects/sync-stages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ projectId: id }),
-      });
-      
-      if (!stagesResponse.ok) {
-        const stagesError = await stagesResponse.json();
-        throw new Error(stagesError.error || 'שגיאה בסנכרון שלבים');
-      }
-      
-      const stagesResult = await stagesResponse.json();
-      console.log('תוצאת סנכרון שלבים:', stagesResult);
-      
-      // 2. לאחר מכן נסנכרן את המשימות
-      await projectService.syncProjectTasks(id);
+      // קריאה לפונקציית הסנכרון החדשה
+      const syncResult = await projectService.syncProjectTables(id);
+      console.log('תוצאת סנכרון טבלאות פרויקט:', syncResult);
       
       // רענון רשימת המשימות והשלבים
       const updatedStages = await stageService.getProjectStages(id);
       setStages(updatedStages);
       
-      const updatedTasks = await taskService.getTasksByProject(id);
+      const updatedTasks = await taskService.getProjectSpecificTasks(id);
       setTasks(updatedTasks);
       
       // עדכון התקדמות הפרויקט
@@ -461,15 +445,15 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       
       // הצגת הודעת הצלחה
       toast({
-        title: 'נתוני הפרויקט סונכרנו בהצלחה',
-        description: `סונכרנו ${stagesResult.project_stages_count || 0} שלבים ו-${updatedTasks.length || 0} משימות`,
+        title: 'טבלאות הפרויקט סונכרנו בהצלחה',
+        description: syncResult.message || 'סנכרון טבלאות הפרויקט הושלם בהצלחה',
         status: 'success',
         duration: 5000,
         isClosable: true,
         position: 'top',
       });
     } catch (error) {
-      console.error('שגיאה בסנכרון נתוני פרויקט:', error);
+      console.error('שגיאה בסנכרון טבלאות פרויקט:', error);
       
       toast({
         title: 'שגיאה בסנכרון',
@@ -552,7 +536,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                       onClick={handleSyncProjectData} 
                       isDisabled={loading}
                     >
-                      סנכרון נתוני פרויקט
+                      סנכרון טבלאות פרויקט
                     </MenuItem>
                     <MenuItem 
                       icon={<FiEdit />} 
@@ -571,7 +555,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                 </Menu>
               ) : (
                 <HStack>
-                  <Tooltip label="סנכרון נתוני הפרויקט מהתבניות">
+                  <Tooltip label="סנכרון משימות ושלבים בטבלאות הפרויקט">
                     <Button
                       leftIcon={<FiRefreshCw />}
                       size="sm"
@@ -579,7 +563,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                       onClick={handleSyncProjectData}
                       isLoading={loading}
                     >
-                      סנכרון נתוני פרויקט
+                      סנכרון טבלאות פרויקט
                     </Button>
                   </Tooltip>
                   <ActionButtons projectId={id} />
@@ -947,36 +931,24 @@ function ActionButtons({ projectId }: { projectId: string }) {
     try {
       setIsSyncingStages(true);
       
-      // קריאה לפונקציית Edge לסנכרון השלבים
-      const response = await fetch('/api/projects/sync-stages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ projectId }),
-      });
-      
-      const result = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(result.error || 'אירעה שגיאה בסנכרון השלבים');
-      }
+      // קריאה לפונקציית סנכרון טבלאות פרויקט החדשה
+      const result = await projectService.syncProjectTables(projectId);
       
       toast({
-        title: 'שלבים סונכרנו בהצלחה',
-        description: `סונכרנו ${result.project_stages_count} שלבים לפרויקט זה`,
+        title: 'טבלאות פרויקט סונכרנו בהצלחה',
+        description: result.message || 'סנכרון טבלאות הפרויקט הושלם בהצלחה',
         status: 'success',
         duration: 5000,
         isClosable: true,
       });
       
-      // רענון הדף כדי להציג את השלבים החדשים
+      // רענון הדף כדי להציג את הנתונים המעודכנים
       router.refresh();
     } catch (error) {
-      console.error('שגיאה בסנכרון שלבים:', error);
+      console.error('שגיאה בסנכרון טבלאות פרויקט:', error);
       
       toast({
-        title: 'שגיאה בסנכרון שלבים',
+        title: 'שגיאה בסנכרון טבלאות פרויקט',
         description: error instanceof Error ? error.message : 'אירעה שגיאה לא צפויה',
         status: 'error',
         duration: 5000,
@@ -1004,11 +976,11 @@ function ActionButtons({ projectId }: { projectId: string }) {
         leftIcon={<FiRefreshCw />}
         onClick={handleSyncStages}
         isLoading={isSyncingStages}
-        loadingText="מסנכרן שלבים..."
+        loadingText="מסנכרן טבלאות..."
         ml={2}
         size="sm"
       >
-        סנכרן שלבים
+        סנכרן טבלאות פרויקט
       </Button>
 
       <AlertDialog

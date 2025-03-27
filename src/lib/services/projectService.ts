@@ -264,6 +264,32 @@ export const projectService = {
       console.error('Error verifying project tables:', error);
       throw new Error(error instanceof Error ? error.message : 'אירעה שגיאה בבדיקת טבלאות הפרויקטים');
     }
+  },
+
+  // סנכרון טבלאות פרויקט - חדש
+  async syncProjectTables(projectId: string): Promise<any> {
+    if (!projectId) {
+      throw new Error('מזהה פרויקט חסר');
+    }
+    
+    try {
+      const response = await fetch(`/api/projects/${projectId}/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'שגיאה בסנכרון טבלאות פרויקט');
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('שגיאה בסנכרון טבלאות פרויקט:', error);
+      throw error;
+    }
   }
 };
 

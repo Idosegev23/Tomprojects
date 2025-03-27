@@ -390,4 +390,110 @@ DROP TRIGGER IF EXISTS project_after_insert_trigger ON projects;
 CREATE TRIGGER project_after_insert_trigger
 AFTER INSERT ON projects
 FOR EACH ROW
-EXECUTE FUNCTION project_after_insert_trigger(); 
+EXECUTE FUNCTION project_after_insert_trigger();
+
+-- ================================================================
+-- פונקציה לסנכרון שלבים ומשימות עבור פרויקט ספציפי
+-- ================================================================
+CREATE OR REPLACE FUNCTION sync_stages_and_tasks_by_project(project_id_param uuid)
+RETURNS json AS $$
+DECLARE
+  tasks_table_name text := 'project_' || project_id_param::text || '_tasks';
+  stages_table_name text := 'project_' || project_id_param::text || '_stages';
+  task_rec record;
+  stage_rec record;
+  updated_count integer := 0;
+  stage_ids uuid[];
+  stage_id uuid;
+  result json;
+BEGIN
+  -- 1. וידוא שטבלאות הפרויקט קיימות
+  IF NOT check_table_exists(tasks_table_name) THEN
+    RETURN json_build_object(
+      'success', false, 
+      'error', 'טבלת המשימות לא קיימת',
+      'tasks_updated', 0
+    );
+  END IF;
+  
+  IF NOT check_stages_table_exists(stages_table_name) THEN
+    -- יצירת טבלת שלבים אם היא לא קיימת
+    PERFORM create_project_stages_table(project_id_param);
+  END IF;
+  
+  -- 2. וידוא שיש שלבים בטבלת השלבים הייחודית
+  EXECUTE format('SELECT COUNT(*) = 0 FROM %I', stages_table_name) INTO stage_rec;
+  
+  IF stage_rec.count THEN
+    -- אין שלבים בטבלה הייחודית, נעתיק שלבים מהטבלה הכללית
+    PERFORM copy_stages_to_project_table(project_id_param);
+  END IF;
+  
+  -- 3. איסוף כל מזהי השלבים מטבלת השלבים הייחודית
+  EXECUTE format('SELECT array_agg(id) FROM %I', stages_table_name) INTO stage_ids;
+  
+  IF stage_ids IS NULL OR array_length(stage_ids, 1) = 0 THEN
+    -- עדיין אין שלבים בטבלה הייחודית, ניצור שלב ברירת מחדל
+    EXECUTE format('
+      INSERT INTO %I (
+        id, title, project_id, status, created_at, updated_at
+      ) VALUES (
+        uuid_generate_v4(), ''שלב ברירת מחדל'', %L, ''active'', now(), now()
+      ) RETURNING id', 
+      stages_table_name, project_id_param
+    ) INTO stage_rec;
+    
+    -- עדכון מערך השלבים
+    stage_ids := ARRAY[stage_rec.id];
+  END IF;
+  
+  -- 4. מציאת כל המשימות שמצביעות לשלבים שלא קיימים בטבלת השלבים הייחודית
+  -- או שיש להן שלב NULL ועדכון שלהן לשלב ברירת מחדל
+  
+  -- בחירת שלב ברירת מחדל (הראשון במערך)
+  stage_id := stage_ids[1];
+  
+  -- עדכון משימות שאין להן שלב או שהשלב לא קיים בטבלת השלבים הייחודית
+  EXECUTE format('
+    UPDATE %I
+    SET stage_id = %L
+    WHERE stage_id IS NULL OR stage_id NOT IN (SELECT id FROM %I)
+    RETURNING id',
+    tasks_table_name, stage_id, stages_table_name
+  ) INTO task_rec;
+  
+  IF task_rec.id IS NOT NULL THEN
+    -- ספירת מספר המשימות שעודכנו
+    EXECUTE format('
+      SELECT COUNT(*) FROM %I WHERE stage_id = %L',
+      tasks_table_name, stage_id
+    ) INTO updated_count;
+  END IF;
+  
+  -- 5. החזרת תוצאות הסנכרון
+  EXECUTE format('
+    SELECT 
+      json_build_object(
+        ''success'', true,
+        ''message'', ''סנכרון שלבים ומשימות הושלם בהצלחה'',
+        ''project_id'', %L,
+        ''stages_count'', (SELECT COUNT(*) FROM %I),
+        ''tasks_count'', (SELECT COUNT(*) FROM %I),
+        ''tasks_updated'', %L
+      )
+  ', project_id_param, stages_table_name, tasks_table_name, updated_count) INTO result;
+  
+  RETURN result;
+  
+EXCEPTION WHEN OTHERS THEN
+  RETURN json_build_object(
+    'success', false,
+    'error', SQLERRM,
+    'project_id', project_id_param,
+    'tasks_updated', 0
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- הענקת הרשאות
+GRANT EXECUTE ON FUNCTION sync_stages_and_tasks_by_project(uuid) TO anon, authenticated, service_role; 
