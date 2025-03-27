@@ -22,58 +22,60 @@ export async function POST(req: NextRequest) {
     let result: any = null;
 
     try {
-      // 1. נסיון ראשון: קריאה לפונקציית RPC להעתקת שלבים מהטבלה הכללית לטבלה הייחודית של הפרויקט
-      console.log('ניסיון קריאה לפונקציית copy_stages_to_project...');
-      const { data, error } = await supabase.rpc(
-        'copy_stages_to_project',
-        { project_id: projectId }
-      );
+      // שימוש בפונקציה החדשה syncStagesToProjectTable מתוך stageService
+      console.log('מסנכרן שלבים מהטבלה הכללית לטבלה הספציפית של הפרויקט באמצעות stageService...');
+      const syncResult = await stageService.syncStagesToProjectTable(projectId);
       
-      if (error) {
-        console.error('שגיאה בסנכרון שלבים באמצעות copy_stages_to_project:', error);
-        throw error;
+      if (!syncResult.success) {
+        console.error('שגיאה בסנכרון שלבים באמצעות stageService:', syncResult.error);
+        throw new Error(syncResult.error);
       }
       
       success = true;
-      result = data;
-    } catch (rpcError) {
-      console.log('ניסיון קריאה לפונקציית copy_stages_to_project_table כגיבוי...');
+      result = syncResult;
+    } catch (syncError) {
+      console.error('שגיאה בסנכרון שלבים באמצעות stageService:', syncError);
+      
+      // מצב חירום: נשתמש בניסיון ישיר באמצעות RPC
       try {
-        // 2. נסיון שני: קריאה לפונקציית RPC הישנה כגיבוי
+        console.log('מנסה לסנכרן שלבים באמצעות RPC כגיבוי...');
         const { data, error } = await supabase.rpc(
-          'copy_stages_to_project_table',
+          'copy_stages_to_project',
           { project_id: projectId }
         );
         
         if (error) {
-          console.error('שגיאה גם בסנכרון שלבים באמצעות copy_stages_to_project_table:', error);
-          throw error;
-        }
-        
-        success = true;
-        result = { project_stages_count: 0 }; // אין מידע על מספר השלבים מהפונקציה הישנה
-      } catch (oldRpcError) {
-        console.log('שני ניסיונות RPC נכשלו, עובר לשימוש ישיר ב-stageService...');
-        
-        // 3. מצב חירום: נשתמש ב-stageService באופן ישיר
-        try {
-          // קודם נבדוק אם כבר יש שלבים
+          console.error('שגיאה בסנכרון שלבים באמצעות RPC:', error);
+          
+          // ניסיון אחרון: בדיקה אם יש שלבים קיימים
           const existingStages = await stageService.getProjectStages(projectId);
           
-          // אם אין שלבים, ניצור שלבי ברירת מחדל
           if (!existingStages || existingStages.length === 0) {
-            const newStages = await stageService.createDefaultStages(projectId);
+            // אם אין שלבים, ניצור שלבי ברירת מחדל
+            console.log('אין שלבים קיימים, יוצר שלבי ברירת מחדל...');
+            const defaultStages = await stageService.createDefaultStages(projectId);
             success = true;
-            result = { project_stages_count: newStages.length };
+            result = { 
+              success: true,
+              message: 'נוצרו שלבי ברירת מחדל',
+              project_stages_count: defaultStages.length 
+            };
           } else {
-            // אם כבר יש שלבים, נחזיר הצלחה עם מספר השלבים הקיימים
+            // אם יש שלבים קיימים, נשתמש בהם
             success = true;
-            result = { project_stages_count: existingStages.length };
+            result = { 
+              success: true,
+              message: 'נמצאו שלבים קיימים',
+              project_stages_count: existingStages.length 
+            };
           }
-        } catch (serviceError) {
-          console.error('כל ניסיונות הסנכרון נכשלו:', serviceError);
-          throw new Error('כל ניסיונות הסנכרון נכשלו');
+        } else {
+          success = true;
+          result = data;
         }
+      } catch (finalError) {
+        console.error('כל ניסיונות הסנכרון נכשלו:', finalError);
+        throw new Error('כל ניסיונות הסנכרון נכשלו');
       }
     }
     

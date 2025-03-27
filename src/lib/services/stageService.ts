@@ -636,6 +636,120 @@ export const stageService = {
       console.error(`Error in getStagesWithTasks for project ${projectId}:`, err);
       throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה');
     }
+  },
+
+  // סנכרון שלבים מהטבלה הכללית לטבלה הספציפית של הפרויקט
+  async syncStagesToProjectTable(projectId: string): Promise<any> {
+    const supabase = createClientComponentClient();
+    
+    if (!projectId) {
+      console.error("syncStagesToProjectTable: מזהה פרויקט חסר");
+      return { success: false, error: "מזהה פרויקט חסר" };
+    }
+    
+    try {
+      // נבדוק אם הטבלה הייחודית לפרויקט קיימת
+      const projectStagesTableName = `project_${projectId}_stages`;
+      
+      // בדיקה אם הטבלה קיימת
+      const tableExists = await checkIfTableExists(projectStagesTableName);
+      
+      if (!tableExists) {
+        // אם הטבלה לא קיימת, ניצור אותה
+        console.log(`טבלת ${projectStagesTableName} לא קיימת, יוצר אותה...`);
+        
+        // ניסיון קריאה לפונקציית RPC ליצירת טבלת שלבים
+        try {
+          const { data, error } = await supabase.rpc(
+            'create_project_stages_table',
+            { project_id: projectId }
+          );
+          
+          if (error) {
+            console.error(`שגיאה ביצירת טבלת ${projectStagesTableName}:`, error);
+            return { success: false, error: `שגיאה ביצירת טבלת השלבים: ${error.message}` };
+          }
+        } catch (err) {
+          console.error(`שגיאה ביצירת טבלת ${projectStagesTableName}:`, err);
+          return { success: false, error: `שגיאה ביצירת טבלת השלבים: ${err instanceof Error ? err.message : 'שגיאה לא ידועה'}` };
+        }
+      }
+      
+      // שליפת השלבים מהטבלה הכללית שהם או כלליים (project_id IS NULL) או שייכים לפרויקט זה
+      const { data: stagesFromGeneralTable, error: generalError } = await supabase
+        .from('stages')
+        .select('*')
+        .or(`project_id.eq.${projectId},project_id.is.null`);
+      
+      if (generalError) {
+        console.error('שגיאה בשליפת שלבים מהטבלה הכללית:', generalError);
+        return { success: false, error: `שגיאה בשליפת שלבים מהטבלה הכללית: ${generalError.message}` };
+      }
+      
+      if (!stagesFromGeneralTable || stagesFromGeneralTable.length === 0) {
+        console.log('לא נמצאו שלבים בטבלה הכללית להעתקה');
+        
+        // אם אין שלבים בטבלה הכללית, ניצור שלבי ברירת מחדל ישירות בטבלה הספציפית
+        const defaultStages = await this.createDefaultStages(projectId);
+        return { 
+          success: true, 
+          message: 'נוצרו שלבי ברירת מחדל בטבלה הספציפית של הפרויקט',
+          stages_count: defaultStages.length
+        };
+      }
+      
+      // העתקת השלבים לטבלה הספציפית של הפרויקט
+      let copiedCount = 0;
+      
+      for (const stage of stagesFromGeneralTable) {
+        try {
+          // התאמת השלב לטבלה הספציפית - שינוי שדה project_id לפרויקט הנוכחי
+          const stageForProjectTable = {
+            ...stage,
+            project_id: projectId,
+            updated_at: new Date().toISOString()
+          };
+          
+          // העתקת השלב לטבלה הספציפית
+          const { data, error } = await supabase
+            .from(projectStagesTableName)
+            .upsert(stageForProjectTable, { onConflict: 'id' })
+            .select();
+          
+          if (error) {
+            console.error(`שגיאה בהעתקת שלב ${stage.id} לטבלת ${projectStagesTableName}:`, error);
+            continue;
+          }
+          
+          copiedCount++;
+        } catch (err) {
+          console.error(`שגיאה בהעתקת שלב ${stage.id}:`, err);
+          continue;
+        }
+      }
+      
+      // שליפת מספר השלבים הסופי בטבלה הספציפית
+      const { data: finalStages, error: countError } = await supabase
+        .from(projectStagesTableName)
+        .select('*');
+      
+      if (countError) {
+        console.error(`שגיאה בספירת השלבים הסופית בטבלת ${projectStagesTableName}:`, countError);
+      }
+      
+      return { 
+        success: true, 
+        message: `הועתקו ${copiedCount} שלבים לטבלה הספציפית של הפרויקט`,
+        stages_count: finalStages ? finalStages.length : copiedCount,
+        stages: finalStages
+      };
+    } catch (error) {
+      console.error('שגיאה בלתי צפויה בפונקציה syncStagesToProjectTable:', error);
+      return { 
+        success: false, 
+        error: `שגיאה בלתי צפויה: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`
+      };
+    }
   }
 };
 
