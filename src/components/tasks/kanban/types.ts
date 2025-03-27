@@ -1,14 +1,32 @@
-import { Task, Stage, Project } from '@/types/supabase';
+import { Task as BaseTask, Stage, Project } from '@/types/supabase';
+
+// הרחבת הטיפוס של משימה לכלול מידע נוסף
+export interface Task extends Omit<BaseTask, 'assignees'> {
+  // מחליף את assignees המקורי
+  assignees?: string[] | null;
+  
+  // תת-משימות
+  subtasks?: Task[];
+  
+  // שדות נוספים
+  tags?: string[];
+  collaborators?: string[];
+  
+  // שדות עזר לתצוגה
+  stageName?: string;
+  stageColor?: string;
+}
 
 // טיפוסים משותפים לקומפוננטות הקנבן
 export interface TaskKanbanProps {
+  projectId: string;
   tasks: Task[];
-  stages?: Stage[];
-  projects?: Project[];
-  onEditTask?: (task: Task) => void;
-  onDeleteTask?: (taskId: string) => void;
-  onStatusChange?: (taskId: string, status: string) => void;
-  onStageChange?: (taskId: string, stageId: string) => void;
+  stages: Stage[];
+  isLoading?: boolean;
+  onTaskUpdated?: (task: Task) => void;
+  onTaskDeleted?: (taskId: string) => void;
+  onTaskCreated?: (task: Task) => void;
+  getProjectName: (projectId: string) => string;
 }
 
 // טיפוס לעמודת קנבן
@@ -20,7 +38,7 @@ export interface KanbanColumnProps {
   isCollapsed: boolean;
   isDragOver: boolean;
   onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
-  onDragLeave: () => void;
+  onDragLeave: (e: React.DragEvent<HTMLDivElement>) => void;
   onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
   onToggleCollapse: () => void;
   onEditTask?: (task: Task) => void;
