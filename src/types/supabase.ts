@@ -243,3 +243,17 @@ export type UpdateTask = Database['public']['Tables']['tasks']['Update']
 export interface TaskWithChildren extends Task {
   children?: TaskWithChildren[];
 } 
+
+// טיפוס מורחב של Task שכולל שדות נוספים שאינם בסכמה המקורית
+export interface ExtendedTask extends Task {
+  dropbox_folder?: string;
+}
+
+// טיפוסים להוספה ועדכון משימות עם שדות מורחבים
+export interface ExtendedNewTask extends NewTask {
+  dropbox_folder?: string;
+}
+
+export interface ExtendedUpdateTask extends UpdateTask {
+  dropbox_folder?: string;
+} 

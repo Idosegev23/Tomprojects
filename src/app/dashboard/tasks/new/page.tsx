@@ -52,12 +52,12 @@ import { useRouter } from 'next/navigation';
 import taskService from '@/lib/services/taskService';
 import projectService from '@/lib/services/projectService';
 import stageService from '@/lib/services/stageService';
-import { Project, Stage, Task } from '@/types/supabase';
+import { Project, Stage, Task, ExtendedTask, ExtendedNewTask } from '@/types/supabase';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 
 export default function NewTask() {
   // מצב מורחב של task עם כל השדות הנדרשים
-  const [task, setTask] = useState({
+  const [task, setTask] = useState<ExtendedNewTask>({
     title: '',
     description: '',
     project_id: '',
@@ -79,6 +79,7 @@ export default function NewTask() {
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [loading, setLoading] = useState<boolean>(false);
   const [projectsLoading, setProjectsLoading] = useState<boolean>(true);
+  const [stagesLoading, setStagesLoading] = useState<boolean>(false);
   const [tasksLoading, setTasksLoading] = useState<boolean>(false);
   
   const router = useRouter();
@@ -141,6 +142,7 @@ export default function NewTask() {
     if (!projectId) return;
     
     try {
+      setStagesLoading(true);
       const stagesData = await stageService.getProjectStages(projectId);
       setStages(stagesData);
       
@@ -159,6 +161,8 @@ export default function NewTask() {
         isClosable: true,
         position: 'top-right',
       });
+    } finally {
+      setStagesLoading(false);
     }
   };
   
@@ -256,7 +260,7 @@ export default function NewTask() {
     }
     
     // וודא שזמן משוער לביצוע הוא מספר לא שלילי
-    if (task.estimated_hours < 0) {
+    if (task.estimated_hours !== null && task.estimated_hours !== undefined && task.estimated_hours < 0) {
       newErrors.estimated_hours = 'זמן משוער לביצוע לא יכול להיות שלילי';
     }
     
@@ -269,8 +273,9 @@ export default function NewTask() {
     e.preventDefault();
     
     // חישוב מספר היררכי אם המשימה היא תת-משימה
+    let hierarchicalNumber = '';
     if (task.parent_task_id) {
-      const hierarchicalNumber = generateHierarchicalNumber();
+      hierarchicalNumber = generateHierarchicalNumber();
       setTask(prev => ({ ...prev, hierarchical_number: hierarchicalNumber }));
     }
     
@@ -281,7 +286,15 @@ export default function NewTask() {
     setLoading(true);
     
     try {
-      const createdTask = await taskService.createTask(task);
+      const formattedTask = {
+        ...task,
+        hierarchical_number: hierarchicalNumber,
+        estimated_hours: task.estimated_hours !== null && task.estimated_hours !== undefined 
+          ? parseFloat(task.estimated_hours.toString()) 
+          : 0,
+      } as ExtendedNewTask;
+
+      const newTask = await taskService.createTask(formattedTask);
       
       toast({
         title: 'המשימה נוצרה בהצלחה',
@@ -292,7 +305,7 @@ export default function NewTask() {
       });
       
       // ניווט לדף המשימה החדשה
-      router.push(`/dashboard/tasks/${createdTask.id}`);
+      router.push(`/dashboard/tasks/${newTask.id}`);
     } catch (err) {
       console.error('שגיאה ביצירת משימה:', err);
       
@@ -358,7 +371,7 @@ export default function NewTask() {
                   </FormLabel>
                   <Textarea
                     name="description"
-                    value={task.description}
+                    value={task.description ?? ''}
                     onChange={handleChange}
                     placeholder="תיאור מפורט של המשימה..."
                     minH="150px"
@@ -383,7 +396,7 @@ export default function NewTask() {
                   </FormLabel>
                   <Select
                     name="project_id"
-                    value={task.project_id}
+                    value={task.project_id || ''}
                     onChange={handleChange}
                     placeholder="בחר פרויקט"
                     isDisabled={projectsLoading || projects.length === 0}
@@ -402,17 +415,17 @@ export default function NewTask() {
                 </FormControl>
                 
                 {/* שלב בפרויקט */}
-                <FormControl isRequired={stages.length > 0} isInvalid={!!errors.stage_id}>
+                <FormControl isInvalid={!!errors.stage_id}>
                   <FormLabel display="flex" alignItems="center">
                     <Icon as={FiLayers} mr={2} color="purple.500" />
                     שלב בפרויקט
                   </FormLabel>
                   <Select
                     name="stage_id"
-                    value={task.stage_id}
+                    value={task.stage_id || ''}
                     onChange={handleChange}
-                    placeholder={stages.length === 0 ? "אין שלבים זמינים" : "בחר שלב בפרויקט"}
-                    isDisabled={!task.project_id || stages.length === 0}
+                    placeholder={stagesLoading ? "טוען שלבים..." : stages.length === 0 ? "אין שלבים זמינים" : "בחר שלב"}
+                    isDisabled={stagesLoading || stages.length === 0 || !task.project_id}
                     bg="white"
                   >
                     {stages.map(stage => (
@@ -425,21 +438,20 @@ export default function NewTask() {
                 {/* משימת אב */}
                 <FormControl>
                   <FormLabel display="flex" alignItems="center">
-                    <Icon as={FiLink} mr={2} color="orange.500" />
+                    <Icon as={FiLayers} mr={2} color="teal.500" />
                     משימת אב
                   </FormLabel>
                   <Select
                     name="parent_task_id"
-                    value={task.parent_task_id}
+                    value={task.parent_task_id || ''}
                     onChange={handleChange}
-                    placeholder="בחר משימת אב (אופציונלי)"
-                    isDisabled={!task.project_id || parentTasks.length === 0 || tasksLoading}
+                    placeholder={tasksLoading ? "טוען משימות..." : parentTasks.length === 0 ? "אין משימות זמינות" : "בחר משימת אב (אופציונלי)"}
+                    isDisabled={tasksLoading || parentTasks.length === 0 || !task.project_id}
                     bg="white"
                   >
-                    <option value="">ללא משימת אב</option>
                     {parentTasks.map(parentTask => (
                       <option key={parentTask.id} value={parentTask.id}>
-                        {parentTask.hierarchical_number ? `${parentTask.hierarchical_number} - ` : ''}{parentTask.title}
+                        {parentTask.hierarchical_number ? `${parentTask.hierarchical_number}. ` : ''}{parentTask.title}
                       </option>
                     ))}
                   </Select>
@@ -454,7 +466,7 @@ export default function NewTask() {
                     </FormLabel>
                     <Input
                       name="hierarchical_number"
-                      value={task.hierarchical_number || generateHierarchicalNumber()}
+                      value={(task.hierarchical_number || generateHierarchicalNumber() || '')}
                       onChange={handleChange}
                       placeholder="יחושב אוטומטית"
                       isReadOnly
@@ -469,22 +481,23 @@ export default function NewTask() {
                 {/* קטגוריה */}
                 <FormControl>
                   <FormLabel display="flex" alignItems="center">
-                    <Icon as={FiTag} mr={2} color="green.500" />
+                    <Icon as={FiTag} mr={2} color="orange.500" />
                     קטגוריה
                   </FormLabel>
                   <Select
                     name="category"
-                    value={task.category}
+                    value={task.category || ''}
                     onChange={handleChange}
+                    placeholder="בחר קטגוריה (אופציונלי)"
                     bg="white"
                   >
-                    <option value="">ללא קטגוריה</option>
-                    <option value="פיתוח">פיתוח</option>
-                    <option value="עיצוב">עיצוב</option>
-                    <option value="תוכן">תוכן</option>
-                    <option value="שיווק">שיווק</option>
-                    <option value="תשתיות">תשתיות</option>
-                    <option value="אחר">אחר</option>
+                    <option value="development">פיתוח</option>
+                    <option value="design">עיצוב</option>
+                    <option value="documentation">תיעוד</option>
+                    <option value="testing">בדיקות</option>
+                    <option value="deployment">הטמעה</option>
+                    <option value="maintenance">תחזוקה</option>
+                    <option value="other">אחר</option>
                   </Select>
                 </FormControl>
                 
@@ -496,9 +509,9 @@ export default function NewTask() {
                   </FormLabel>
                   <Input
                     name="responsible"
-                    value={task.responsible}
+                    value={task.responsible || ''}
                     onChange={handleChange}
-                    placeholder="הזן שם האחראי"
+                    placeholder="שם האחראי לביצוע המשימה"
                     bg="white"
                   />
                 </FormControl>
@@ -506,14 +519,14 @@ export default function NewTask() {
                 {/* תיקיית דרופבוקס */}
                 <FormControl>
                   <FormLabel display="flex" alignItems="center">
-                    <Icon as={FiDroplet} mr={2} color="blue.400" />
-                    תיקיית דרופבוקס
+                    <Icon as={FiFolder} mr={2} color="blue.400" />
+                    תיקיית Dropbox
                   </FormLabel>
                   <Input
                     name="dropbox_folder"
-                    value={task.dropbox_folder}
+                    value={task.dropbox_folder || ''}
                     onChange={handleChange}
-                    placeholder="הזן קישור לתיקיית דרופבוקס"
+                    placeholder="קישור לתיקיית Dropbox"
                     bg="white"
                   />
                 </FormControl>
@@ -535,13 +548,14 @@ export default function NewTask() {
                   </FormLabel>
                   <Select
                     name="priority"
-                    value={task.priority}
+                    value={task.priority || 'medium'}
                     onChange={handleChange}
                     bg="white"
                   >
                     <option value="low">נמוכה</option>
                     <option value="medium">בינונית</option>
                     <option value="high">גבוהה</option>
+                    <option value="urgent">דחופה</option>
                   </Select>
                 </FormControl>
                 
@@ -553,7 +567,7 @@ export default function NewTask() {
                   </FormLabel>
                   <Select
                     name="status"
-                    value={task.status}
+                    value={task.status || 'todo'}
                     onChange={handleChange}
                     bg="white"
                   >
@@ -561,25 +575,28 @@ export default function NewTask() {
                     <option value="in_progress">בתהליך</option>
                     <option value="review">בבדיקה</option>
                     <option value="done">הושלם</option>
+                    <option value="blocked">חסום</option>
                   </Select>
                 </FormControl>
                 
                 {/* זמן משוער לביצוע */}
                 <FormControl isInvalid={!!errors.estimated_hours}>
                   <FormLabel display="flex" alignItems="center">
-                    <Icon as={FiClock} mr={2} color="orange.500" />
-                    זמן משוער (שעות)
+                    <Icon as={FiClock} mr={2} color="cyan.500" />
+                    שעות משוערות
                   </FormLabel>
                   <InputGroup>
                     <Input
                       name="estimated_hours"
                       type="number"
-                      value={task.estimated_hours}
+                      min="0"
+                      step="0.5"
+                      value={task.estimated_hours?.toString() || ''}
                       onChange={handleChange}
-                      placeholder="הזן מספר שעות"
+                      placeholder="0"
                       bg="white"
-                      min={0}
                     />
+                    <InputRightElement pointerEvents="none" children="שעות" />
                   </InputGroup>
                   {errors.estimated_hours && <FormErrorMessage>{errors.estimated_hours}</FormErrorMessage>}
                 </FormControl>
@@ -594,13 +611,13 @@ export default function NewTask() {
                 {/* תאריך יעד */}
                 <FormControl>
                   <FormLabel display="flex" alignItems="center">
-                    <Icon as={FiCalendar} mr={2} color="red.500" />
+                    <Icon as={FiCalendar} mr={2} color="yellow.500" />
                     תאריך יעד
                   </FormLabel>
                   <Input
                     name="due_date"
                     type="date"
-                    value={task.due_date}
+                    value={task.due_date || ''}
                     onChange={handleChange}
                     bg="white"
                   />

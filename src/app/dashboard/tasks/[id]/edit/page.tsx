@@ -50,12 +50,12 @@ import { useRouter, useParams } from 'next/navigation';
 import taskService from '@/lib/services/taskService';
 import projectService from '@/lib/services/projectService';
 import stageService from '@/lib/services/stageService';
-import { Task, Project, Stage } from '@/types/supabase';
+import { Task, Project, Stage, ExtendedTask, ExtendedUpdateTask } from '@/types/supabase';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 
 export default function EditTask() {
-  const [originalTask, setOriginalTask] = useState<Task | null>(null);
-  const [task, setTask] = useState<Partial<Task>>({
+  const [originalTask, setOriginalTask] = useState<ExtendedTask | null>(null);
+  const [task, setTask] = useState<Partial<ExtendedTask>>({
     title: '',
     description: '',
     project_id: '',
@@ -124,7 +124,7 @@ export default function EditTask() {
       
       try {
         // טעינת פרטי המשימה
-        const taskData = await taskService.getTaskById(taskId);
+        const taskData = await taskService.getTaskById(taskId) as ExtendedTask;
         
         if (!taskData) {
           setLoadError('המשימה לא נמצאה');
