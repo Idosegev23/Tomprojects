@@ -26,6 +26,11 @@ import {
   Tooltip,
   Divider,
   useColorModeValue,
+  InputGroup,
+  InputLeftElement,
+  Wrap,
+  WrapItem,
+  SimpleGrid,
 } from '@chakra-ui/react';
 import { 
   FiPlus, 
@@ -45,8 +50,12 @@ import {
   FiActivity,
   FiList,
   FiLayers,
+  FiRefreshCw,
+  FiSearch,
+  FiX,
 } from 'react-icons/fi';
 import { Task, Stage } from '@/types/supabase';
+import { ExtendedStage, ExtendedTask } from '@/types/extendedTypes';
 import taskService from '@/lib/services/taskService';
 import stageService from '@/lib/services/stageService';
 import TaskEditModal from '@/components/tasks/TaskEditModal';
@@ -57,12 +66,6 @@ interface TaskListProps {
   onTaskCreated?: (task: Task) => void;
   onTaskUpdated?: (task: Task) => void;
   onTaskDeleted?: (taskId: string) => void;
-}
-
-// הרחבת ממשק Stage כדי לכלול את שדה color
-interface ExtendedStage extends Stage {
-  color?: string;
-  status?: string;
 }
 
 // הוספת ממשק מורחב עבור משימה עם שם השלב
@@ -98,18 +101,33 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
         
         // טעינת שלבים
         const stagesData = await stageService.getProjectStages(projectId);
-        setStages(stagesData as ExtendedStage[]);
         
-        // טעינת משימות
-        const tasksData = await taskService.getTasks({ projectId });
+        // הוספת צבעים לשלבים אם אין להם
+        const stagesWithColors = stagesData.map((stage, index) => {
+          // נתייחס ל-stage כאל Stage רגיל מאחר שזה מה שמגיע מהשרת
+          // צבעים ברירת מחדל
+          const defaultColors = ['blue', 'green', 'orange', 'purple', 'pink', 'teal', 'yellow', 'red', 'cyan'];
+          
+          // יצירת אובייקט מסוג ExtendedStage עם כל המאפיינים של Stage המקורי
+          // ועם הוספת color
+          return {
+            ...stage,
+            color: defaultColors[index % defaultColors.length]
+          } as ExtendedStage;
+        });
+        
+        setStages(stagesWithColors);
+        
+        // טעינת משימות - שינוי כאן ל-getProjectSpecificTasks
+        const tasksData = await taskService.getProjectSpecificTasks(projectId);
         
         // הוספת שם השלב לכל משימה
         const tasksWithStage: TaskWithStage[] = tasksData.map(task => {
-          const stage = stagesData.find(s => s.id === task.stage_id) as ExtendedStage | undefined;
+          const stage = stagesWithColors.find(s => s.id === task.stage_id);
           return {
             ...task,
             stageName: stage?.title || 'ללא שלב',
-            stageColor: stage?.color || '',
+            stageColor: stage?.color || 'gray',
           };
         });
         
@@ -141,12 +159,17 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
   
   // פונקציה לטיפול ביצירת משימה חדשה
   const handleTaskCreated = (newTask: Task) => {
+    // בדיקה אם המשימה שייכת לפרויקט הנוכחי
+    if (newTask.project_id !== projectId) {
+      return;
+    }
+  
     // הוספת השלב למשימה החדשה
     const stage = stages.find(s => s.id === newTask.stage_id);
     const taskWithStage: TaskWithStage = {
       ...newTask,
       stageName: stage?.title || 'ללא שלב',
-      stageColor: stage?.color || '',
+      stageColor: stage?.color || 'gray',
     };
     
     setTasks([...tasks, taskWithStage]);
@@ -165,12 +188,17 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
   
   // פונקציה לטיפול בעדכון משימה
   const handleTaskUpdated = (updatedTask: Task) => {
+    // בדיקה אם המשימה שייכת לפרויקט הנוכחי
+    if (updatedTask.project_id !== projectId) {
+      return;
+    }
+    
     // הוספת השלב למשימה המעודכנת
     const stage = stages.find(s => s.id === updatedTask.stage_id);
     const taskWithStage: TaskWithStage = {
       ...updatedTask,
       stageName: stage?.title || 'ללא שלב',
-      stageColor: stage?.color || '',
+      stageColor: stage?.color || 'gray',
     };
     
     setTasks(tasks.map(task => (task.id === updatedTask.id ? taskWithStage : task)));
@@ -421,6 +449,61 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
     }
   };
   
+  // פונקציה לטעינת הנתונים מחדש
+  const handleRefresh = async () => {
+    try {
+      setLoading(true);
+      
+      // טעינת שלבים
+      const stagesData = await stageService.getProjectStages(projectId);
+      
+      // הוספת צבעים לשלבים אם אין להם
+      const stagesWithColors = stagesData.map((stage, index) => {
+        // צבעים ברירת מחדל
+        const defaultColors = ['blue', 'green', 'orange', 'purple', 'pink', 'teal', 'yellow', 'red', 'cyan'];
+        return {
+          ...stage,
+          color: defaultColors[index % defaultColors.length]
+        } as ExtendedStage;
+      });
+      
+      setStages(stagesWithColors);
+      
+      // טעינת משימות - שימוש ב-getProjectSpecificTasks
+      const tasksData = await taskService.getProjectSpecificTasks(projectId);
+      
+      // הוספת שם השלב לכל משימה
+      const tasksWithStage: TaskWithStage[] = tasksData.map(task => {
+        const stage = stagesWithColors.find(s => s.id === task.stage_id);
+        return {
+          ...task,
+          stageName: stage?.title || 'ללא שלב',
+          stageColor: stage?.color || 'gray',
+        };
+      });
+      
+      setTasks(tasksWithStage);
+      
+      toast({
+        title: 'הנתונים רועננו בהצלחה',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (err) {
+      console.error('Error refreshing data:', err);
+      toast({
+        title: 'שגיאה ברענון נתונים',
+        description: err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   if (loading) {
     return (
       <Flex justify="center" align="center" p={8}>
@@ -444,6 +527,18 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
         <Heading size="md">רשימת משימות</Heading>
         
         <HStack>
+          <Tooltip label="רענן נתונים">
+            <IconButton
+              icon={<FiRefreshCw />}
+              aria-label="רענן נתונים"
+              colorScheme="blue"
+              variant="outline"
+              onClick={handleRefresh}
+              isLoading={loading}
+              size={{ base: 'sm', md: 'md' }}
+            />
+          </Tooltip>
+          
           <Button
             leftIcon={<FiPlus />}
             colorScheme="blue"
@@ -483,35 +578,144 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
             <Text fontWeight="bold">סינון וחיפוש</Text>
           </HStack>
           <Divider mb={3} />
-          <Flex gap={2} wrap="wrap">
+          
+          {/* סינון טקסטואלי */}
+          <Flex gap={3} mb={4} wrap="wrap">
+            <InputGroup flex={{ base: "1", md: "0 0 300px" }}>
+              <InputLeftElement pointerEvents="none">
+                <FiSearch color="gray.300" />
+              </InputLeftElement>
             <Input
               placeholder="חיפוש משימות..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              width={{ base: "100%", md: "300px" }}
-              mb={{ base: 2, md: 0 }}
-            />
+              />
+            </InputGroup>
             
-            <Select
-              placeholder="סנן לפי סטטוס"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              width={{ base: "100%", md: "200px" }}
-              mb={{ base: 2, md: 0 }}
+            <Button 
+              size="md"
+              variant="outline"
+              onClick={() => {
+                setSearchTerm('');
+                setStatusFilter('');
+                setPriorityFilter('');
+                setCategoryFilter('');
+                setStageFilter('');
+              }}
+              leftIcon={<FiX />}
             >
-              <option value="todo">לביצוע</option>
-              <option value="in_progress">בתהליך</option>
-              <option value="review">בבדיקה</option>
-              <option value="done">הושלם</option>
-            </Select>
-            
+              נקה סינון
+            </Button>
+          </Flex>
+          
+          {/* תגי סינון מהירים - סטטוס */}
+          <Box mb={4}>
+            <Text fontSize="sm" fontWeight="medium" mb={2}>סינון לפי סטטוס:</Text>
+            <Wrap spacing={2}>
+              <WrapItem>
+                <Tag 
+                  size="md" 
+                  variant={statusFilter === '' ? 'solid' : 'outline'} 
+                  colorScheme="gray" 
+                  cursor="pointer"
+                  onClick={() => setStatusFilter('')}
+                >
+                  הכל
+                </Tag>
+              </WrapItem>
+              <WrapItem>
+                <Tag 
+                  size="md" 
+                  variant={statusFilter === 'todo' ? 'solid' : 'outline'} 
+                  colorScheme="gray" 
+                  cursor="pointer"
+                  onClick={() => setStatusFilter('todo')}
+                >
+                  <TagLeftIcon as={FiClock} />
+                  <TagLabel>לביצוע</TagLabel>
+                </Tag>
+              </WrapItem>
+              <WrapItem>
+                <Tag 
+                  size="md" 
+                  variant={statusFilter === 'in_progress' ? 'solid' : 'outline'} 
+                  colorScheme="blue" 
+                  cursor="pointer"
+                  onClick={() => setStatusFilter('in_progress')}
+                >
+                  <TagLeftIcon as={FiActivity} />
+                  <TagLabel>בתהליך</TagLabel>
+                </Tag>
+              </WrapItem>
+              <WrapItem>
+                <Tag 
+                  size="md" 
+                  variant={statusFilter === 'review' ? 'solid' : 'outline'} 
+                  colorScheme="orange" 
+                  cursor="pointer"
+                  onClick={() => setStatusFilter('review')}
+                >
+                  <TagLeftIcon as={FiStar} />
+                  <TagLabel>בבדיקה</TagLabel>
+                </Tag>
+              </WrapItem>
+              <WrapItem>
+                <Tag 
+                  size="md" 
+                  variant={statusFilter === 'done' ? 'solid' : 'outline'} 
+                  colorScheme="green" 
+                  cursor="pointer"
+                  onClick={() => setStatusFilter('done')}
+                >
+                  <TagLeftIcon as={FiCheckCircle} />
+                  <TagLabel>הושלם</TagLabel>
+                </Tag>
+              </WrapItem>
+            </Wrap>
+          </Box>
+          
+          {/* תגי סינון מהירים - שלבים */}
+          {stages.length > 0 && (
+            <Box mb={4}>
+              <Text fontSize="sm" fontWeight="medium" mb={2}>סינון לפי שלב:</Text>
+              <Wrap spacing={2}>
+                <WrapItem>
+                  <Tag 
+                    size="md" 
+                    variant={stageFilter === '' ? 'solid' : 'outline'} 
+                    colorScheme="gray" 
+                    cursor="pointer"
+                    onClick={() => setStageFilter('')}
+                  >
+                    כל השלבים
+                  </Tag>
+                </WrapItem>
+                {stages.map(stage => (
+                  <WrapItem key={stage.id}>
+                    <Tag 
+                      size="md" 
+                      variant={stageFilter === stage.id ? 'solid' : 'outline'} 
+                      colorScheme={stage.color || 'gray'} 
+                      cursor="pointer"
+                      onClick={() => setStageFilter(stage.id)}
+                    >
+                      <TagLeftIcon as={FiLayers} />
+                      <TagLabel>{stage.title}</TagLabel>
+                    </Tag>
+                  </WrapItem>
+                ))}
+              </Wrap>
+            </Box>
+          )}
+          
+          {/* פילטרים נוספים */}
+          <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
             <Select
               placeholder="סנן לפי עדיפות"
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value)}
-              width={{ base: "100%", md: "200px" }}
-              mb={{ base: 2, md: 0 }}
             >
+              <option value="">כל העדיפויות</option>
               <option value="low">נמוכה</option>
               <option value="medium">בינונית</option>
               <option value="high">גבוהה</option>
@@ -521,9 +725,8 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
               placeholder="סנן לפי קטגוריה"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              width={{ base: "100%", md: "200px" }}
             >
-              <option value="">הכל</option>
+              <option value="">כל הקטגוריות</option>
               <option value="פיתוח">פיתוח</option>
               <option value="עיצוב">עיצוב</option>
               <option value="תוכן">תוכן</option>
@@ -531,33 +734,7 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
               <option value="תשתיות">תשתיות</option>
               <option value="אחר">אחר</option>
             </Select>
-            
-            <Box>
-              <Text fontWeight="bold" mb={2}>שלב</Text>
-              <Select 
-                placeholder="כל השלבים" 
-                value={stageFilter} 
-                onChange={(e) => setStageFilter(e.target.value)}
-                size="sm"
-              >
-                <option value="">ללא שלב</option>
-                {stages.map(stage => (
-                  <option key={stage.id} value={stage.id}>{stage.title}</option>
-                ))}
-              </Select>
-            </Box>
-          </Flex>
-          <Button 
-            size="sm"
-            onClick={() => {
-              setStatusFilter('');
-              setPriorityFilter('');
-              setCategoryFilter('');
-              setStageFilter('');
-            }}
-          >
-            נקה סינון
-          </Button>
+          </SimpleGrid>
         </CardBody>
       </Card>
       
@@ -566,6 +743,7 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
         <Card variant="outline" p={8} textAlign="center" boxShadow="md">
           <CardBody>
             <Text mb={4} fontSize="lg">אין משימות להצגה</Text>
+            <VStack spacing={4}>
             <Button
               leftIcon={<FiPlus />}
               colorScheme="blue"
@@ -574,6 +752,22 @@ const TaskList: React.FC<TaskListProps> = ({ projectId, onTaskCreated, onTaskUpd
             >
               צור משימה חדשה
             </Button>
+              
+              <Button
+                leftIcon={<FiRefreshCw />}
+                colorScheme="teal"
+                variant="outline"
+                onClick={handleRefresh}
+                isLoading={loading}
+                size="md"
+              >
+                סנכרן נתוני פרויקט
+              </Button>
+              
+              <Text fontSize="sm" color="gray.500" maxW="400px" mt={2}>
+                אם לא מופיעות משימות, יתכן שצריך לסנכרן את נתוני הפרויקט כדי לטעון את המשימות מטבלת המשימות הספציפית של הפרויקט.
+              </Text>
+            </VStack>
           </CardBody>
         </Card>
       ) : (

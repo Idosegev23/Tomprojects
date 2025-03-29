@@ -151,6 +151,62 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       // טעינת משימות הפרויקט
       const tasksData = await taskService.getProjectSpecificTasks(id);
       
+      console.log(`נטענו ${tasksData.length} משימות לפרויקט ${id}`);
+      
+      // אם אין משימות, ננסה לסנכרן את הנתונים
+      if (tasksData.length === 0 && stagesData.length > 0) {
+        console.log("אין משימות בפרויקט - מנסה לסנכרן נתונים...");
+        try {
+          await projectService.syncProjectTables(id);
+          // טעינה מחדש של המשימות לאחר הסנכרון
+          const resyncedTasks = await taskService.getProjectSpecificTasks(id);
+          console.log(`לאחר סנכרון: נטענו ${resyncedTasks.length} משימות`);
+          
+          // אם עדיין אין משימות, ננסה ליצור משימות ברירת מחדל
+          if (resyncedTasks.length === 0) {
+            console.log("עדיין אין משימות - מנסה ליצור משימות ברירת מחדל...");
+            const defaultStage = stagesData.length > 0 ? stagesData[0].id : null;
+            await taskService.createDefaultTasksForRealEstateProject(id, defaultStage);
+            const defaultTasks = await taskService.getProjectSpecificTasks(id);
+            console.log(`נוצרו ${defaultTasks.length} משימות ברירת מחדל`);
+            
+            // המרת נתוני המשימות לטיפוס המורחב
+            const foundStage = (taskStageId: string | null) => stagesData.find(stage => stage.id === taskStageId);
+            
+            const enhancedDefaultTasks = defaultTasks.map(task => {
+              const stage = foundStage(task.stage_id);
+              return {
+                ...task,
+                stageName: stage?.title || 'ללא שלב',
+                stageColor: 'gray',
+                assignees: task.assignees || null,
+              };
+            });
+            
+            setTasks(enhancedDefaultTasks as KanbanTask[]);
+            return;
+          }
+          
+          // המרת נתוני המשימות לטיפוס המורחב אחרי הסנכרון
+          const foundStage = (taskStageId: string | null) => stagesData.find(stage => stage.id === taskStageId);
+          
+          const enhancedResyncedTasks = resyncedTasks.map(task => {
+            const stage = foundStage(task.stage_id);
+            return {
+              ...task,
+              stageName: stage?.title || 'ללא שלב',
+              stageColor: 'gray',
+              assignees: task.assignees || null,
+            };
+          });
+          
+          setTasks(enhancedResyncedTasks as KanbanTask[]);
+          return;
+        } catch (syncError) {
+          console.error("שגיאה בסנכרון אוטומטי:", syncError);
+        }
+      }
+      
       // המרת נתוני המשימות לטיפוס המורחב
       const foundStage = (taskStageId: string | null) => stagesData.find(stage => stage.id === taskStageId);
       
