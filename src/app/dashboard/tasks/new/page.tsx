@@ -71,6 +71,9 @@ export default function NewTask() {
     responsible: '',
     dropbox_folder: '',
     estimated_hours: 0,
+    assignees: [],
+    tags: [],
+    start_date: '',
   });
   
   const [projects, setProjects] = useState<Project[]>([]);

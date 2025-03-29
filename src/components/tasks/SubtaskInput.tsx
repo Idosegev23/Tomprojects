@@ -52,6 +52,8 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
     due_date: '',
     responsible: '',
     estimated_hours: 0,
+    assignees: [] as string[],
+    tags: [] as string[],
   });
   const [loading, setLoading] = useState(false);
   const toast = useToast();
@@ -81,7 +83,8 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
     setLoading(true);
     
     try {
-      const newSubtask = {
+      // הכנת אובייקט חדש לשליחה
+      const cleanTask: any = {
         title: formData.title.trim(),
         description: formData.description,
         status: formData.status,
@@ -89,12 +92,19 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
         project_id: projectId,
         parent_task_id: parentTaskId,
         stage_id: stageId || null,
-        due_date: formData.due_date || null,
         responsible: formData.responsible || null,
         estimated_hours: formData.estimated_hours || 0,
+        tags: formData.tags,
+        assignees: formData.assignees,
       };
       
-      const createdTask = await taskService.createTask(newSubtask);
+      // טיפול בתאריך יעד - רק אם יש ערך
+      if (formData.due_date) {
+        cleanTask.due_date = formData.due_date;
+      }
+      
+      // יצירת תת-המשימה
+      const createdTask = await taskService.createTask(cleanTask);
       
       toast({
         title: 'תת-משימה נוצרה בהצלחה',
@@ -113,6 +123,8 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
         due_date: '',
         responsible: '',
         estimated_hours: 0,
+        assignees: [],
+        tags: [],
       });
       
       // עדכון ההורה
@@ -150,6 +162,8 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
       due_date: '',
       responsible: '',
       estimated_hours: 0,
+      assignees: [],
+      tags: [],
     });
     setIsExpanded(false);
     setIsAdvancedMode(false);

@@ -124,9 +124,9 @@ const CATEGORIES = [
 // הרחבת הטיפוס של המשימה כדי להכיל את כל השדות הדרושים
 interface ExtendedTask extends Task {
   dropbox_folder?: string;
-  tags?: string[];
-  reminder_days?: number;
-  collaborators?: string[];
+  tags?: string[] | null;
+  reminder_days?: number | null;
+  assignees?: string[];
 }
 
 interface TaskEditModalProps {
@@ -165,7 +165,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     hierarchical_number: null,
     tags: [],
     reminder_days: 1,
-    collaborators: [],
+    assignees: [],
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -182,7 +182,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [newTag, setNewTag] = useState('');
   const [remindersEnabled, setRemindersEnabled] = useState(false);
-  const [newCollaborator, setNewCollaborator] = useState('');
+  const [newAssignee, setNewAssignee] = useState('');
   const [isEditingSubtask, setIsEditingSubtask] = useState(false);
   const [currentSubtask, setCurrentSubtask] = useState<Task | null>(null);
   
@@ -201,7 +201,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         start_date: task.start_date ? task.start_date.split('T')[0] : '',
         due_date: task.due_date ? task.due_date.split('T')[0] : '',
         tags: task.tags || [],
-        collaborators: task.collaborators || [],
+        assignees: task.assignees || [],
       });
       setIsSubtask(!!task.parent_task_id);
       setRemindersEnabled(!!task.reminder_days);
@@ -228,7 +228,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         hierarchical_number: null,
         tags: [],
         reminder_days: 1,
-        collaborators: [],
+        assignees: [],
       });
       setIsSubtask(false);
       setSubtasks([]);
@@ -297,20 +297,26 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   };
   
   // טיפול במשתפי פעולה
-  const handleAddCollaborator = () => {
-    if (!newCollaborator.trim()) return;
+  const handleAddAssignee = () => {
+    if (!newAssignee.trim()) return;
+    
+    if (formData.assignees && formData.assignees.includes(newAssignee)) {
+      setNewAssignee('');
+      return;
+    }
     
     setFormData(prev => ({
       ...prev,
-      collaborators: [...(prev.collaborators || []), newCollaborator.trim()]
+      assignees: [...(prev.assignees || []), newAssignee],
     }));
-    setNewCollaborator('');
+    
+    setNewAssignee('');
   };
   
-  const handleRemoveCollaborator = (collaboratorToRemove: string) => {
+  const handleRemoveAssignee = (assigneeToRemove: string) => {
     setFormData(prev => ({
       ...prev,
-      collaborators: (prev.collaborators || []).filter(c => c !== collaboratorToRemove)
+      assignees: (prev.assignees || []).filter(a => a !== assigneeToRemove),
     }));
   };
 
@@ -407,7 +413,8 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
       if (isEditMode && task) {
         // עדכון משימה קיימת
         const taskData = {
-          ...formData
+          ...formData,
+          reminder_days: remindersEnabled ? formData.reminder_days : null,
         };
         
         // אם יש projectId, נוסיף אותו לאובייקט
@@ -444,7 +451,8 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         const taskData = {
           ...formData,
           title: formData.title,  // וידוא שהכותרת תעבור כמחרוזת
-          project_id: projectId || null
+          project_id: projectId || null,
+          reminder_days: remindersEnabled ? formData.reminder_days : null,
         };
         result = await taskService.createTask(taskData);
         
@@ -660,39 +668,39 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                                   <Icon as={FaUsers} color="gray.400" />
                                 </InputLeftElement>
                                 <Input 
-                                  value={newCollaborator} 
-                                  onChange={(e) => setNewCollaborator(e.target.value)}
+                                  value={newAssignee} 
+                                  onChange={(e) => setNewAssignee(e.target.value)}
                                   placeholder="הוסף משתף פעולה"
                                   borderRadius="md"
-                                  onKeyPress={(e) => e.key === 'Enter' && handleAddCollaborator()}
+                                  onKeyPress={(e) => e.key === 'Enter' && handleAddAssignee()}
                                 />
                               </InputGroup>
                               <IconButton
                                 aria-label="הוסף משתף פעולה"
                                 icon={<AddIcon />}
-                                onClick={handleAddCollaborator}
+                                onClick={handleAddAssignee}
                                 colorScheme="blue"
                                 borderRadius="md"
                               />
                             </HStack>
                             
-                            {formData.collaborators && formData.collaborators.length > 0 && (
+                            {formData.assignees && formData.assignees.length > 0 && (
                               <Wrap spacing={2} mt={2}>
-                                {formData.collaborators.map((collaborator, index) => (
+                                {formData.assignees.map((assignee, index) => (
                                   <WrapItem key={index}>
                                     <Tag colorScheme="blue" borderRadius="full" size="md">
                                       <Avatar
                                         src=""
-                                        name={collaborator}
+                                        name={assignee}
                                         size="xs"
                                         ml={-1}
                                         mr={2}
                                       />
-                                      <TagLabel>{collaborator}</TagLabel>
+                                      <TagLabel>{assignee}</TagLabel>
                                       <CloseButton 
                                         size="sm" 
                                         ml={1} 
-                                        onClick={() => handleRemoveCollaborator(collaborator)}
+                                        onClick={() => handleRemoveAssignee(assignee)}
                                       />
                                     </Tag>
                                   </WrapItem>

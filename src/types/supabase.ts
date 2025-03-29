@@ -247,13 +247,19 @@ export interface TaskWithChildren extends Task {
 // טיפוס מורחב של Task שכולל שדות נוספים שאינם בסכמה המקורית
 export interface ExtendedTask extends Task {
   dropbox_folder?: string;
+  tags?: string[] | null;
+  reminder_days?: number | null;
 }
 
 // טיפוסים להוספה ועדכון משימות עם שדות מורחבים
 export interface ExtendedNewTask extends NewTask {
   dropbox_folder?: string;
+  tags?: string[] | null;
+  reminder_days?: number | null;
 }
 
 export interface ExtendedUpdateTask extends UpdateTask {
   dropbox_folder?: string;
+  tags?: string[] | null;
+  reminder_days?: number | null;
 } 

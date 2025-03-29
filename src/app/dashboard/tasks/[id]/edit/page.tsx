@@ -69,6 +69,9 @@ export default function EditTask() {
     responsible: '',
     dropbox_folder: '',
     estimated_hours: 0,
+    assignees: [],
+    tags: [],
+    start_date: '',
   });
   
   const [projects, setProjects] = useState<Project[]>([]);
@@ -145,10 +148,13 @@ export default function EditTask() {
           priority: taskData.priority,
           status: taskData.status,
           due_date: formatDateForInput(taskData.due_date),
+          start_date: formatDateForInput(taskData.start_date),
           category: taskData.category || '',
           responsible: taskData.responsible || '',
           dropbox_folder: taskData.dropbox_folder || '',
           estimated_hours: taskData.estimated_hours || 0,
+          tags: taskData.tags || [],
+          assignees: taskData.assignees || [],
         });
         
         // בדיקה אם המשתמש הוא הבעלים של המשימה או הפרויקט
@@ -339,13 +345,56 @@ export default function EditTask() {
     }
     
     if (!validateForm()) {
+      toast({
+        title: 'שגיאה בטופס',
+        description: 'נא לתקן את השגיאות לפני שליחת הטופס',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+        position: 'top-right',
+      });
       return;
     }
     
     setSaveLoading(true);
     
     try {
-      await taskService.updateTask(taskId, task);
+      if (!originalTask) {
+        throw new Error('לא ניתן לעדכן משימה שלא נטענה כראוי');
+      }
+      
+      // יצירת אובייקט העדכון
+      const updateData: Partial<ExtendedTask> = {
+        title: task.title,
+        description: task.description,
+        project_id: task.project_id,
+        stage_id: task.stage_id || null,
+        parent_task_id: task.parent_task_id || null,
+        priority: task.priority,
+        status: task.status,
+        category: task.category || null,
+        responsible: task.responsible || null,
+        dropbox_folder: task.dropbox_folder || '',
+        estimated_hours: task.estimated_hours,
+        tags: task.tags || [],
+        assignees: task.assignees || [],
+      };
+      
+      // טיפול בשדות תאריך
+      if (task.due_date) {
+        updateData.due_date = task.due_date;
+      } else {
+        updateData.due_date = null;
+      }
+      
+      if (task.start_date) {
+        updateData.start_date = task.start_date;
+      } else {
+        updateData.start_date = null;
+      }
+      
+      // עדכון המשימה
+      const updatedTask = await taskService.updateTask(taskId, updateData);
       
       toast({
         title: 'המשימה עודכנה בהצלחה',
@@ -355,20 +404,20 @@ export default function EditTask() {
         position: 'top-right',
       });
       
-      // ניווט לדף המשימה
-      router.push(`/dashboard/tasks/${taskId}`);
+      // מעבר חזרה לדף המשימה
+      router.push(`/dashboard/tasks/${updatedTask.id}`);
     } catch (err) {
       console.error('שגיאה בעדכון המשימה:', err);
       
       toast({
         title: 'שגיאה בעדכון המשימה',
-        description: err instanceof Error ? err.message : 'אירעה שגיאה בעדכון המשימה',
+        description: err instanceof Error ? err.message : 'אירעה שגיאה בלתי צפויה',
         status: 'error',
         duration: 5000,
         isClosable: true,
         position: 'top-right',
       });
-      
+    } finally {
       setSaveLoading(false);
     }
   };
