@@ -334,6 +334,13 @@ export default function EditTask() {
     return Object.keys(newErrors).length === 0;
   };
   
+  // וודא שהפונקציה שמטפלת בעדכון האחראים עובדת כראוי
+  const handleAssigneesChange = (value: string) => {
+    // פיצול לפי פסיקים ליצירת מערך של אחראים
+    const assigneesArray = value.split(',').map(item => item.trim()).filter(Boolean);
+    setTask(prev => ({ ...prev, assignees: assigneesArray }));
+  };
+  
   // שליחת הטופס
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -656,6 +663,30 @@ export default function EditTask() {
                   />
                 </FormControl>
               </SimpleGrid>
+            </Card>
+            
+            <Card bg={cardBg} borderColor={borderColor} borderWidth="1px" p={6} mb={6} borderRadius="md" boxShadow="sm">
+              <Text fontSize="lg" fontWeight="bold" mb={4} display="flex" alignItems="center">
+                <Icon as={FiUsers} mr={2} />
+                צוות המשימה
+              </Text>
+              
+              <FormControl>
+                <FormLabel display="flex" alignItems="center">
+                  <Icon as={FiUsers} mr={2} color="blue.500" />
+                  אחראים למשימה
+                </FormLabel>
+                <Input
+                  name="assignees"
+                  placeholder="הוסף חברי צוות מופרדים בפסיקים"
+                  value={task.assignees?.join(', ') || ''}
+                  onChange={(e) => handleAssigneesChange(e.target.value)}
+                  bg="white"
+                />
+                <Text fontSize="xs" color="gray.500" mt={1}>
+                  הזן שמות או מזהים מופרדים בפסיקים
+                </Text>
+              </FormControl>
             </Card>
             
             <Card bg={cardBg} borderColor={borderColor} borderWidth="1px" p={6} mb={6} borderRadius="md" boxShadow="sm">

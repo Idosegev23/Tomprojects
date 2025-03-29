@@ -61,6 +61,12 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
 
+  // פונקציה לטיפול בהוספת אחראים למשימה
+  const handleAssigneesChange = (value: string) => {
+    const assigneesArray = value.split(',').map(item => item.trim()).filter(Boolean);
+    setFormData(prev => ({ ...prev, assignees: assigneesArray }));
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     
@@ -316,6 +322,21 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
                       value={formData.responsible}
                       onChange={handleChange}
                       placeholder="שם האחראי"
+                      bg="white"
+                      size="sm"
+                    />
+                  </FormControl>
+                  
+                  <FormControl>
+                    <FormLabel display="flex" alignItems="center" fontSize="sm">
+                      <Icon as={FiUsers} mr={2} color="blue.500" />
+                      אחראים למשימה
+                    </FormLabel>
+                    <Input
+                      name="assignees"
+                      value={formData.assignees.join(', ')}
+                      onChange={(e) => handleAssigneesChange(e.target.value)}
+                      placeholder="הזן שמות מופרדים בפסיקים"
                       bg="white"
                       size="sm"
                     />

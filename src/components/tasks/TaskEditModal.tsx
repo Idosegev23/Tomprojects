@@ -126,7 +126,6 @@ interface ExtendedTask extends Task {
   dropbox_folder?: string;
   tags?: string[] | null;
   reminder_days?: number | null;
-  assignees?: string[];
 }
 
 interface TaskEditModalProps {
@@ -1113,10 +1112,11 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                         {remindersEnabled && (
                           <FormControl>
                             <FormLabel fontWeight="bold">מספר ימים לפני תאריך היעד</FormLabel>
-                            <NumberInput 
+                            <NumberInput
+                              size="sm"
                               min={1} 
                               max={30} 
-                              value={formData.reminder_days} 
+                              value={formData.reminder_days ?? undefined} 
                               onChange={(value) => setFormData(prev => ({ ...prev, reminder_days: parseInt(value) }))}
                             >
                               <NumberInputField borderRadius="md" />

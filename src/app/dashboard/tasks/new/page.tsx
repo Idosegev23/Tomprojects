@@ -330,6 +330,13 @@ export default function NewTask() {
     router.back();
   };
   
+  // וודא שהפונקציה שמטפלת בעדכון האחראים עובדת כראוי
+  const handleAssigneesChange = (value: string) => {
+    // פיצול לפי פסיקים ליצירת מערך של אחראים
+    const assigneesArray = value.split(',').map(item => item.trim()).filter(Boolean);
+    setTask(prev => ({ ...prev, assignees: assigneesArray }));
+  };
+  
   return (
     <Container maxW="container.lg" py={8}>
       <Box as="form" onSubmit={handleSubmit}>
@@ -686,6 +693,19 @@ export default function NewTask() {
                 </Box>
                 
                 <Divider />
+                
+                <FormControl mt={4}>
+                  <FormLabel display="flex" alignItems="center">
+                    <Icon as={FiUsers} mr={2} color="blue.500" />
+                    צוות המשימה
+                  </FormLabel>
+                  <Input
+                    name="assignees"
+                    placeholder="הוסף חברי צוות מופרדים בפסיקים"
+                    value={task.assignees?.join(', ') || ''}
+                    onChange={(e) => handleAssigneesChange(e.target.value)}
+                  />
+                </FormControl>
                 
                 <Button 
                   colorScheme="primary" 

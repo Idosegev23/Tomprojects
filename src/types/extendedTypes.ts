@@ -15,7 +15,9 @@ export interface ExtendedStage extends Stage {
 // טיפוס שמרחיב את Task כדי לכלול שדות נוספים
 export interface ExtendedTask extends Task {
   dropbox_folder?: string;
-  // hierarchical_number מוגדר כ-string | null ב-Task המקורי
+  tags?: string[] | null;
+  reminder_days?: number | null;
+  // הערה: assignees כבר קיים ב-Task המקורי
 }
 
 // טיפוס שמותאם למשימה עם ילדים
