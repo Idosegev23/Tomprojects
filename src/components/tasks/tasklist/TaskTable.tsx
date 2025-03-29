@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { VStack, Divider, Card, CardBody, Text, Button, Flex, useColorModeValue } from '@chakra-ui/react';
 import { FiPlus, FiRefreshCw } from 'react-icons/fi';
 import { Task } from '@/types/supabase';
 import { TaskWithStage } from './useTaskList';
-import TaskTableHeader from './TaskTableHeader';
+import TaskTableHeader, { SortField, SortDirection } from './TaskTableHeader';
 import TaskRow from './TaskRow';
 
 interface TaskTableProps {
@@ -33,6 +33,70 @@ const TaskTable: React.FC<TaskTableProps> = ({
 }) => {
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const hoverBgColor = useColorModeValue('gray.50', 'gray.700');
+  
+  // הוספת state למיונים
+  const [sortField, setSortField] = useState<SortField>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  
+  // טיפול בלחיצה על עמודה למיון
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // הפיכת כיוון המיון אם לוחצים שוב על אותה עמודה
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // קביעת עמודה חדשה למיון והתחלה עם מיון עולה
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+  
+  // מיון המשימות לפי השדה והכיוון שנבחרו
+  const sortedTasks = useMemo(() => {
+    if (!sortField) return tasks;
+    
+    return [...tasks].sort((a, b) => {
+      let comparison = 0;
+      
+      // מיון לפי השדה שנבחר
+      switch (sortField) {
+        case 'title':
+          comparison = a.title.localeCompare(b.title);
+          break;
+        case 'hierarchical_number':
+          if (a.hierarchical_number && b.hierarchical_number) {
+            comparison = a.hierarchical_number.localeCompare(b.hierarchical_number);
+          } else if (a.hierarchical_number) {
+            comparison = -1;
+          } else if (b.hierarchical_number) {
+            comparison = 1;
+          }
+          break;
+        case 'status':
+          comparison = a.status.localeCompare(b.status);
+          break;
+        case 'priority':
+          // מיון מיוחד לפי עדיפות (גבוהה, בינונית, נמוכה)
+          const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+          const aValue = priorityOrder[a.priority.toLowerCase()] ?? 3;
+          const bValue = priorityOrder[b.priority.toLowerCase()] ?? 3;
+          comparison = aValue - bValue;
+          break;
+        case 'responsible':
+          const aResponsible = a.responsible || '';
+          const bResponsible = b.responsible || '';
+          comparison = aResponsible.localeCompare(bResponsible);
+          break;
+        case 'due_date':
+          const aDate = a.due_date ? new Date(a.due_date).getTime() : Infinity;
+          const bDate = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+          comparison = aDate - bDate;
+          break;
+      }
+      
+      // הפיכת התוצאה אם המיון הוא יורד
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [tasks, sortField, sortDirection]);
   
   if (tasks.length === 0) {
     return (
@@ -75,10 +139,13 @@ const TaskTable: React.FC<TaskTableProps> = ({
         <TaskTableHeader 
           isAllSelected={selectedTasks.length === tasks.length && tasks.length > 0}
           onSelectAll={onSelectAll}
+          sortField={sortField}
+          sortDirection={sortDirection}
+          onSort={handleSort}
         />
         
         <VStack spacing={0} align="stretch" divider={<Divider />}>
-          {tasks.map(task => (
+          {sortedTasks.map(task => (
             <TaskRow
               key={task.id}
               task={task}

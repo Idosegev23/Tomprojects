@@ -124,18 +124,6 @@ const TaskRow: React.FC<TaskRowProps> = ({
         )}
       </Box>
       
-      {/* שלב */}
-      <Box flex="1" display={{ base: "none", md: "block" }}>
-        <Tag 
-          size="sm" 
-          variant="subtle" 
-          colorScheme={task.stageColor || "gray"}
-        >
-          <TagLeftIcon as={FiLayers} />
-          <TagLabel>{task.stageName}</TagLabel>
-        </Tag>
-      </Box>
-      
       {/* סטטוס */}
       <Box flex="1" display={{ base: "none", md: "block" }}>
         <Tag colorScheme={getStatusColor(task.status)} size="md" borderRadius="full">
