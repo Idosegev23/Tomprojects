@@ -356,9 +356,28 @@ BEGIN
     END;
   END IF;
   
-  -- 3. בניית טבלת השלבים בהתאם למשימות שנבחרו
+  -- 3. בניית טבלת השלבים
   IF create_default_stages THEN
-    PERFORM build_stages_from_selected_tasks(project_id_param);
+    -- יצירת טבלת השלבים
+    PERFORM create_project_stages_table(project_id_param);
+    
+    -- בניית השלבים מהמשימות או יצירת שלב ברירת מחדל
+    IF EXISTS (SELECT 1 FROM tasks WHERE project_id = project_id_param) OR 
+       (selected_task_ids IS NOT NULL AND array_length(selected_task_ids, 1) > 0) THEN
+      -- בניית שלבים מהמשימות הקיימות
+      PERFORM build_stages_from_selected_tasks(project_id_param);
+    ELSE
+      -- יצירת שלב ברירת מחדל אם אין משימות
+      EXECUTE format('
+        INSERT INTO %I (
+          id, title, project_id, status, progress, sort_order, created_at, updated_at
+        )
+        VALUES (
+          uuid_generate_v4(), ''משימה ראשית'', %L, ''pending'', 0, 1, now(), now()
+        )
+        ON CONFLICT DO NOTHING
+      ', stages_table_name, project_id_param);
+    END IF;
   END IF;
   
   RAISE NOTICE 'Project tables and data initialized successfully for project %', project_id_param;
@@ -454,8 +473,15 @@ BEGIN
   EXECUTE format('SELECT COUNT(*) FROM %I', stages_table_name) INTO stage_count_check;
   
   IF stage_count_check.count = 0 THEN
-    -- אין שלבים בטבלה הייחודית, נעתיק שלבים מהטבלה הכללית
-    PERFORM copy_stages_to_project_table(project_id_param);
+    -- אין שלבים בטבלה הייחודית, ניצור שלב ברירת מחדל במקום להעתיק
+    EXECUTE format('
+      INSERT INTO %I (
+        id, title, project_id, status, created_at, updated_at
+      ) VALUES (
+        uuid_generate_v4(), ''משימה ראשית'', %L, ''active'', now(), now()
+      ) RETURNING id', 
+      stages_table_name, project_id_param
+    ) INTO stage_rec;
   END IF;
   
   -- 3. איסוף כל מזהי השלבים מטבלת השלבים הייחודית
@@ -467,7 +493,7 @@ BEGIN
       INSERT INTO %I (
         id, title, project_id, status, created_at, updated_at
       ) VALUES (
-        uuid_generate_v4(), ''שלב ברירת מחדל'', %L, ''active'', now(), now()
+        uuid_generate_v4(), ''משימה ראשית'', %L, ''active'', now(), now()
       ) RETURNING id', 
       stages_table_name, project_id_param
     ) INTO stage_rec;

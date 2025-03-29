@@ -356,6 +356,63 @@ export const projectService = {
         }
       };
     }
+  },
+
+  // עדכון מצב בנייה של פרויקט
+  async updateBuildTracking(
+    projectId: string,
+    trackingData: Record<string, any>
+  ): Promise<boolean> {
+    try {
+      if (!projectId) {
+        console.error("updateBuildTracking: מזהה פרויקט חסר");
+        return false;
+      }
+
+      // קריאה לפונקציית RPC
+      const { data, error } = await supabase.rpc('update_build_tracking', {
+        project_id_param: projectId,
+        tracking_data: trackingData
+      });
+
+      if (error) {
+        console.error("שגיאה בעדכון build_tracking:", error);
+        return false;
+      }
+
+      console.log("build_tracking עודכן בהצלחה:", data);
+      return true;
+    } catch (error) {
+      console.error("שגיאה בלתי צפויה בעדכון build_tracking:", error);
+      return false;
+    }
+  },
+
+  // שליפת מצב בנייה של פרויקט
+  async getBuildTracking(
+    projectId: string
+  ): Promise<Record<string, any> | null> {
+    try {
+      if (!projectId) {
+        console.error("getBuildTracking: מזהה פרויקט חסר");
+        return null;
+      }
+
+      // קריאה לפונקציית RPC
+      const { data, error } = await supabase.rpc('get_build_tracking', {
+        project_id_param: projectId
+      });
+
+      if (error) {
+        console.error("שגיאה בשליפת build_tracking:", error);
+        return null;
+      }
+
+      return data.build_tracking || {};
+    } catch (error) {
+      console.error("שגיאה בלתי צפויה בשליפת build_tracking:", error);
+      return null;
+    }
   }
 };
 

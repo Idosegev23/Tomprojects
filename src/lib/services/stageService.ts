@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 // פונקציית עזר לקבלת שם טבלת השלבים הספציפית של פרויקט
 const getProjectStagesTable = (projectId: string): string => {
-  return `project_${projectId}_stages`;
+  return "stages";
 };
 
 // פונקציית עזר - בודקת אם טבלה קיימת
@@ -110,53 +110,21 @@ export const stageService = {
       return [];
     }
     
-    // נבדוק אם הטבלה הייחודית לפרויקט קיימת
-    const projectStagesTableName = `project_${projectId}_stages`;
-    
     try {
-      // בדיקה אם הטבלה קיימת באמצעות הפונקציה המעודכנת
-      const tableExists = await checkIfTableExists(projectStagesTableName);
+      // שימוש בטבלת השלבים הכללית בלבד
+      console.log(`שולף שלבים מהטבלה הכללית עבור פרויקט ${projectId}`);
+      const { data, error } = await supabase
+        .from('stages')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('sort_order', { ascending: true });
         
-      if (tableExists) {
-        // שליפת השלבים מהטבלה הייחודית לפרויקט
-        const { data, error } = await supabase
-          .from(projectStagesTableName)
-          .select('*');
-          
-        if (error) {
-          console.error(`שגיאה בשליפת שלבים מטבלת ${projectStagesTableName}:`, error);
-          
-          // במקרה של שגיאה, ננסה לשלוף נתונים מטבלת השלבים הכללית
-          console.log(`מנסה לשלוף שלבים מהטבלה הכללית (stages) עבור פרויקט ${projectId}`);
-          const { data: generalStages, error: generalError } = await supabase
-            .from('stages')
-            .select('*')
-            .eq('project_id', projectId);
-            
-          if (generalError) {
-            console.error('שגיאה בשליפת שלבים מהטבלה הכללית:', generalError);
-            return [];
-          }
-          
-          return generalStages || [];
-        }
-        
-        return data || [];
-      } else {
-        // אם הטבלה לא קיימת, ננסה לשלוף נתונים מטבלת השלבים הכללית
-        console.log(`טבלת ${projectStagesTableName} לא קיימת, שולף שלבים מהטבלה הכללית עבור פרויקט ${projectId}`);
-        const { data, error } = await supabase
-          .from('stages')
-          .select('*')
-          .eq('project_id', projectId);
-          
-        if (error) {
-          console.error('שגיאה בשליפת שלבים מהטבלה הכללית:', error);
-          return [];
-        }
-        
-        return data || [];
+      if (error) {
+        console.error('שגיאה בשליפת שלבים מהטבלה הכללית:', error);
+        return [];
       }
+      
+      return data || [];
     } catch (error) {
       console.error('שגיאה בלתי צפויה בפונקציה getProjectStages:', error);
       return [];
@@ -537,184 +505,101 @@ export const stageService = {
   
   // יצירת שלבים ברירת מחדל לפרויקט חדש
   async createDefaultStages(projectId: string): Promise<Stage[]> {
-    const supabase = createClientComponentClient();
-    
-    if (!projectId) {
-      console.error("createDefaultStages: מזהה פרויקט חסר");
-      return [];
-    }
-    
     try {
-      // יצירת שלבים ברירת מחדל עם השדות הנדרשים
+      if (!projectId) {
+        console.error("createDefaultStages: מזהה פרויקט חסר");
+        return [];
+      }
+      
+      // בדיקה אם כבר קיימים שלבים לפרויקט זה בטבלה הכללית
+      const { data: existingStages, error: existingError } = await supabase
+        .from('stages')
+        .select('*')
+        .eq('project_id', projectId);
+        
+      if (existingError) {
+        console.error('שגיאה בבדיקת שלבים קיימים:', existingError);
+        return [];
+      }
+      
+      // אם כבר יש שלבים, אין צורך ליצור שלבים חדשים
+      if (existingStages && existingStages.length > 0) {
+        console.log(`קיימים כבר ${existingStages.length} שלבים עבור פרויקט ${projectId}. לא יוצר שלבים חדשים.`);
+        return existingStages;
+      }
+        
+      // הוספת שלבי ברירת מחדל לטבלה הכללית
+      console.log(`יוצר שלבי ברירת מחדל בטבלה הכללית עבור פרויקט ${projectId}`);
+      
+      // יצירת שלושה שלבי ברירת מחדל
       const defaultStages = [
         {
           id: uuidv4(),
-          title: "הכנה",
-          description: "שלב ההכנות הראשוני של הפרויקט",
-          status: "active",
-          progress: 0,
-          color: "#3498db", // כחול
+          title: 'לביצוע',
+          description: 'משימות שצריך לבצע',
           project_id: projectId,
-          sort_order: 0,
-          hierarchical_number: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        },
-        {
-          id: uuidv4(),
-          title: "תכנון",
-          description: "קביעת תכנית העבודה ופירוט המשימות",
-          status: "active",
+          status: 'active',
+          hierarchical_number: '1',
           progress: 0,
-          color: "#2ecc71", // ירוק
-          project_id: projectId,
+          color: '#3182CE',
           sort_order: 1,
-          hierarchical_number: null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         },
         {
           id: uuidv4(),
-          title: "ביצוע",
-          description: "ביצוע המשימות המתוכננות",
-          status: "active",
-          progress: 0,
-          color: "#e74c3c", // אדום
+          title: 'בתהליך',
+          description: 'משימות בביצוע',
           project_id: projectId,
+          status: 'active',
+          hierarchical_number: '2',
+          progress: 0,
+          color: '#DD6B20',
           sort_order: 2,
-          hierarchical_number: null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         },
         {
           id: uuidv4(),
-          title: "בקרה",
-          description: "בקרת איכות ופיקוח על התוצרים",
-          status: "active",
-          progress: 0,
-          color: "#f39c12", // כתום
+          title: 'הושלם',
+          description: 'משימות שהושלמו',
           project_id: projectId,
+          status: 'active',
+          hierarchical_number: '3',
+          progress: 0,
+          color: '#38A169',
           sort_order: 3,
-          hierarchical_number: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        },
-        {
-          id: uuidv4(),
-          title: "סיום",
-          description: "סיום הפרויקט ומסירתו",
-          status: "pending",
-          progress: 0,
-          color: "#9b59b6", // סגול
-          project_id: projectId,
-          sort_order: 4,
-          hierarchical_number: null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }
       ];
       
-      // נבדוק אם הטבלה הייחודית לפרויקט קיימת
-      const projectStagesTableName = `project_${projectId}_stages`;
-      
-      // בדיקה אם הטבלה קיימת באמצעות הפונקציה המעודכנת
-      const tableExists = await checkIfTableExists(projectStagesTableName);
-      
-      if (!tableExists) {
-        // נשתמש בטבלה הכללית במקום
-        console.log(`טבלת ${projectStagesTableName} לא קיימת, מוסיף שלבי ברירת מחדל לטבלה הכללית עבור פרויקט ${projectId}`);
-        const { data, error } = await supabase
-          .from('stages')
-          .upsert(defaultStages.map(stage => ({ ...stage, id: uuidv4() })));
-          
-        if (error) {
-          console.error('שגיאה בהוספת שלבי ברירת מחדל לטבלה הכללית:', error);
-          return [];
-        }
+      // הוספת השלבים לטבלת השלבים הכללית
+      const { data, error } = await supabase
+        .from('stages')
+        .insert(defaultStages)
+        .select();
         
-        // שליפת השלבים שנוצרו
-        const { data: createdStages, error: fetchError } = await supabase
-          .from('stages')
-          .select('*')
-          .eq('project_id', projectId);
-          
-        if (fetchError) {
-          console.error('שגיאה בשליפת שלבי ברירת מחדל שנוצרו:', fetchError);
-          return [];
-        }
-        
-        return createdStages || [];
-      } else {
-        // הוספת שלבי ברירת מחדל לטבלה הייחודית לפרויקט
-        const { data, error } = await supabase
-          .from(projectStagesTableName)
-          .upsert(defaultStages.map(stage => ({ ...stage, id: uuidv4() })));
-          
-        if (error) {
-          console.error(`שגיאה בהוספת שלבי ברירת מחדל לטבלת ${projectStagesTableName}:`, error);
-          
-          // נשתמש בטבלה הכללית כגיבוי
-          console.log(`מוסיף שלבי ברירת מחדל לטבלה הכללית (stages) כגיבוי עבור פרויקט ${projectId}`);
-          const { data: generalData, error: generalError } = await supabase
-            .from('stages')
-            .upsert(defaultStages.map(stage => ({ ...stage, id: uuidv4() })));
-            
-          if (generalError) {
-            console.error('שגיאה בהוספת שלבי ברירת מחדל לטבלה הכללית:', generalError);
-            return [];
-          }
-          
-          // שליפת השלבים שנוצרו
-          const { data: createdStages, error: fetchError } = await supabase
-            .from(projectStagesTableName)
-            .select('*');
-            
-          if (fetchError) {
-            console.error(`שגיאה בשליפת שלבי ברירת מחדל שנוצרו מטבלת ${projectStagesTableName}:`, fetchError);
-            
-            // שליפה מהטבלה הכללית כגיבוי
-            const { data: generalStages, error: generalFetchError } = await supabase
-              .from('stages')
-              .select('*')
-              .eq('project_id', projectId);
-              
-            if (generalFetchError) {
-              console.error('שגיאה בשליפת שלבי ברירת מחדל שנוצרו מהטבלה הכללית:', generalFetchError);
-              return [];
-            }
-            
-            return generalStages || [];
-          }
-          
-          return createdStages || [];
-        }
-        
-        // שליפת השלבים שנוצרו
-        const { data: createdStages, error: fetchError } = await supabase
-          .from(projectStagesTableName)
-          .select('*');
-          
-        if (fetchError) {
-          console.error(`שגיאה בשליפת שלבי ברירת מחדל שנוצרו מטבלת ${projectStagesTableName}:`, fetchError);
-          
-          // שליפה מהטבלה הכללית כגיבוי
-          const { data: generalStages, error: generalFetchError } = await supabase
-            .from('stages')
-            .select('*')
-            .eq('project_id', projectId);
-            
-          if (generalFetchError) {
-            console.error('שגיאה בשליפת שלבי ברירת מחדל שנוצרו מהטבלה הכללית:', generalFetchError);
-            return [];
-          }
-          
-          return generalStages || [];
-        }
-        
-        return createdStages || [];
+      if (error) {
+        console.error(`שגיאה בהוספת שלבי ברירת מחדל לטבלה הכללית:`, error);
+        return [];
       }
+      
+      // שליפת השלבים שנוצרו
+      const { data: fetchedStages, error: fetchError } = await supabase
+        .from('stages')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('sort_order', { ascending: true });
+        
+      if (fetchError) {
+        console.error(`שגיאה בשליפת שלבי ברירת מחדל שנוצרו:`, fetchError);
+        return data || [];
+      }
+      
+      return fetchedStages || [];
     } catch (error) {
-      console.error('שגיאה בלתי צפויה בפונקציה createDefaultStages:', error);
+      console.error('שגיאה בלתי צפויה ביצירת שלבי ברירת מחדל:', error);
       return [];
     }
   },
@@ -826,115 +711,56 @@ export const stageService = {
 
   // סנכרון שלבים מהטבלה הכללית לטבלה הספציפית של הפרויקט
   async syncStagesToProjectTable(projectId: string): Promise<any> {
-    const supabase = createClientComponentClient();
-    
-    if (!projectId) {
-      console.error("syncStagesToProjectTable: מזהה פרויקט חסר");
-      return { success: false, error: "מזהה פרויקט חסר" };
-    }
-    
     try {
-      // נבדוק אם הטבלה הייחודית לפרויקט קיימת
-      const projectStagesTableName = `project_${projectId}_stages`;
-      
-      // בדיקה אם הטבלה קיימת
-      const tableExists = await checkIfTableExists(projectStagesTableName);
-      
-      if (!tableExists) {
-        // אם הטבלה לא קיימת, ניצור אותה
-        console.log(`טבלת ${projectStagesTableName} לא קיימת, יוצר אותה...`);
-        
-        // ניסיון קריאה לפונקציית RPC ליצירת טבלת שלבים
-        try {
-          const { data, error } = await supabase.rpc(
-            'create_project_stages_table',
-            { project_id: projectId }
-          );
-          
-          if (error) {
-            console.error(`שגיאה ביצירת טבלת ${projectStagesTableName}:`, error);
-            return { success: false, error: `שגיאה ביצירת טבלת השלבים: ${error.message}` };
-          }
-        } catch (err) {
-          console.error(`שגיאה ביצירת טבלת ${projectStagesTableName}:`, err);
-          return { success: false, error: `שגיאה ביצירת טבלת השלבים: ${err instanceof Error ? err.message : 'שגיאה לא ידועה'}` };
-        }
-      }
-      
-      // שליפת השלבים מהטבלה הכללית שהם או כלליים (project_id IS NULL) או שייכים לפרויקט זה
-      const { data: stagesFromGeneralTable, error: generalError } = await supabase
-        .from('stages')
-        .select('*')
-        .or(`project_id.eq.${projectId},project_id.is.null`);
-      
-      if (generalError) {
-        console.error('שגיאה בשליפת שלבים מהטבלה הכללית:', generalError);
-        return { success: false, error: `שגיאה בשליפת שלבים מהטבלה הכללית: ${generalError.message}` };
-      }
-      
-      if (!stagesFromGeneralTable || stagesFromGeneralTable.length === 0) {
-        console.log('לא נמצאו שלבים בטבלה הכללית להעתקה');
-        
-        // אם אין שלבים בטבלה הכללית, ניצור שלבי ברירת מחדל ישירות בטבלה הספציפית
-        const defaultStages = await this.createDefaultStages(projectId);
-        return { 
-          success: true, 
-          message: 'נוצרו שלבי ברירת מחדל בטבלה הספציפית של הפרויקט',
-          stages_count: defaultStages.length
+      if (!projectId) {
+        return {
+          success: false,
+          message: "syncStagesToProjectTable: מזהה פרויקט חסר"
         };
       }
       
-      // העתקת השלבים לטבלה הספציפית של הפרויקט
-      let copiedCount = 0;
+      // אין צורך בסנכרון כי משתמשים רק בטבלת השלבים הכללית
+      console.log(`אין צורך בסנכרון טבלאות שלבים עבור פרויקט ${projectId} - משתמשים בטבלת שלבים כללית`);
       
-      for (const stage of stagesFromGeneralTable) {
-        try {
-          // התאמת השלב לטבלה הספציפית - שינוי שדה project_id לפרויקט הנוכחי
-          const stageForProjectTable = {
-            ...stage,
-            project_id: projectId,
-            updated_at: new Date().toISOString()
-          };
-          
-          // העתקת השלב לטבלה הספציפית
-          const { data, error } = await supabase
-            .from(projectStagesTableName)
-            .upsert(stageForProjectTable, { onConflict: 'id' })
-            .select();
-          
-          if (error) {
-            console.error(`שגיאה בהעתקת שלב ${stage.id} לטבלת ${projectStagesTableName}:`, error);
-            continue;
-          }
-          
-          copiedCount++;
-        } catch (err) {
-          console.error(`שגיאה בהעתקת שלב ${stage.id}:`, err);
-          continue;
-        }
-      }
-      
-      // שליפת מספר השלבים הסופי בטבלה הספציפית
-      const { data: finalStages, error: countError } = await supabase
-        .from(projectStagesTableName)
-        .select('*');
-      
-      if (countError) {
-        console.error(`שגיאה בספירת השלבים הסופית בטבלת ${projectStagesTableName}:`, countError);
-      }
-      
-      return { 
-        success: true, 
-        message: `הועתקו ${copiedCount} שלבים לטבלה הספציפית של הפרויקט`,
-        stages_count: finalStages ? finalStages.length : copiedCount,
-        stages: finalStages
+      return {
+        success: true,
+        message: "השלבים מנוהלים בטבלה הכללית בלבד",
+        project_id: projectId,
+        stages_count: await this.countStages(projectId)
       };
     } catch (error) {
-      console.error('שגיאה בלתי צפויה בפונקציה syncStagesToProjectTable:', error);
-      return { 
-        success: false, 
-        error: `שגיאה בלתי צפויה: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`
+      console.error('שגיאה בלתי צפויה בסנכרון שלבים:', error);
+      return {
+        success: false,
+        message: `שגיאה בסנכרון שלבים: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`,
+        project_id: projectId
       };
+    }
+  },
+
+  // קריאת מספר השלבים בפרויקט
+  async countStages(projectId: string): Promise<number> {
+    try {
+      if (!projectId) {
+        console.error("countStages: מזהה פרויקט חסר");
+        return 0;
+      }
+      
+      // שליפת מספר השלבים מהטבלה הכללית
+      const { count, error } = await supabase
+        .from('stages')
+        .select('*', { count: 'exact', head: true })
+        .eq('project_id', projectId);
+        
+      if (error) {
+        console.error('שגיאה בספירת שלבים:', error);
+        return 0;
+      }
+      
+      return count || 0;
+    } catch (error) {
+      console.error('שגיאה בלתי צפויה בספירת שלבים:', error);
+      return 0;
     }
   }
 };
