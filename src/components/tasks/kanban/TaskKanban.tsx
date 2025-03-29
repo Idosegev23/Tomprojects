@@ -9,8 +9,8 @@ import {
   Text,
 } from '@chakra-ui/react';
 import { motion } from 'framer-motion';
-import { Task, Stage, Project } from '@/types/supabase';
-import { TaskKanbanProps, statuses, statusLabels } from './types';
+import { Stage, Project } from '@/types/supabase';
+import { TaskKanbanProps, statuses, statusLabels, Task } from './types';
 import { getStatusColor, groupTasksByStatus, groupTasksByStage, groupTasksByCategory } from './utils';
 import { TaskKanbanHeader } from './';
 import KanbanColumn from './KanbanColumn';

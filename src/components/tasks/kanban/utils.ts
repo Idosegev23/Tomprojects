@@ -1,4 +1,4 @@
-import { Task } from '@/types/supabase';
+import { Task } from './types';
 import { DueStatus } from './types';
 
 // פונקציה לקבלת צבע לפי סטטוס

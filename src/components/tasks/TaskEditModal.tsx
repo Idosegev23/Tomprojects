@@ -407,9 +407,14 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
       if (isEditMode && task) {
         // עדכון משימה קיימת
         const taskData = {
-          ...formData,
-          project_id: projectId || null
+          ...formData
         };
+        
+        // אם יש projectId, נוסיף אותו לאובייקט
+        if (projectId) {
+          taskData.project_id = projectId;
+        }
+        
         result = await taskService.updateTask(task.id, taskData);
         
         toast({
@@ -424,8 +429,21 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         }
       } else {
         // יצירת משימה חדשה
+        if (!formData.title) {
+          toast({
+            title: "שגיאה",
+            description: "כותרת המשימה היא שדה חובה",
+            status: "error",
+            duration: 3000,
+            isClosable: true,
+          });
+          setLoading(false);
+          return;
+        }
+        
         const taskData = {
           ...formData,
+          title: formData.title,  // וידוא שהכותרת תעבור כמחרוזת
           project_id: projectId || null
         };
         result = await taskService.createTask(taskData);

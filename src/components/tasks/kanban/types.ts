@@ -22,11 +22,16 @@ export interface TaskKanbanProps {
   projectId: string;
   tasks: Task[];
   stages: Stage[];
+  projects?: Project[];
   isLoading?: boolean;
   onTaskUpdated?: (task: Task) => void;
   onTaskDeleted?: (taskId: string) => void;
   onTaskCreated?: (task: Task) => void;
-  getProjectName: (projectId: string) => string;
+  getProjectName?: (projectId: string) => string;
+  onEditTask?: (task: Task) => void;
+  onDeleteTask?: (taskId: string) => void;
+  onStatusChange?: (taskId: string, newStatus: string) => void;
+  onStageChange?: (taskId: string, stageId: string) => void;
 }
 
 // טיפוס לעמודת קנבן
