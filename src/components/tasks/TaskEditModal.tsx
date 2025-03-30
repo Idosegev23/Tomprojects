@@ -38,11 +38,18 @@ import {
   Flex,
   Box,
   Text,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
 } from '@chakra-ui/react';
 import { AddIcon, EditIcon } from '@chakra-ui/icons';
 import { Task } from '@/types/supabase';
 import taskService from '@/lib/services/taskService';
-import { FaCalendarAlt, FaClock, FaClipboardCheck, FaList, FaTasks, FaUserCircle, FaUsers, FaChevronLeft } from 'react-icons/fa';
+import taskTemplateService from '@/lib/services/taskTemplateService';
+import { FaCalendarAlt, FaClock, FaClipboardCheck, FaList, FaTasks, FaUserCircle, FaUsers, FaChevronLeft, FaSave } from 'react-icons/fa';
 import { CheckIcon } from '@chakra-ui/icons';
 
 // מדרג עדיפויות עם צבעים
@@ -101,6 +108,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [templateSaveLoading, setTemplateSaveLoading] = useState(false);
   const [parentTasks, setParentTasks] = useState<Task[]>([]);
   const [isSubtask, setIsSubtask] = useState(false);
   const [newAssignee, setNewAssignee] = useState('');
@@ -110,8 +118,12 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string[]>([]);
   const [hierarchyPath, setHierarchyPath] = useState<Array<{id: string, title: string}>>([]);
+  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [createdTaskData, setCreatedTaskData] = useState<ExtendedTask | null>(null);
   
   const toast = useToast();
+  const cancelRef = React.useRef<HTMLButtonElement>(null);
   
   // צבעי רקע לפי מצב התצוגה החשוכה/בהירה
   const bgColor = useColorModeValue('gray.50', 'gray.700');
@@ -511,6 +523,8 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         if (onTaskUpdated) {
           onTaskUpdated(result);
         }
+        
+        onClose();
       } else {
         // יצירת משימה חדשה
         if (!formData.title) {
@@ -552,9 +566,14 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         if (onTaskCreated) {
           onTaskCreated(result);
         }
+        
+        // שמירת המשימה שנוצרה לשימוש בפופאפ התבנית
+        setCreatedTaskData(result);
+        
+        // פתיחת פופאפ לשאלה האם לשמור כתבנית
+        setTemplateName(result.title); // הצעה לשם התבנית
+        setIsTemplateDialogOpen(true);
       }
-      
-      onClose();
     } catch (error) {
       console.error('Error saving task:', error);
       toast({
@@ -564,9 +583,70 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         duration: 5000,
         isClosable: true,
       });
-    } finally {
       setLoading(false);
+    } finally {
+      if (isEditMode) {
+        setLoading(false);
+      }
     }
+  };
+  
+  // שמירת המשימה כתבנית ברירת מחדל
+  const handleSaveAsTemplate = async () => {
+    if (!createdTaskData) return;
+    
+    try {
+      setTemplateSaveLoading(true);
+      
+      // הכנת המידע של התבנית
+      const templateData = {
+        name: templateName || createdTaskData.title,
+        is_default: true, // מסמן שזוהי תבנית ברירת מחדל
+        task_data: {
+          title: createdTaskData.title,
+          description: createdTaskData.description,
+          status: createdTaskData.status,
+          priority: createdTaskData.priority,
+          parent_task_id: createdTaskData.parent_task_id,
+          hierarchical_path: hierarchyPath.map(h => h.id),
+          responsible: createdTaskData.responsible,
+          // שדות נוספים שאתה רוצה לשמור בתבנית
+        }
+      };
+      
+      console.log('שומר תבנית משימה:', templateData);
+      
+      // שימוש בשירות האמיתי לשמירת התבנית
+      await taskTemplateService.saveTemplate(templateData);
+      
+      toast({
+        title: "התבנית נשמרה בהצלחה",
+        description: `המשימה "${templateName || createdTaskData.title}" נשמרה כתבנית ברירת מחדל`,
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error('Error saving task template:', error);
+      toast({
+        title: "שגיאה בשמירת התבנית",
+        description: error instanceof Error ? error.message : "אירעה שגיאה לא ידועה",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      // וודא שמצב הטעינה מבוטל תמיד
+      setTemplateSaveLoading(false);
+      setIsTemplateDialogOpen(false);
+      onClose();
+    }
+  };
+  
+  // סגירת פופאפ התבנית ללא שמירה
+  const handleCloseTemplateDialog = () => {
+    setIsTemplateDialogOpen(false);
+    onClose();
   };
   
   // פונקציות עזר לצבעים וסטטוסים
@@ -923,90 +1003,140 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   );
   
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose} 
-      size="xl" 
-      scrollBehavior="inside"
-      motionPreset="slideInBottom"
-    >
-      <ModalOverlay bg="blackAlpha.300" backdropFilter="blur(5px)" />
-      <ModalContent 
-        borderRadius="md" 
-        boxShadow="xl"
-        maxWidth="95vw"
-        width="700px"
+    <>
+      <Modal 
+        isOpen={isOpen} 
+        onClose={onClose} 
+        size="xl" 
+        scrollBehavior="inside"
+        motionPreset="slideInBottom"
       >
-        {renderModalHeader()}
-        <ModalCloseButton color="white" />
-        
-        <ModalBody p={0}>
-          <Tabs 
-            isFitted 
-            variant="enclosed" 
-            defaultIndex={0} 
-            index={activeTab} 
-            onChange={setActiveTab}
-          >
-            <TabList mb={4}>
-              <Tab _selected={{ fontWeight: "bold", borderBottomWidth: "3px" }}>פרטים בסיסיים</Tab>
-              <Tab _selected={{ fontWeight: "bold", borderBottomWidth: "3px" }}>לוח זמנים ואחראים</Tab>
-              <Tab _selected={{ fontWeight: "bold", borderBottomWidth: "3px" }}>קשרים</Tab>
-            </TabList>
-            
-            <TabPanels>
-              <TabPanel>
-                <Box p={4}>
-                  {renderBasicInfo()}
-                </Box>
-              </TabPanel>
-              <TabPanel>
-                <Box p={4}>
-                  {renderSchedule()}
-                </Box>
-              </TabPanel>
-              <TabPanel>
-                <Box p={4}>
-                  {renderRelationships()}
-                </Box>
-              </TabPanel>
-            </TabPanels>
-          </Tabs>
-        </ModalBody>
-        
-        <ModalFooter borderTop="1px" borderColor={borderColor} py={3} bg={bgColor}>
-          <Flex width="100%" justifyContent="space-between">
-            <Button variant="ghost" onClick={onClose}>
-              ביטול
-            </Button>
-            
-            <HStack>
-              {activeTab > 0 && (
-                <Button variant="ghost" mr={2} onClick={() => setActiveTab(prev => prev - 1)}>
-                  הקודם
-                </Button>
-              )}
+        <ModalOverlay bg="blackAlpha.300" backdropFilter="blur(5px)" />
+        <ModalContent 
+          borderRadius="md" 
+          boxShadow="xl"
+          maxWidth="95vw"
+          width="700px"
+        >
+          {renderModalHeader()}
+          <ModalCloseButton color="white" />
+          
+          <ModalBody p={0}>
+            <Tabs 
+              isFitted 
+              variant="enclosed" 
+              defaultIndex={0} 
+              index={activeTab} 
+              onChange={setActiveTab}
+            >
+              <TabList mb={4}>
+                <Tab _selected={{ fontWeight: "bold", borderBottomWidth: "3px" }}>פרטים בסיסיים</Tab>
+                <Tab _selected={{ fontWeight: "bold", borderBottomWidth: "3px" }}>לוח זמנים ואחראים</Tab>
+                <Tab _selected={{ fontWeight: "bold", borderBottomWidth: "3px" }}>קשרים</Tab>
+              </TabList>
               
-              {activeTab < 2 ? (
-                <Button colorScheme="blue" onClick={() => setActiveTab(prev => prev + 1)}>
-                  הבא
-                </Button>
-              ) : (
-                <Button 
-                  colorScheme="blue" 
-                  leftIcon={isEditMode ? <EditIcon /> : <AddIcon />}
-                  onClick={handleSubmit}
-                  isLoading={loading}
-                  loadingText={isEditMode ? "מעדכן..." : "יוצר..."}
-                >
-                  {isEditMode ? "עדכן משימה" : "צור משימה"}
-                </Button>
-              )}
-            </HStack>
-          </Flex>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
+              <TabPanels>
+                <TabPanel>
+                  <Box p={4}>
+                    {renderBasicInfo()}
+                  </Box>
+                </TabPanel>
+                <TabPanel>
+                  <Box p={4}>
+                    {renderSchedule()}
+                  </Box>
+                </TabPanel>
+                <TabPanel>
+                  <Box p={4}>
+                    {renderRelationships()}
+                  </Box>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
+          </ModalBody>
+          
+          <ModalFooter borderTop="1px" borderColor={borderColor} py={3} bg={bgColor}>
+            <Flex width="100%" justifyContent="space-between">
+              <Button variant="ghost" onClick={onClose}>
+                ביטול
+              </Button>
+              
+              <HStack>
+                {activeTab > 0 && (
+                  <Button variant="ghost" mr={2} onClick={() => setActiveTab(prev => prev - 1)}>
+                    הקודם
+                  </Button>
+                )}
+                
+                {activeTab < 2 ? (
+                  <Button colorScheme="blue" onClick={() => setActiveTab(prev => prev + 1)}>
+                    הבא
+                  </Button>
+                ) : (
+                  <Button 
+                    colorScheme="blue" 
+                    leftIcon={isEditMode ? <EditIcon /> : <AddIcon />}
+                    onClick={handleSubmit}
+                    isLoading={loading}
+                    loadingText={isEditMode ? "מעדכן..." : "יוצר..."}
+                  >
+                    {isEditMode ? "עדכן משימה" : "צור משימה"}
+                  </Button>
+                )}
+              </HStack>
+            </Flex>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+      
+      {/* דיאלוג שאלה האם לשמור כתבנית ברירת מחדל */}
+      <AlertDialog
+        isOpen={isTemplateDialogOpen}
+        leastDestructiveRef={cancelRef}
+        onClose={handleCloseTemplateDialog}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              שמירת משימה כתבנית ברירת מחדל
+            </AlertDialogHeader>
+
+            <AlertDialogBody>
+              <VStack spacing={4} align="stretch">
+                <Text>
+                  האם ברצונך לשמור את המשימה הזו כתבנית ברירת מחדל? 
+                  משימות מתבנית ברירת מחדל יוצגו אוטומטית בכל פרויקט חדש.
+                </Text>
+                <FormControl>
+                  <FormLabel>שם התבנית</FormLabel>
+                  <Input 
+                    value={templateName} 
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    placeholder="הזן שם לתבנית"
+                  />
+                </FormControl>
+              </VStack>
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <Button ref={cancelRef} onClick={handleCloseTemplateDialog}>
+                לא, תודה
+              </Button>
+              <Button 
+                colorScheme="blue" 
+                onClick={handleSaveAsTemplate} 
+                ml={3}
+                leftIcon={<FaSave />}
+                isLoading={templateSaveLoading}
+                loadingText="שומר..."
+              >
+                שמור כתבנית ברירת מחדל
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
+    </>
   );
 };
 

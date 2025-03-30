@@ -28,31 +28,7 @@ import {
 } from '@chakra-ui/react';
 import { FiCopy, FiSave, FiList, FiPlus } from 'react-icons/fi';
 import { Task } from '@/types/supabase';
-
-// נניח שיש לנו סרביס שמטפל בתבניות
-const mockTemplateService = {
-  // פונקציה שמדמה טעינת תבניות מהשרת
-  getTemplates: async () => {
-    // נדמה השהייה של שרת
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // נחזיר נתוני דוגמה
-    return [
-      { id: '1', name: 'משימת פיתוח', title: 'פיתוח תכונה חדשה', category: 'פיתוח', priority: 'medium' },
-      { id: '2', name: 'משימת עיצוב', title: 'עיצוב ממשק משתמש', category: 'עיצוב', priority: 'high' },
-      { id: '3', name: 'משימת בדיקות', title: 'בדיקת איכות', category: 'בדיקות', priority: 'low' },
-    ];
-  },
-  
-  // פונקציה שמדמה שמירת תבנית
-  saveTemplate: async (template: any) => {
-    // נדמה השהייה של שרת
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // נחזיר אישור הצלחה
-    return { id: Math.random().toString(), ...template };
-  }
-};
+import { taskTemplateService } from '@/lib/services/taskTemplateService';
 
 interface TaskTemplateButtonProps {
   onSelectTemplate?: (template: any) => void;
@@ -62,6 +38,11 @@ interface TaskTemplateButtonProps {
   buttonText?: string;
 }
 
+// פונקציית עזר להסרת תיוג התבנית מהכותרת ולהצגת השם האמיתי של המשימה
+const getCleanTemplateName = (title: string) => {
+  return title?.replace(/\[TEMPLATE\]|\[TEMPLATE-DEFAULT\]/g, '').trim() || '';
+};
+
 const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({
   onSelectTemplate,
   currentTask,
@@ -69,8 +50,9 @@ const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({
   size = "md",
   buttonText
 }) => {
-  const [templates, setTemplates] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false); // סטייט נפרד לטעינת שמירה
   const [templateName, setTemplateName] = useState('');
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
@@ -80,10 +62,12 @@ const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({
     const loadTemplates = async () => {
       setLoading(true);
       try {
-        const data = await mockTemplateService.getTemplates();
+        console.log('טוען תבניות משימות...');
+        const data = await taskTemplateService.getAllTemplates();
+        console.log(`נטענו ${data.length} תבניות משימות`);
         setTemplates(data);
       } catch (error) {
-        console.error('Error loading templates:', error);
+        console.error('שגיאה בטעינת תבניות:', error);
         toast({
           title: 'שגיאה בטעינת תבניות',
           status: 'error',
@@ -98,24 +82,84 @@ const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({
     loadTemplates();
   }, [toast]);
   
+  // פתיחת מודל השמירה ואיפוס שדות
+  const handleOpenSaveModal = () => {
+    // איפוס שם התבנית לשם המשימה הנוכחית אם קיים
+    if (currentTask?.title) {
+      setTemplateName(currentTask.title);
+    } else {
+      setTemplateName('');
+    }
+    
+    // איפוס סטטוס הטעינה של השמירה
+    setSaveLoading(false);
+    
+    // פתיחת המודל
+    onOpen();
+  };
+  
+  // סגירת מודל השמירה ואיפוס השדות
+  const handleCloseModal = () => {
+    // איפוס סטטוס הטעינה של השמירה אם עדיין פעיל
+    setSaveLoading(false);
+    
+    // סגירת המודל
+    onClose();
+    
+    // איפוס שם התבנית
+    setTemplateName('');
+  };
+  
   // שמירת המשימה הנוכחית כתבנית
   const handleSaveAsTemplate = async () => {
-    if (!currentTask || !templateName.trim()) return;
+    // וידוא שיש לנו משימה נוכחית ושם תבנית תקין
+    if (!currentTask) {
+      toast({
+        title: 'שגיאה בשמירת תבנית',
+        description: 'לא נמצאה משימה נוכחית לשמירה',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
     
-    setLoading(true);
+    if (!templateName.trim()) {
+      toast({
+        title: 'שגיאה בשמירת תבנית',
+        description: 'יש להזין שם לתבנית',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    
+    // הפעלת מצב טעינה
+    setSaveLoading(true);
     
     try {
-      // הכנת נתוני התבנית - נסיר שדות ספציפיים
+      console.log(`שומר משימה כתבנית: ${templateName}`);
+      
+      // הכנת נתוני התבנית
       const templateData = {
         name: templateName,
-        title: currentTask.title,
-        description: currentTask.description,
-        priority: currentTask.priority,
-        category: currentTask.category,
-        // שמירה על ערכים רלוונטיים אחרים
+        is_default: false, // לא תבנית ברירת מחדל
+        task_data: {
+          title: currentTask.title,
+          description: currentTask.description,
+          priority: currentTask.priority,
+          status: currentTask.status,
+          parent_task_id: currentTask.parent_task_id,
+          hierarchical_number: currentTask.hierarchical_number,
+          responsible: currentTask.responsible,
+          category: currentTask.category,
+          // שדות נוספים שרוצים לשמור
+        }
       };
       
-      await mockTemplateService.saveTemplate(templateData);
+      // שליחת הנתונים לשרת
+      await taskTemplateService.saveTemplate(templateData);
       
       toast({
         title: 'התבנית נשמרה בהצלחה',
@@ -125,27 +169,29 @@ const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({
       });
       
       // רענון רשימת התבניות
-      const updatedTemplates = await mockTemplateService.getTemplates();
+      console.log('מרענן רשימת תבניות...');
+      const updatedTemplates = await taskTemplateService.getAllTemplates();
       setTemplates(updatedTemplates);
       
       // סגירת המודל
-      onClose();
-      setTemplateName('');
+      handleCloseModal();
     } catch (error) {
-      console.error('Error saving template:', error);
+      console.error('שגיאה בשמירת תבנית:', error);
       toast({
         title: 'שגיאה בשמירת התבנית',
+        description: error instanceof Error ? error.message : 'אירעה שגיאה לא ידועה',
         status: 'error',
         duration: 3000,
         isClosable: true,
       });
     } finally {
-      setLoading(false);
+      // סיום מצב טעינה
+      setSaveLoading(false);
     }
   };
   
   // בחירת תבנית
-  const handleSelectTemplate = (template: any) => {
+  const handleSelectTemplate = (template: Task) => {
     if (onSelectTemplate) {
       onSelectTemplate(template);
     }
@@ -183,23 +229,27 @@ const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({
           }
         }}>
           <MenuGroup title="תבניות משימות">
-            {templates.map(template => (
-              <MenuItem 
-                key={template.id} 
-                onClick={() => handleSelectTemplate(template)}
-              >
-                <Flex alignItems="center" width="100%">
-                  <Text flex="1">{template.name}</Text>
-                  <Badge colorScheme={getPriorityColor(template.priority)}>{template.priority}</Badge>
-                </Flex>
-              </MenuItem>
-            ))}
+            {templates.length > 0 ? (
+              templates.map(template => (
+                <MenuItem 
+                  key={template.id} 
+                  onClick={() => handleSelectTemplate(template)}
+                >
+                  <Flex alignItems="center" width="100%">
+                    <Text flex="1">{getCleanTemplateName(template.title)}</Text>
+                    <Badge colorScheme={getPriorityColor(template.priority || '')}>{template.priority}</Badge>
+                  </Flex>
+                </MenuItem>
+              ))
+            ) : (
+              <MenuItem isDisabled>אין תבניות זמינות</MenuItem>
+            )}
           </MenuGroup>
           
           <MenuDivider />
           
           {currentTask && (
-            <MenuItem icon={<FiSave />} onClick={onOpen}>
+            <MenuItem icon={<FiSave />} onClick={handleOpenSaveModal}>
               שמור משימה נוכחית כתבנית
             </MenuItem>
           )}
@@ -211,7 +261,7 @@ const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({
       </Menu>
       
       {/* מודל לשמירת תבנית */}
-      <Modal isOpen={isOpen} onClose={onClose}>
+      <Modal isOpen={isOpen} onClose={handleCloseModal}>
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>שמירת משימה כתבנית</ModalHeader>
@@ -235,14 +285,20 @@ const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({
           </ModalBody>
           
           <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={onClose}>
+            <Button 
+              variant="ghost" 
+              mr={3} 
+              onClick={handleCloseModal}
+              isDisabled={saveLoading}
+            >
               ביטול
             </Button>
             <Button
               colorScheme="blue"
               onClick={handleSaveAsTemplate}
-              isLoading={loading}
-              isDisabled={!templateName.trim()}
+              isLoading={saveLoading}
+              loadingText="שומר..."
+              isDisabled={!templateName.trim() || saveLoading}
             >
               שמור תבנית
             </Button>
