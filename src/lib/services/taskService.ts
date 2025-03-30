@@ -54,7 +54,39 @@ export const taskService = {
     return data;
   },
   
-  // יצירת משימה חדשה
+  // פונקציה להסרת שדות שאינם חלק מהטבלה
+  async removeNonExistingFields(task: any, forProjectTable: boolean = false): Promise<any> {
+    // רשימת השדות הקיימים בטבלה הראשית
+    const mainTableFields = [
+      'id', 'project_id', 'stage_id', 'title', 'description', 'category',
+      'status', 'priority', 'responsible', 'estimated_hours', 'actual_hours',
+      'start_date', 'due_date', 'completed_date', 'budget', 'dependencies',
+      'assignees_info', 'watchers', 'labels', 'deleted', 'created_at',
+      'updated_at', 'hierarchical_number', 'parent_task_id', 'is_template',
+      'is_global_template', 'original_task_id'
+    ];
+    
+    // רשימת השדות הקיימים בטבלה הספציפית של פרויקט
+    const projectTableFields = [
+      'id', 'project_id', 'stage_id', 'title', 'description', 'category',
+      'status', 'priority', 'responsible', 'due_date', 'assignees_info',
+      'created_at', 'updated_at', 'hierarchical_number', 'parent_task_id'
+    ];
+    
+    const validFields = forProjectTable ? projectTableFields : mainTableFields;
+    const cleanedTask = { ...task };
+    
+    // הסר את כל השדות שאינם קיימים ברשימת השדות התקפים
+    for (const key in cleanedTask) {
+      if (!validFields.includes(key)) {
+        delete cleanedTask[key];
+      }
+    }
+    
+    return cleanedTask;
+  },
+  
+  // עדכון פונקציית createTask
   async createTask(task: NewTask): Promise<Task> {
     try {
       // וידוא שיש מזהה UUID
@@ -64,36 +96,15 @@ export const taskService = {
       
       // תאימות לאחור: אם יש assignees אבל אין assignees_info, נעתיק את הערך
       if (task.assignees && !task.assignees_info) {
-        task.assignees_info = task.assignees;
+        task.assignees_info = Array.isArray(task.assignees) ? task.assignees : [];
+      } else if (task.assignees_info && !Array.isArray(task.assignees_info)) {
+        // אם assignees_info קיים אבל הוא לא מערך, נהפוך אותו למערך ריק
+        task.assignees_info = [];
       }
       
       // יצירת עותק נקי של האובייקט task ללא שדות לא נתמכים
-      const cleanedTask = { ...task };
+      let cleanedTask = { ...task };
 
-      // הסרת שדות שלא קיימים בטבלה כדי למנוע שגיאות
-      const fieldsToRemove = [
-        'assignees', // השדה משתמש ב-assignees_info במקום
-        'start_date', // לא קיים בטבלה הספציפית
-        'actual_hours', // לא קיים בטבלה הספציפית
-        'completed_date', // לא קיים בטבלה הספציפית
-        'estimated_hours', // לא קיים בטבלה הספציפית
-        'budget', // לא קיים בטבלה הספציפית
-        'dependencies', // לא קיים בטבלה הספציפית
-        'watchers', // לא קיים בטבלה הספציפית
-        'labels', // לא קיים בטבלה הספציפית
-        'is_template', // לא קיים בטבלה הספציפית
-        'is_global_template', // לא קיים בטבלה הספציפית
-        'original_task_id', // לא קיים בטבלה הספציפית
-        'deleted', // לא קיים בטבלה הספציפית
-      ];
-      
-      // מחיקת השדות הלא רלוונטיים
-      for (const field of fieldsToRemove) {
-        if (field in cleanedTask) {
-          delete (cleanedTask as any)[field];
-        }
-      }
-      
       // טיפול בשדות תאריך ריקים - הסרתם מהאובייקט
       const dateFields = ['due_date']; // רק due_date קיים בטבלה
       for (const field of dateFields) {
@@ -101,6 +112,9 @@ export const taskService = {
           delete cleanedTask[field as keyof typeof cleanedTask];
         }
       }
+      
+      // הסר את כל השדות שאינם קיימים בדאטאבייס
+      cleanedTask = await this.removeNonExistingFields(cleanedTask, true);
       
       // אם המקבל את assignees_info מסוג מערך, נמיר אותו ל-JSON
       if (cleanedTask.assignees_info && Array.isArray(cleanedTask.assignees_info)) {
@@ -211,10 +225,10 @@ export const taskService = {
     }
   },
   
-  // עדכון משימה קיימת
+  // עדכון פונקציית updateTask
   async updateTask(id: string, task: UpdateTask): Promise<Task> {
     // יצירת עותק של האובייקט task
-    const cleanTask = { ...task };
+    let cleanTask = { ...task };
     
     // סינון שדה children אם קיים (לא קיים בטבלה בפועל)
     if ('children' in cleanTask) {
@@ -223,32 +237,14 @@ export const taskService = {
     
     // תאימות לאחור: אם יש assignees אבל אין assignees_info, נעתיק את הערך
     if (cleanTask.assignees && !cleanTask.assignees_info) {
-      cleanTask.assignees_info = cleanTask.assignees;
+      cleanTask.assignees_info = Array.isArray(cleanTask.assignees) ? cleanTask.assignees : [];
+    } else if (cleanTask.assignees_info && !Array.isArray(cleanTask.assignees_info)) {
+      // אם assignees_info קיים אבל הוא לא מערך, נהפוך אותו למערך ריק
+      cleanTask.assignees_info = [];
     }
     
-    // הסרת שדות שלא קיימים בטבלה כדי למנוע שגיאות
-    const fieldsToRemove = [
-      'assignees', // השדה משתמש ב-assignees_info במקום
-      'start_date', // לא קיים בטבלה הספציפית
-      'actual_hours', // לא קיים בטבלה הספציפית
-      'completed_date', // לא קיים בטבלה הספציפית
-      'estimated_hours', // לא קיים בטבלה הספציפית
-      'budget', // לא קיים בטבלה הספציפית
-      'dependencies', // לא קיים בטבלה הספציפית
-      'watchers', // לא קיים בטבלה הספציפית
-      'labels', // לא קיים בטבלה הספציפית
-      'is_template', // לא קיים בטבלה הספציפית
-      'is_global_template', // לא קיים בטבלה הספציפית
-      'original_task_id', // לא קיים בטבלה הספציפית
-      'deleted', // לא קיים בטבלה הספציפית
-    ];
-    
-    // מחיקת השדות הלא רלוונטיים
-    for (const field of fieldsToRemove) {
-      if (field in cleanTask) {
-        delete (cleanTask as any)[field];
-      }
-    }
+    // הסר את כל השדות שאינם קיימים בדאטאבייס
+    cleanTask = await this.removeNonExistingFields(cleanTask, true);
     
     // אם המקבל את assignees_info מסוג מערך, נמיר אותו ל-JSON
     if (cleanTask.assignees_info && Array.isArray(cleanTask.assignees_info)) {
@@ -297,10 +293,13 @@ export const taskService = {
         delete originalTask[field as keyof UpdateTask];
       }
     }
+    
+    // הסרת שדות שלא קיימים בטבלה הראשית
+    const cleanedOriginalTask = await this.removeNonExistingFields(originalTask, false);
 
     const { data, error } = await supabase
       .from('tasks')
-      .update(originalTask)
+      .update(cleanedOriginalTask)
       .eq('id', id)
       .select()
       .single();

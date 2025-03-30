@@ -20,11 +20,13 @@ import {
   AvatarGroup,
   Divider,
   Progress,
+  Icon,
 } from '@chakra-ui/react';
 import { FiMoreVertical, FiEdit, FiTrash2, FiCalendar, FiUser, FiBriefcase, FiClock, FiLink, FiCheckCircle, FiXCircle } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import { TaskCardProps } from './types';
 import { getPriorityColor, getPriorityLabel, formatDate, getDueStatus } from './utils';
+import { FaUserAlt } from 'react-icons/fa';
 
 // קומפוננטה מונפשת לכרטיס משימה
 const MotionBox = motion(Box);
@@ -247,16 +249,18 @@ const TaskCard: React.FC<TaskCardProps> = ({
           )}
           
           {/* אחראי */}
-          {(task.responsible || (task.assignees_info && task.assignees_info.length > 0) || (task.assignees && task.assignees.length > 0)) && (
-            <Tooltip label={task.responsible ? `אחראי: ${task.responsible}` : `מוקצה ל: ${(task.assignees_info || task.assignees)?.join(', ')}`}>
-              <AvatarGroup size="xs" max={2}>
-                {task.responsible && (
-                  <Avatar name={task.responsible} size="xs" />
-                )}
-                {(task.assignees_info || task.assignees) && (task.assignees_info || task.assignees)?.map((assignee, index) => (
-                  <Avatar key={index} name={assignee} size="xs" />
-                ))}
-              </AvatarGroup>
+          {(task.responsible || (task.assignees_info && Array.isArray(task.assignees_info) && task.assignees_info.length > 0) || 
+            (task.assignees && Array.isArray(task.assignees) && task.assignees.length > 0)) && (
+            <Tooltip label={task.responsible ? `אחראי: ${task.responsible}` : 
+              `מוקצה ל: ${(Array.isArray(task.assignees_info) ? task.assignees_info : 
+                          Array.isArray(task.assignees) ? task.assignees : [])?.join(', ')}`}>
+              <HStack spacing={1} mt={1}>
+                <Icon as={FaUserAlt} boxSize="12px" color="gray.500" />
+                <Text fontSize="xs" color="gray.500" noOfLines={1}>
+                  {task.responsible || ((Array.isArray(task.assignees_info) ? task.assignees_info : 
+                                      Array.isArray(task.assignees) ? task.assignees : []))?.join(', ')}
+                </Text>
+              </HStack>
             </Tooltip>
           )}
         </Flex>

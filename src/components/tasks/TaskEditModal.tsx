@@ -119,7 +119,8 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         ...task,
         start_date: task.start_date ? task.start_date.split('T')[0] : '',
         due_date: task.due_date ? task.due_date.split('T')[0] : '',
-        assignees_info: task.assignees_info || task.assignees || [], // קודם assignees_info, אם לא קיים אז assignees
+        assignees_info: Array.isArray(task.assignees_info) ? task.assignees_info : 
+                        Array.isArray(task.assignees) ? task.assignees : [],
       });
       setIsSubtask(!!task.parent_task_id);
     } else {
@@ -191,15 +192,17 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   const handleAddAssignee = () => {
     if (!newAssignee.trim()) return;
     
-    if (formData.assignees_info && formData.assignees_info.includes(newAssignee)) {
+    const currentAssignees = Array.isArray(formData.assignees_info) ? formData.assignees_info : [];
+    
+    if (currentAssignees.includes(newAssignee)) {
       setNewAssignee('');
       return;
     }
     
     setFormData(prev => ({
       ...prev,
-      assignees_info: [...(prev.assignees_info || []), newAssignee],
-      assignees: [...(prev.assignees_info || []), newAssignee], // עדכון שדה ה-assignees לתאימות לאחור
+      assignees_info: [...currentAssignees, newAssignee],
+      assignees: [...currentAssignees, newAssignee], // עדכון שדה ה-assignees לתאימות לאחור
     }));
     
     setNewAssignee('');
@@ -207,7 +210,8 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   
   const handleRemoveAssignee = (assigneeToRemove: string) => {
     setFormData(prev => {
-      const updatedAssignees = (prev.assignees_info || []).filter(a => a !== assigneeToRemove);
+      const currentAssignees = Array.isArray(prev.assignees_info) ? prev.assignees_info : [];
+      const updatedAssignees = currentAssignees.filter(a => a !== assigneeToRemove);
       return {
         ...prev,
         assignees_info: updatedAssignees,
@@ -526,7 +530,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
           </Button>
         </HStack>
         
-        {formData.assignees_info && formData.assignees_info.length > 0 && (
+        {formData.assignees_info && Array.isArray(formData.assignees_info) && formData.assignees_info.length > 0 && (
           <Wrap spacing={2} mt={2}>
             {formData.assignees_info.map((assignee, index) => (
               <WrapItem key={index}>
