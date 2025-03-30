@@ -73,6 +73,35 @@ export default function EditTask() {
     assignees: [],
   });
   
+  // מדרג עדיפויות עם צבעים
+  const PRIORITY_MAP: Record<string, { color: string, label: string }> = {
+    urgent: { color: "red.500", label: "דחוף" },
+    high: { color: "orange.400", label: "גבוהה" },
+    medium: { color: "yellow.400", label: "בינונית" },
+    low: { color: "green.400", label: "נמוכה" },
+  };
+
+  // מדרג סטטוסים עם צבעים
+  const STATUS_MAP: Record<string, { color: string, label: string }> = {
+    todo: { color: "gray.400", label: "לביצוע" },
+    in_progress: { color: "blue.400", label: "בתהליך" },
+    review: { color: "purple.400", label: "בבדיקה" },
+    done: { color: "green.400", label: "הושלם" },
+    blocked: { color: "red.400", label: "חסום" },
+  };
+
+  // קטגוריות נפוצות
+  const CATEGORIES = [
+    { value: "", label: "ללא קטגוריה" },
+    { value: "development", label: "פיתוח" },
+    { value: "design", label: "עיצוב" },
+    { value: "documentation", label: "תיעוד" },
+    { value: "testing", label: "בדיקות" },
+    { value: "deployment", label: "הטמעה" },
+    { value: "maintenance", label: "תחזוקה" },
+    { value: "other", label: "אחר" },
+  ];
+  
   const [projects, setProjects] = useState<Project[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [parentTasks, setParentTasks] = useState<Task[]>([]);
@@ -459,26 +488,37 @@ export default function EditTask() {
   return (
     <Container maxW="container.lg" py={8}>
       <Box as="form" onSubmit={handleSubmit}>
-        <Flex justifyContent="space-between" alignItems="center" mb={6}>
+        <Flex 
+          justifyContent="space-between" 
+          alignItems="center" 
+          mb={8}
+          bg={useColorModeValue('white', 'gray.800')} 
+          p={4} 
+          borderRadius="md" 
+          shadow="sm"
+          borderWidth="1px"
+          borderColor={borderColor}
+        >
           <Heading size="lg">עריכת משימה</Heading>
           <Button 
             variant="outline" 
             rightIcon={<FiChevronRight />} 
             onClick={handleBack}
+            colorScheme="gray"
           >
             חזרה
           </Button>
         </Flex>
         
-        <Grid templateColumns={{ base: "1fr", md: "3fr 1fr" }} gap={6}>
+        <Grid templateColumns={{ base: "1fr", md: "3fr 1fr" }} gap={8}>
           {/* החלק העיקרי - משמאל */}
           <GridItem>
-            <Card bg={cardBg} borderColor={borderColor} borderWidth="1px" p={6} mb={6} borderRadius="md" boxShadow="sm">
-              <VStack spacing={6} align="stretch">
+            <Card bg={cardBg} borderColor={borderColor} borderWidth="1px" p={{ base: 4, md: 6 }} mb={6} borderRadius="md" boxShadow="md">
+              <VStack spacing={8} align="stretch">
                 {/* כותרת המשימה */}
                 <FormControl isRequired isInvalid={!!errors.title}>
                   <FormLabel fontSize="lg" fontWeight="bold" display="flex" alignItems="center">
-                    <Icon as={FiFileText} mr={2} />
+                    <Icon as={FiFileText} mr={2} color="primary.500" />
                     כותרת המשימה
                   </FormLabel>
                   <Input
@@ -487,7 +527,11 @@ export default function EditTask() {
                     onChange={handleChange}
                     placeholder="הזן כותרת למשימה"
                     size="lg"
-                    bg="white"
+                    bg={useColorModeValue('white', 'gray.700')}
+                    borderColor={borderColor}
+                    _hover={{ borderColor: 'primary.300' }}
+                    _focus={{ borderColor: 'primary.500', boxShadow: '0 0 0 1px var(--chakra-colors-primary-500)' }}
+                    height="50px"
                   />
                   {errors.title && <FormErrorMessage>{errors.title}</FormErrorMessage>}
                 </FormControl>
@@ -495,7 +539,7 @@ export default function EditTask() {
                 {/* תיאור המשימה */}
                 <FormControl>
                   <FormLabel fontSize="md" fontWeight="bold" display="flex" alignItems="center">
-                    <Icon as={FiInfo} mr={2} />
+                    <Icon as={FiInfo} mr={2} color="blue.500" />
                     תיאור מפורט
                   </FormLabel>
                   <Textarea
@@ -503,23 +547,28 @@ export default function EditTask() {
                     value={task.description || ''}
                     onChange={handleChange}
                     placeholder="תיאור מפורט של המשימה..."
-                    minH="150px"
-                    bg="white"
+                    minH="180px"
+                    bg={useColorModeValue('white', 'gray.700')}
+                    borderColor={borderColor}
+                    _hover={{ borderColor: 'primary.300' }}
+                    _focus={{ borderColor: 'primary.500', boxShadow: '0 0 0 1px var(--chakra-colors-primary-500)' }}
+                    p={4}
+                    fontSize="md"
                   />
                 </FormControl>
               </VStack>
             </Card>
             
-            <Card bg={cardBg} borderColor={borderColor} borderWidth="1px" p={6} mb={6} borderRadius="md" boxShadow="sm">
-              <Text fontSize="lg" fontWeight="bold" mb={4} display="flex" alignItems="center">
-                <Icon as={FiLayers} mr={2} />
+            <Card bg={cardBg} borderColor={borderColor} borderWidth="1px" p={{ base: 4, md: 6 }} mb={6} borderRadius="md" boxShadow="md">
+              <Text fontSize="lg" fontWeight="bold" mb={5} display="flex" alignItems="center">
+                <Icon as={FiLayers} mr={3} color="purple.500" fontSize="24px" />
                 פרטי משימה
               </Text>
               
               <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                 {/* פרויקט */}
                 <FormControl isRequired isInvalid={!!errors.project_id}>
-                  <FormLabel display="flex" alignItems="center">
+                  <FormLabel display="flex" alignItems="center" fontWeight="medium">
                     <Icon as={FiFolder} mr={2} color="blue.500" />
                     פרויקט
                   </FormLabel>
@@ -529,7 +578,11 @@ export default function EditTask() {
                     onChange={handleChange}
                     placeholder="בחר פרויקט"
                     isDisabled={projects.length === 0}
-                    bg="white"
+                    bg={useColorModeValue('white', 'gray.700')}
+                    borderColor={borderColor}
+                    _hover={{ borderColor: 'primary.300' }}
+                    _focus={{ borderColor: 'primary.500', boxShadow: '0 0 0 1px var(--chakra-colors-primary-500)' }}
+                    h="42px"
                   >
                     {projects.map(project => (
                       <option key={project.id} value={project.id}>{project.name}</option>
@@ -545,7 +598,7 @@ export default function EditTask() {
                 
                 {/* שלב בפרויקט */}
                 <FormControl isInvalid={!!errors.stage_id}>
-                  <FormLabel display="flex" alignItems="center">
+                  <FormLabel display="flex" alignItems="center" fontWeight="medium">
                     <Icon as={FiLayers} mr={2} color="purple.500" />
                     שלב בפרויקט
                   </FormLabel>
@@ -555,7 +608,11 @@ export default function EditTask() {
                     onChange={handleChange}
                     placeholder={loadingStages ? "טוען שלבים..." : stages.length === 0 ? "אין שלבים זמינים" : "בחר שלב"}
                     isDisabled={loadingStages || stages.length === 0 || !task.project_id}
-                    bg="white"
+                    bg={useColorModeValue('white', 'gray.700')}
+                    borderColor={borderColor}
+                    _hover={{ borderColor: 'primary.300' }}
+                    _focus={{ borderColor: 'primary.500', boxShadow: '0 0 0 1px var(--chakra-colors-primary-500)' }}
+                    h="42px"
                   >
                     {stages.map(stage => (
                       <option key={stage.id} value={stage.id}>{stage.title}</option>
@@ -566,7 +623,7 @@ export default function EditTask() {
                 
                 {/* משימת אב */}
                 <FormControl>
-                  <FormLabel display="flex" alignItems="center">
+                  <FormLabel display="flex" alignItems="center" fontWeight="medium">
                     <Icon as={FiLayers} mr={2} color="teal.500" />
                     משימת אב
                   </FormLabel>
@@ -576,7 +633,11 @@ export default function EditTask() {
                     onChange={handleChange}
                     placeholder={tasksLoading ? "טוען משימות..." : parentTasks.length === 0 ? "אין משימות זמינות" : "בחר משימת אב (אופציונלי)"}
                     isDisabled={tasksLoading || parentTasks.length === 0 || !task.project_id}
-                    bg="white"
+                    bg={useColorModeValue('white', 'gray.700')}
+                    borderColor={borderColor}
+                    _hover={{ borderColor: 'primary.300' }}
+                    _focus={{ borderColor: 'primary.500', boxShadow: '0 0 0 1px var(--chakra-colors-primary-500)' }}
+                    h="42px"
                   >
                     <option value="">ללא משימת אב</option>
                     {parentTasks.map(parentTask => (
@@ -590,7 +651,7 @@ export default function EditTask() {
                 {/* מספר היררכי */}
                 {task.parent_task_id && (
                   <FormControl>
-                    <FormLabel display="flex" alignItems="center">
+                    <FormLabel display="flex" alignItems="center" fontWeight="medium">
                       <Icon as={FiTag} mr={2} color="cyan.500" />
                       מספר היררכי
                     </FormLabel>
@@ -600,7 +661,9 @@ export default function EditTask() {
                       onChange={handleChange}
                       placeholder="יחושב אוטומטית"
                       isReadOnly
-                      bg="gray.50"
+                      bg={useColorModeValue('gray.50', 'gray.600')}
+                      borderColor={borderColor}
+                      h="42px"
                     />
                     <Text fontSize="xs" color="gray.500" mt={1}>
                       המספר יחושב אוטומטית בעת שמירת המשימה
@@ -610,7 +673,7 @@ export default function EditTask() {
                 
                 {/* קטגוריה */}
                 <FormControl>
-                  <FormLabel display="flex" alignItems="center">
+                  <FormLabel display="flex" alignItems="center" fontWeight="medium">
                     <Icon as={FiTag} mr={2} color="orange.500" />
                     קטגוריה
                   </FormLabel>
@@ -619,22 +682,21 @@ export default function EditTask() {
                     value={task.category || ''}
                     onChange={handleChange}
                     placeholder="בחר קטגוריה (אופציונלי)"
-                    bg="white"
+                    bg={useColorModeValue('white', 'gray.700')}
+                    borderColor={borderColor}
+                    _hover={{ borderColor: 'primary.300' }}
+                    _focus={{ borderColor: 'primary.500', boxShadow: '0 0 0 1px var(--chakra-colors-primary-500)' }}
+                    h="42px"
                   >
-                    <option value="">ללא קטגוריה</option>
-                    <option value="development">פיתוח</option>
-                    <option value="design">עיצוב</option>
-                    <option value="documentation">תיעוד</option>
-                    <option value="testing">בדיקות</option>
-                    <option value="deployment">הטמעה</option>
-                    <option value="maintenance">תחזוקה</option>
-                    <option value="other">אחר</option>
+                    {CATEGORIES.map(category => (
+                      <option key={category.value} value={category.value}>{category.label}</option>
+                    ))}
                   </Select>
                 </FormControl>
                 
                 {/* אחראי */}
                 <FormControl>
-                  <FormLabel display="flex" alignItems="center">
+                  <FormLabel display="flex" alignItems="center" fontWeight="medium">
                     <Icon as={FiUsers} mr={2} color="blue.500" />
                     אחראי
                   </FormLabel>
@@ -643,13 +705,17 @@ export default function EditTask() {
                     value={task.responsible || ''}
                     onChange={handleChange}
                     placeholder="שם האחראי לביצוע המשימה"
-                    bg="white"
+                    bg={useColorModeValue('white', 'gray.700')}
+                    borderColor={borderColor}
+                    _hover={{ borderColor: 'primary.300' }}
+                    _focus={{ borderColor: 'primary.500', boxShadow: '0 0 0 1px var(--chakra-colors-primary-500)' }}
+                    h="42px"
                   />
                 </FormControl>
                 
                 {/* תיקיית דרופבוקס */}
                 <FormControl>
-                  <FormLabel display="flex" alignItems="center">
+                  <FormLabel display="flex" alignItems="center" fontWeight="medium">
                     <Icon as={FiFolder} mr={2} color="blue.400" />
                     תיקיית Dropbox
                   </FormLabel>
@@ -658,22 +724,26 @@ export default function EditTask() {
                     value={task.dropbox_folder || ''}
                     onChange={handleChange}
                     placeholder="קישור לתיקיית Dropbox"
-                    bg="white"
+                    bg={useColorModeValue('white', 'gray.700')}
+                    borderColor={borderColor}
+                    _hover={{ borderColor: 'primary.300' }}
+                    _focus={{ borderColor: 'primary.500', boxShadow: '0 0 0 1px var(--chakra-colors-primary-500)' }}
+                    h="42px"
                   />
                 </FormControl>
               </SimpleGrid>
             </Card>
             
-            <Card bg={cardBg} borderColor={borderColor} borderWidth="1px" p={6} mb={6} borderRadius="md" boxShadow="sm">
-              <Text fontSize="lg" fontWeight="bold" mb={4} display="flex" alignItems="center">
-                <Icon as={FiCheckSquare} mr={2} />
+            <Card bg={cardBg} borderColor={borderColor} borderWidth="1px" p={{ base: 4, md: 6 }} mb={6} borderRadius="md" boxShadow="md">
+              <Text fontSize="lg" fontWeight="bold" mb={5} display="flex" alignItems="center">
+                <Icon as={FiCheckSquare} mr={3} color="green.500" fontSize="24px" />
                 סטטוס ועדיפות
               </Text>
               
               <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6}>
                 {/* עדיפות */}
                 <FormControl>
-                  <FormLabel display="flex" alignItems="center">
+                  <FormLabel display="flex" alignItems="center" fontWeight="medium">
                     <Icon as={FiFlag} mr={2} color="red.500" />
                     עדיפות
                   </FormLabel>
@@ -681,18 +751,21 @@ export default function EditTask() {
                     name="priority"
                     value={task.priority || 'medium'}
                     onChange={handleChange}
-                    bg="white"
+                    bg={useColorModeValue('white', 'gray.700')}
+                    borderColor={borderColor}
+                    _hover={{ borderColor: 'primary.300' }}
+                    _focus={{ borderColor: 'primary.500', boxShadow: '0 0 0 1px var(--chakra-colors-primary-500)' }}
+                    h="42px"
                   >
-                    <option value="low">נמוכה</option>
-                    <option value="medium">בינונית</option>
-                    <option value="high">גבוהה</option>
-                    <option value="urgent">דחופה</option>
+                    {Object.entries(PRIORITY_MAP).map(([value, { label, color }]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
                   </Select>
                 </FormControl>
                 
                 {/* סטטוס */}
                 <FormControl>
-                  <FormLabel display="flex" alignItems="center">
+                  <FormLabel display="flex" alignItems="center" fontWeight="medium">
                     <Icon as={FiCheckSquare} mr={2} color="green.500" />
                     סטטוס
                   </FormLabel>
@@ -700,19 +773,21 @@ export default function EditTask() {
                     name="status"
                     value={task.status || 'todo'}
                     onChange={handleChange}
-                    bg="white"
+                    bg={useColorModeValue('white', 'gray.700')}
+                    borderColor={borderColor}
+                    _hover={{ borderColor: 'primary.300' }}
+                    _focus={{ borderColor: 'primary.500', boxShadow: '0 0 0 1px var(--chakra-colors-primary-500)' }}
+                    h="42px"
                   >
-                    <option value="todo">לביצוע</option>
-                    <option value="in_progress">בתהליך</option>
-                    <option value="review">בבדיקה</option>
-                    <option value="done">הושלם</option>
-                    <option value="blocked">חסום</option>
+                    {Object.entries(STATUS_MAP).map(([value, { label, color }]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
                   </Select>
                 </FormControl>
                 
                 {/* זמן משוער לביצוע */}
                 <FormControl isInvalid={!!errors.estimated_hours}>
-                  <FormLabel display="flex" alignItems="center">
+                  <FormLabel display="flex" alignItems="center" fontWeight="medium">
                     <Icon as={FiClock} mr={2} color="cyan.500" />
                     שעות משוערות
                   </FormLabel>
@@ -725,9 +800,21 @@ export default function EditTask() {
                       value={task.estimated_hours?.toString() || ''}
                       onChange={handleChange}
                       placeholder="0"
-                      bg="white"
+                      bg={useColorModeValue('white', 'gray.700')}
+                      borderColor={borderColor}
+                      _hover={{ borderColor: 'primary.300' }}
+                      _focus={{ borderColor: 'primary.500', boxShadow: '0 0 0 1px var(--chakra-colors-primary-500)' }}
+                      h="42px"
                     />
-                    <InputRightElement pointerEvents="none" children="שעות" />
+                    <InputRightElement 
+                      pointerEvents="none" 
+                      children="שעות"
+                      h="42px"
+                      lineHeight="42px"
+                      color="gray.500"
+                      fontWeight="medium"
+                      fontSize="sm"
+                    />
                   </InputGroup>
                   {errors.estimated_hours && <FormErrorMessage>{errors.estimated_hours}</FormErrorMessage>}
                 </FormControl>
@@ -737,12 +824,21 @@ export default function EditTask() {
           
           {/* סיידבר - מימין */}
           <GridItem>
-            <Card bg={cardBg} borderColor={borderColor} borderWidth="1px" p={6} borderRadius="md" position="sticky" top="100px" boxShadow="sm">
+            <Card 
+              bg={cardBg} 
+              borderColor={borderColor} 
+              borderWidth="1px" 
+              p={{ base: 4, md: 6 }} 
+              borderRadius="md" 
+              position="sticky" 
+              top="100px" 
+              boxShadow="md"
+            >
               <VStack spacing={6} align="stretch">
                 {/* תאריך יעד */}
                 <FormControl>
-                  <FormLabel display="flex" alignItems="center">
-                    <Icon as={FiCalendar} mr={2} color="yellow.500" />
+                  <FormLabel display="flex" alignItems="center" fontWeight="bold">
+                    <Icon as={FiCalendar} mr={2} color="orange.500" fontSize="18px" />
                     תאריך יעד
                   </FormLabel>
                   <Input
@@ -750,74 +846,99 @@ export default function EditTask() {
                     type="date"
                     value={task.due_date || ''}
                     onChange={handleChange}
-                    bg="white"
+                    bg={useColorModeValue('white', 'gray.700')}
+                    borderColor={borderColor}
+                    _hover={{ borderColor: 'primary.300' }}
+                    _focus={{ borderColor: 'primary.500', boxShadow: '0 0 0 1px var(--chakra-colors-primary-500)' }}
+                    h="42px"
                   />
                 </FormControl>
                 
                 {/* תצוגת סיכום */}
-                <Box>
-                  <Text fontWeight="bold" mb={2}>סיכום משימה</Text>
-                  <Divider mb={3} />
+                <Box 
+                  bg={useColorModeValue('gray.50', 'gray.700')} 
+                  p={4} 
+                  borderRadius="md"
+                  borderWidth="1px"
+                  borderColor={borderColor}
+                >
+                  <Text fontWeight="bold" mb={3} color="primary.600">סיכום משימה</Text>
+                  <Divider mb={4} borderColor={borderColor} />
                   
-                  <VStack align="stretch" spacing={3}>
+                  <VStack align="stretch" spacing={4}>
                     {task.title && (
                       <Box>
-                        <Text fontSize="sm" color="gray.500">כותרת:</Text>
-                        <Text fontWeight="medium">{task.title}</Text>
+                        <Text fontSize="sm" color="gray.500" fontWeight="medium">כותרת:</Text>
+                        <Text fontWeight="bold" mt={1}>{task.title}</Text>
                       </Box>
                     )}
                     
                     {task.project_id && (
                       <Box>
-                        <Text fontSize="sm" color="gray.500">פרויקט:</Text>
-                        <Text>{projects.find(p => p.id === task.project_id)?.name || ''}</Text>
+                        <Text fontSize="sm" color="gray.500" fontWeight="medium">פרויקט:</Text>
+                        <Text fontWeight="medium" mt={1} color="blue.600">
+                          {projects.find(p => p.id === task.project_id)?.name || ''}
+                        </Text>
                       </Box>
                     )}
                     
                     {task.stage_id && (
                       <Box>
-                        <Text fontSize="sm" color="gray.500">שלב:</Text>
-                        <Text>{stages.find(s => s.id === task.stage_id)?.title || ''}</Text>
+                        <Text fontSize="sm" color="gray.500" fontWeight="medium">שלב:</Text>
+                        <Text fontWeight="medium" mt={1} color="purple.600">
+                          {stages.find(s => s.id === task.stage_id)?.title || ''}
+                        </Text>
                       </Box>
                     )}
                     
-                    <Flex>
+                    <Flex mt={2} justify="space-between">
                       <Box flex="1">
-                        <Text fontSize="sm" color="gray.500">עדיפות:</Text>
-                        <Badge colorScheme={
-                          task.priority === 'high' ? 'red' : 
-                          task.priority === 'medium' ? 'orange' : 
-                          'green'
-                        }>
-                          {task.priority === 'high' ? 'גבוהה' : 
-                           task.priority === 'medium' ? 'בינונית' : 
-                           'נמוכה'}
+                        <Text fontSize="sm" color="gray.500" fontWeight="medium">עדיפות:</Text>
+                        <Badge 
+                          colorScheme={
+                            task.priority === 'high' ? 'orange' : 
+                            task.priority === 'medium' ? 'yellow' : 
+                            task.priority === 'urgent' ? 'red' :
+                            'green'
+                          }
+                          px={2}
+                          py={1}
+                          borderRadius="full"
+                          mt={1}
+                          fontSize="sm"
+                        >
+                          {task.priority ? PRIORITY_MAP[task.priority]?.label || task.priority : 'בינונית'}
                         </Badge>
                       </Box>
                       
                       <Box flex="1">
-                        <Text fontSize="sm" color="gray.500">סטטוס:</Text>
-                        <Badge colorScheme={
-                          task.status === 'done' ? 'green' : 
-                          task.status === 'review' ? 'purple' : 
-                          task.status === 'in_progress' ? 'blue' : 
-                          'gray'
-                        }>
-                          {task.status === 'todo' ? 'לביצוע' : 
-                           task.status === 'in_progress' ? 'בתהליך' : 
-                           task.status === 'review' ? 'בבדיקה' : 
-                           'הושלם'}
+                        <Text fontSize="sm" color="gray.500" fontWeight="medium">סטטוס:</Text>
+                        <Badge 
+                          colorScheme={
+                            task.status === 'done' ? 'green' : 
+                            task.status === 'review' ? 'purple' : 
+                            task.status === 'in_progress' ? 'blue' :
+                            task.status === 'blocked' ? 'red' :
+                            'gray'
+                          }
+                          px={2}
+                          py={1}
+                          borderRadius="full"
+                          mt={1}
+                          fontSize="sm"
+                        >
+                          {task.status ? STATUS_MAP[task.status]?.label || task.status : 'לביצוע'}
                         </Badge>
                       </Box>
                     </Flex>
                   </VStack>
                 </Box>
                 
-                <Divider />
+                <Divider borderColor={borderColor} />
                 
                 <FormControl mt={4}>
-                  <FormLabel display="flex" alignItems="center">
-                    <Icon as={FiUsers} mr={2} color="blue.500" />
+                  <FormLabel display="flex" alignItems="center" fontWeight="bold">
+                    <Icon as={FiUsers} mr={2} color="blue.500" fontSize="18px" />
                     צוות המשימה
                   </FormLabel>
                   <Input
@@ -825,6 +946,11 @@ export default function EditTask() {
                     placeholder="הוסף חברי צוות מופרדים בפסיקים"
                     value={task.assignees?.join(', ') || ''}
                     onChange={(e) => handleAssigneesChange(e.target.value)}
+                    bg={useColorModeValue('white', 'gray.700')}
+                    borderColor={borderColor}
+                    _hover={{ borderColor: 'primary.300' }}
+                    _focus={{ borderColor: 'primary.500', boxShadow: '0 0 0 1px var(--chakra-colors-primary-500)' }}
+                    h="42px"
                   />
                 </FormControl>
                 
@@ -835,6 +961,12 @@ export default function EditTask() {
                   leftIcon={<FiSave />}
                   isLoading={saveLoading}
                   loadingText="שומר..."
+                  h="50px"
+                  fontSize="md"
+                  fontWeight="bold"
+                  mt={4}
+                  _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg' }}
+                  transition="all 0.2s"
                 >
                   שמור שינויים
                 </Button>

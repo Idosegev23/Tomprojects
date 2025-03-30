@@ -52,6 +52,7 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
     due_date: '',
     responsible: '',
     estimated_hours: 0,
+    assignees_info: [] as string[],
     assignees: [] as string[],
     tags: [] as string[],
   });
@@ -64,7 +65,11 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
   // פונקציה לטיפול בהוספת אחראים למשימה
   const handleAssigneesChange = (value: string) => {
     const assigneesArray = value.split(',').map(item => item.trim()).filter(Boolean);
-    setFormData(prev => ({ ...prev, assignees: assigneesArray }));
+    setFormData(prev => ({ 
+      ...prev, 
+      assignees_info: assigneesArray,
+      assignees: assigneesArray
+    }));
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -101,7 +106,8 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
         responsible: formData.responsible || null,
         estimated_hours: formData.estimated_hours || 0,
         tags: formData.tags,
-        assignees: formData.assignees,
+        assignees_info: formData.assignees_info,
+        assignees: formData.assignees_info,
       };
       
       // טיפול בתאריך יעד - רק אם יש ערך
@@ -129,6 +135,7 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
         due_date: '',
         responsible: '',
         estimated_hours: 0,
+        assignees_info: [],
         assignees: [],
         tags: [],
       });
@@ -168,6 +175,7 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
       due_date: '',
       responsible: '',
       estimated_hours: 0,
+      assignees_info: [],
       assignees: [],
       tags: [],
     });
@@ -333,8 +341,8 @@ const SubtaskInput: React.FC<SubtaskInputProps> = ({
                       אחראים למשימה
                     </FormLabel>
                     <Input
-                      name="assignees"
-                      value={formData.assignees.join(', ')}
+                      name="assignees_info"
+                      value={formData.assignees_info.join(', ')}
                       onChange={(e) => handleAssigneesChange(e.target.value)}
                       placeholder="הזן שמות מופרדים בפסיקים"
                       bg="white"

@@ -1,37 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, useRef, Component, ReactNode } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
-  Container,
-  Heading,
-  Text,
   Flex,
-  Button,
-  Divider,
-  Badge,
-  Tabs,
-  TabList,
-  Tab,
-  TabPanels,
-  TabPanel,
+  Text,
   Spinner,
-  Progress,
-  Grid,
-  GridItem,
-  Card,
-  CardBody,
-  CardHeader,
-  IconButton,
+  Button,
   useToast,
-  HStack,
-  VStack,
-  Menu,
-  MenuButton,
-  MenuList,
-  MenuItem,
-  useBreakpointValue,
   useDisclosure,
   AlertDialog,
   AlertDialogOverlay,
@@ -39,58 +16,25 @@ import {
   AlertDialogHeader,
   AlertDialogBody,
   AlertDialogFooter,
-  Tooltip,
-  SimpleGrid,
   Icon,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
-  useColorModeValue,
-  Avatar,
-  AvatarGroup,
+  Heading,
+  useBreakpointValue
 } from '@chakra-ui/react';
-import { 
-  FiArrowLeft, 
-  FiEdit, 
-  FiTrash2, 
-  FiCalendar, 
-  FiUsers, 
-  FiList,
-  FiPlusSquare,
-  FiColumns,
-  FiMoreVertical,
-  FiInfo as InfoIcon,
-  FiCheck as CheckIcon,
-  FiEye as ViewIcon,
-  FiCalendar as CalendarIcon,
-  FiPlus,
-  FiRefreshCw,
-  FiClock,
-  FiTarget,
-  FiFlag,
-  FiAlertCircle,
-  FiBarChart2,
-  FiCreditCard,
-  FiTrello,
-  FiActivity,
-  FiStar,
-} from 'react-icons/fi';
-import { FaFire, FaMoneyBillWave, FaTable, FaUserAlt, FaUserCheck, FaUsers } from 'react-icons/fa';
+import { FiAlertCircle } from 'react-icons/fi';
+
 import projectService from '@/lib/services/projectService';
 import taskService from '@/lib/services/taskService';
 import stageService from '@/lib/services/stageService';
-import { Project, Task, Stage } from '@/types/supabase';
-import { ExtendedTask, ExtendedStage } from '@/types/extendedTypes';
+import { Project } from '@/types/supabase';
 import { useAuthContext } from '@/components/auth/AuthProvider';
-import TaskTree from '@/components/tasks/TaskTree';
-import TaskGantt from '@/components/tasks/TaskGantt';
-import TaskList from '@/components/tasks/TaskList';
 import TaskEditModal from '@/components/tasks/TaskEditModal';
 import AssignTasksModal from '@/components/tasks/AssignTasksModal';
-import TaskKanban from '@/components/tasks/kanban/TaskKanban';
-import StageManager from '@/components/stages/StageManager';
 import { Task as KanbanTask } from '@/components/tasks/kanban/types';
+
+// קומפוננטות מקומיות
+import ProjectHeader from './components/ProjectHeader';
+import ProjectDetails from './components/ProjectDetails';
+import ProjectTabs from './components/ProjectTabs';
 
 type ProjectPageProps = {
   params: {
@@ -102,7 +46,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   const { id } = params;
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<KanbanTask[]>([]);
-  const [stages, setStages] = useState<Stage[]>([]);
+  const [stages, setStages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +59,6 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   const toast = useToast();
   const { user } = useAuthContext();
   const isMobile = useBreakpointValue({ base: true, md: false });
-  const isTablet = useBreakpointValue({ base: true, lg: false });
   
   const { isOpen, onOpen, onClose } = useDisclosure();
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -151,62 +94,6 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       // טעינת משימות הפרויקט
       const tasksData = await taskService.getProjectSpecificTasks(id);
       
-      console.log(`נטענו ${tasksData.length} משימות לפרויקט ${id}`);
-      
-      // אם אין משימות, ננסה לסנכרן את הנתונים
-      if (tasksData.length === 0 && stagesData.length > 0) {
-        console.log("אין משימות בפרויקט - מנסה לסנכרן נתונים...");
-        try {
-          await projectService.syncProjectTables(id);
-          // טעינה מחדש של המשימות לאחר הסנכרון
-          const resyncedTasks = await taskService.getProjectSpecificTasks(id);
-          console.log(`לאחר סנכרון: נטענו ${resyncedTasks.length} משימות`);
-          
-          // אם עדיין אין משימות, ננסה ליצור משימות ברירת מחדל
-          if (resyncedTasks.length === 0) {
-            console.log("עדיין אין משימות - מנסה ליצור משימות ברירת מחדל...");
-            const defaultStage = stagesData.length > 0 ? stagesData[0].id : null;
-            await taskService.createDefaultTasksForRealEstateProject(id, defaultStage);
-            const defaultTasks = await taskService.getProjectSpecificTasks(id);
-            console.log(`נוצרו ${defaultTasks.length} משימות ברירת מחדל`);
-            
-            // המרת נתוני המשימות לטיפוס המורחב
-            const foundStage = (taskStageId: string | null) => stagesData.find(stage => stage.id === taskStageId);
-            
-            const enhancedDefaultTasks = defaultTasks.map(task => {
-              const stage = foundStage(task.stage_id);
-              return {
-                ...task,
-                stageName: stage?.title || 'ללא שלב',
-                stageColor: 'gray',
-                assignees: task.assignees || null,
-              };
-            });
-            
-            setTasks(enhancedDefaultTasks as KanbanTask[]);
-            return;
-          }
-          
-          // המרת נתוני המשימות לטיפוס המורחב אחרי הסנכרון
-          const foundStage = (taskStageId: string | null) => stagesData.find(stage => stage.id === taskStageId);
-          
-          const enhancedResyncedTasks = resyncedTasks.map(task => {
-            const stage = foundStage(task.stage_id);
-            return {
-              ...task,
-              stageName: stage?.title || 'ללא שלב',
-              stageColor: 'gray',
-              assignees: task.assignees || null,
-            };
-          });
-          
-          setTasks(enhancedResyncedTasks as KanbanTask[]);
-          return;
-        } catch (syncError) {
-          console.error("שגיאה בסנכרון אוטומטי:", syncError);
-        }
-      }
-      
       // המרת נתוני המשימות לטיפוס המורחב
       const foundStage = (taskStageId: string | null) => stagesData.find(stage => stage.id === taskStageId);
       
@@ -215,8 +102,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
         return {
           ...task,
           stageName: stage?.title || 'ללא שלב',
-          stageColor: 'gray', // ערך ברירת מחדל קבוע
-          // העתקה של שדות אחרים הנדרשים על ידי KanbanTask
+          stageColor: 'gray',
           assignees: task.assignees || null,
         };
       });
@@ -245,11 +131,8 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   
   // מחיקת פרויקט
   const handleDeleteProject = async () => {
-    if (!confirm('האם אתה בטוח שברצונך למחוק פרויקט זה? כל המשימות המשויכות אליו יימחקו גם כן. פעולה זו אינה הפיכה.')) {
-      return;
-    }
-    
     try {
+      setLoading(true);
       await projectService.deleteProject(id);
       
       toast({
@@ -273,6 +156,9 @@ export default function ProjectPage({ params }: ProjectPageProps) {
         isClosable: true,
         position: 'top-right',
       });
+    } finally {
+      setLoading(false);
+      onClose();
     }
   };
   
@@ -304,7 +190,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     }
   };
   
-  // פונקציה להטיפול ביצירת משימה
+  // טיפול במשימות
   const handleTaskCreated = (newTask: KanbanTask) => {
     setTasks(prev => [...prev, newTask]);
     toast({
@@ -315,7 +201,6 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     });
   };
   
-  // פונקציה לטיפול בעדכון משימה
   const handleTaskUpdated = (updatedTask: KanbanTask) => {
     setTasks(prev => prev.map(task => 
       task.id === updatedTask.id ? { ...task, ...updatedTask } : task
@@ -328,7 +213,6 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     });
   };
   
-  // פונקציה לטיפול במחיקת משימה
   const handleTaskDeleted = (taskId: string) => {
     setTasks(prev => prev.filter(task => task.id !== taskId));
     toast({
@@ -339,13 +223,16 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     });
   };
   
-  // פונקציה להצגת מודל עריכת משימה
   const handleEditTask = (task: KanbanTask) => {
     setSelectedTask(task);
     setIsTaskModalOpen(true);
   };
   
-  // טיפול במחיקת משימה
+  const handleCreateTask = () => {
+    setSelectedTask(null);
+    setIsTaskModalOpen(true);
+  };
+  
   const handleDeleteTask = async (taskId: string) => {
     if (window.confirm('האם אתה בטוח שברצונך למחוק משימה זו?')) {
       try {
@@ -370,15 +257,10 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     }
   };
   
-  // טיפול בשינוי סטטוס משימה
   const handleStatusChange = async (taskId: string, status: string) => {
     try {
-      console.log('handleStatusChange - status before normalization:', status);
-      
       // המרת הסטטוס לאותיות קטנות
       let normalizedStatus = status.toLowerCase();
-      
-      console.log('handleStatusChange - normalizedStatus after normalization:', normalizedStatus);
       
       // וידוא שהסטטוס תקין
       const validStatuses = ['todo', 'in_progress', 'review', 'done'];
@@ -409,11 +291,9 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       
       toast({
         title: 'סטטוס המשימה עודכן',
-        description: `המשימה עודכנה לסטטוס: ${normalizedStatus}`,
         status: 'success',
         duration: 3000,
         isClosable: true,
-        position: 'top-right',
       });
     } catch (error) {
       console.error('שגיאה בעדכון סטטוס המשימה:', error);
@@ -424,12 +304,10 @@ export default function ProjectPage({ params }: ProjectPageProps) {
         status: 'error',
         duration: 5000,
         isClosable: true,
-        position: 'top-right',
       });
     }
   };
   
-  // טיפול בגרירת משימה בגאנט
   const handleTaskDrop = async (taskId: string, newStartDate: string, newEndDate: string) => {
     try {
       const updatedTask = await taskService.updateTask(taskId, {
@@ -457,104 +335,6 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     }
   };
   
-  // טיפול בשינוי שלב משימה
-  const handleStageChange = async (taskId: string, stageId: string) => {
-    try {
-      // וידוא שהשלב קיים
-      const stageExists = stages.some(stage => stage.id === stageId);
-      if (!stageExists) {
-        throw new Error(`שלב לא קיים: ${stageId}`);
-      }
-      
-      // עדכון השלב בשרת
-      const updatedTask = await taskService.updateTaskStage(taskId, stageId);
-      
-      // עדכון המשימה ברשימה המקומית
-      setTasks(tasks.map(task => task.id === taskId ? updatedTask : task));
-      
-      // מציאת שם השלב להצגה בהודעה
-      const stageName = stages.find(stage => stage.id === stageId)?.title || stageId;
-      
-      toast({
-        title: 'שלב המשימה עודכן',
-        description: `המשימה הועברה לשלב: ${stageName}`,
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-        position: 'top-right',
-      });
-    } catch (error) {
-      console.error('שגיאה בעדכון שלב המשימה:', error);
-      
-      toast({
-        title: 'שגיאה בעדכון שלב המשימה',
-        description: error instanceof Error ? error.message : 'אירעה שגיאה בעדכון שלב המשימה',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-        position: 'top-right',
-      });
-    }
-  };
-  
-  // טיפול בסנכרון משימות הפרויקט
-  const handleSyncProjectData = async () => {
-    if (loading) return;
-    
-    try {
-      setLoading(true);
-      
-      // קריאה לפונקציית הסנכרון החדשה
-      const syncResult = await projectService.syncProjectTables(id);
-      console.log('תוצאת סנכרון טבלאות פרויקט:', syncResult);
-      
-      // רענון רשימת המשימות והשלבים
-      const updatedStages = await stageService.getProjectStages(id);
-      setStages(updatedStages);
-      
-      const updatedTasksData = await taskService.getProjectSpecificTasks(id);
-      
-      // המרה נכונה לטיפוס KanbanTask
-      const enhancedTasks = updatedTasksData.map(task => ({
-        ...task,
-        stageName: updatedStages.find(stage => stage.id === task.stage_id)?.title || 'ללא שלב',
-        stageColor: 'gray',
-        assignees: task.assignees || null,
-      }));
-      
-      setTasks(enhancedTasks as KanbanTask[]);
-      
-      // עדכון התקדמות הפרויקט
-      const updatedProject = await projectService.getProjectById(id);
-      if (updatedProject) {
-        setProject(updatedProject);
-      }
-      
-      // הצגת הודעת הצלחה
-      toast({
-        title: 'טבלאות הפרויקט סונכרנו בהצלחה',
-        description: syncResult.message || 'סנכרון טבלאות הפרויקט הושלם בהצלחה',
-        status: 'success',
-        duration: 5000,
-        isClosable: true,
-        position: 'top',
-      });
-    } catch (error) {
-      console.error('שגיאה בסנכרון טבלאות פרויקט:', error);
-      
-      toast({
-        title: 'שגיאה בסנכרון',
-        description: error instanceof Error ? error.message : 'אירעה שגיאה לא צפויה',
-        status: 'error', 
-        duration: 5000,
-        isClosable: true,
-        position: 'top',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-  
   return (
     <Box>
       {loading ? (
@@ -575,361 +355,40 @@ export default function ProjectPage({ params }: ProjectPageProps) {
         </Box>
       ) : project && (
         <>
-          {/* כותרת הפרויקט ומידע בסיסי */}
           <Box mb={6}>
-            <Flex 
-              direction={{ base: 'column', md: 'row' }} 
-              justify="space-between" 
-              align={{ base: 'flex-start', md: 'center' }} 
-              mb={4} 
-              gap={3}
-            >
-              <HStack spacing={2}>
-                <Tooltip label="חזרה לרשימת הפרויקטים">
-                  <IconButton
-                    aria-label="חזור לרשימת הפרויקטים"
-                    icon={<FiArrowLeft />}
-                    onClick={() => router.push('/dashboard/projects')}
-                    variant="ghost"
-                    size="md"
-                    colorScheme="blue"
-                  />
-                </Tooltip>
-                <Heading size={{ base: 'md', md: 'lg' }}>{project.name}</Heading>
-                <Tooltip label={`סטטוס: ${project.status}`}>
-                  <Badge 
-                    colorScheme={getStatusColor(project.status)} 
-                    fontSize="md" 
-                    px={2} 
-                    py={1}
-                    borderRadius="full"
-                  >
-                    {project.status}
-                  </Badge>
-                </Tooltip>
-              </HStack>
-              
-              {isMobile ? (
-                <Menu closeOnSelect={true}>
-                  <MenuButton 
-                    as={IconButton} 
-                    icon={<FiMoreVertical />} 
-                    variant="outline"
-                    aria-label="פעולות נוספות"
-                  />
-                  <MenuList>
-                    <MenuItem 
-                      icon={<FiRefreshCw />} 
-                      onClick={handleSyncProjectData} 
-                      isDisabled={loading}
-                    >
-                      סנכרון טבלאות פרויקט
-                    </MenuItem>
-                    <MenuItem 
-                      icon={<FiEdit />} 
-                      onClick={() => router.push(`/dashboard/projects/${id}/edit`)}
-                    >
-                      ערוך פרויקט
-                    </MenuItem>
-                    <MenuItem 
-                      icon={<FiTrash2 />} 
-                      onClick={onOpen}
-                      color="red.500"
-                    >
-                      מחק פרויקט
-                    </MenuItem>
-                  </MenuList>
-                </Menu>
-              ) : (
-                <HStack>
-                  <Tooltip label="סנכרון משימות ושלבים בטבלאות הפרויקט">
-                    <Button
-                      leftIcon={<FiRefreshCw />}
-                      size="sm"
-                      colorScheme="blue"
-                      onClick={handleSyncProjectData}
-                      isLoading={loading}
-                    >
-                      סנכרון טבלאות פרויקט
-                    </Button>
-                  </Tooltip>
-                  <ActionButtons projectId={id} />
-                </HStack>
-              )}
-            </Flex>
+            {/* כותרת הפרויקט ומידע בסיסי */}
+            <ProjectHeader 
+              project={project} 
+              onOpenDeleteDialog={onOpen} 
+              getStatusColor={getStatusColor} 
+            />
             
-            {project.description && (
-              <Card mb={4} variant="outline" bg={useColorModeValue('gray.50', 'gray.700')}>
-                <CardBody>
-                  <HStack mb={2}>
-                    <Icon as={InfoIcon} color="blue.500" />
-                    <Text fontWeight="bold">תיאור הפרויקט</Text>
-                  </HStack>
-                  <Text>{project.description}</Text>
-                </CardBody>
-              </Card>
-            )}
-            
-            <SimpleGrid 
-              columns={{ base: 1, sm: 2, md: 4 }}
-              spacing={4} 
-              mb={4}
-            >
-              <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
-                <CardBody>
-                  <Stat>
-                    <StatLabel>
-                      <HStack>
-                        <Icon as={FiCalendar} color="blue.500" />
-                        <Text>תאריך התחלה</Text>
-                      </HStack>
-                    </StatLabel>
-                    <StatNumber fontSize="lg">{formatDate(project.planned_start_date)}</StatNumber>
-                  </Stat>
-                </CardBody>
-              </Card>
-              
-              <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
-                <CardBody>
-                  <Stat>
-                    <StatLabel>
-                      <HStack>
-                        <Icon as={FiTarget} color="purple.500" />
-                        <Text>תאריך סיום</Text>
-                      </HStack>
-                    </StatLabel>
-                    <StatNumber fontSize="lg">{formatDate(project.planned_end_date)}</StatNumber>
-                  </Stat>
-                </CardBody>
-              </Card>
-              
-              <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
-                <CardBody>
-                  <Stat>
-                    <StatLabel>
-                      <HStack>
-                        <Icon as={FiBarChart2} color="green.500" />
-                        <Text>התקדמות</Text>
-                      </HStack>
-                    </StatLabel>
-                    <StatNumber fontSize="lg">{progress}%</StatNumber>
-                    <Progress 
-                      value={progress} 
-                      colorScheme={progress < 30 ? 'red' : progress < 70 ? 'orange' : 'green'} 
-                      size="sm" 
-                      mt={2} 
-                      borderRadius="full"
-                    />
-                  </Stat>
-                </CardBody>
-              </Card>
-              
-              <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
-                <CardBody>
-                  <Stat>
-                    <StatLabel>
-                      <HStack>
-                        <Icon as={FiCreditCard} color="orange.500" />
-                        <Text>משימות</Text>
-                      </HStack>
-                    </StatLabel>
-                    <StatNumber fontSize="lg">{tasks.length}</StatNumber>
-                    <StatHelpText>{tasks.filter(t => t.status === 'done').length} הושלמו</StatHelpText>
-                  </Stat>
-                </CardBody>
-              </Card>
-
-              {project.entrepreneur && (
-                <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
-                  <CardBody>
-                    <Stat>
-                      <StatLabel>
-                        <HStack>
-                          <Icon as={FiUsers} color="teal.500" />
-                          <Text>יזם</Text>
-                        </HStack>
-                      </StatLabel>
-                      <StatNumber fontSize="lg">{project.entrepreneur}</StatNumber>
-                    </Stat>
-                  </CardBody>
-                </Card>
-              )}
-            </SimpleGrid>
-            
-            {/* כפתור סנכרון טבלאות */}
-            <Box mb={6} textAlign="center">
-              <Tooltip label="סנכרון טבלאות הפרויקט - מתקן בעיות של טבלאות כפולות ומוודא שכל המשימות מצביעות לשלבים הנכונים">
-                <Button
-                  leftIcon={<FiRefreshCw />}
-                  colorScheme="teal"
-                  size="md"
-                  onClick={handleSyncProjectData}
-                  isLoading={loading}
-                  loadingText="מסנכרן טבלאות..."
-                  shadow="md"
-                  width={{ base: 'full', md: 'auto' }}
-                >
-                  סנכרון וטיפול בטבלאות כפולות
-                </Button>
-              </Tooltip>
-            </Box>
+            {/* פרטי הפרויקט */}
+            <ProjectDetails 
+              project={project} 
+              tasks={tasks} 
+              progress={progress} 
+              formatDate={formatDate} 
+            />
           </Box>
           
           {/* טאבים לתצוגות שונות */}
-          <Card variant="outline" shadow="sm" mb={4}>
-            <CardBody p={0}>
-              <Tabs 
-                index={tabIndex} 
-                onChange={setTabIndex} 
-                variant="enclosed" 
-                isLazy
-                colorScheme="blue"
-              >
-                <TabList overflowX="auto" overflowY="hidden">
-                  <Tooltip label="הצג את כל המשימות כרשימה">
-                    <Tab><HStack><FiList /><Text>רשימה</Text></HStack></Tab>
-                  </Tooltip>
-                  <Tooltip label="הצג משימות לפי שלבים בלוח קנבן">
-                    <Tab><HStack><FiColumns /><Text>קנבן</Text></HStack></Tab>
-                  </Tooltip>
-                  <Tooltip label="הצג לוח זמנים של המשימות">
-                    <Tab><HStack><FiCalendar /><Text>גאנט</Text></HStack></Tab>
-                  </Tooltip>
-                  <Tooltip label="הצג את מבנה המשימות בצורת עץ">
-                    <Tab><HStack><FiTrello /><Text>עץ</Text></HStack></Tab>
-                  </Tooltip>
-                  <Tooltip label="ניהול שלבי הפרויקט">
-                    <Tab><HStack><FiFlag /><Text>שלבים</Text></HStack></Tab>
-                  </Tooltip>
-                </TabList>
-                
-                <TabPanels>
-                  {/* תצוגת רשימה */}
-                  <TabPanel>
-                    <Box>
-                      {tasks.length > 0 ? (
-                        <TaskList 
-                          projectId={id}
-                          onTaskCreated={(newTask) => handleTaskCreated(newTask as KanbanTask)}
-                          onTaskUpdated={(updatedTask) => handleTaskUpdated(updatedTask as KanbanTask)}
-                          onTaskDeleted={handleDeleteTask}
-                        />
-                      ) : (
-                        <Card p={8} textAlign="center" variant="outline">
-                          <CardBody>
-                            <Icon as={FiCreditCard} w={12} h={12} color="gray.400" mb={4} />
-                            <Heading size="md" mb={2}>אין משימות בפרויקט זה</Heading>
-                            <Text mb={6} color="gray.500">
-                              התחל ליצור משימות כדי לנהל את הפרויקט שלך
-                            </Text>
-                            <Button
-                              leftIcon={<FiPlus />}
-                              colorScheme="blue"
-                              onClick={() => {
-                                setSelectedTask(null);
-                                setIsTaskModalOpen(true);
-                              }}
-                            >
-                              צור משימה חדשה
-                            </Button>
-                          </CardBody>
-                        </Card>
-                      )}
-                    </Box>
-                  </TabPanel>
-                  
-                  {/* תצוגת קנבן */}
-                  <TabPanel>
-                    <Box>
-                      {stages.length > 0 ? (
-                        <TaskKanban
-                          projectId={id}
-                          stages={stages as any}
-                          tasks={tasks as any}
-                          onTaskUpdated={(updatedTask) => handleTaskUpdated(updatedTask as KanbanTask)}
-                          onTaskDeleted={handleDeleteTask}
-                          getProjectName={(projectId) => project?.name || ""}
-                        />
-                      ) : (
-                        <Card p={8} textAlign="center" variant="outline">
-                          <CardBody>
-                            <Icon as={FiTrello} w={12} h={12} color="gray.400" mb={4} />
-                            <Heading size="md" mb={2}>אין שלבים מוגדרים בפרויקט</Heading>
-                            <Text mb={6} color="gray.500">
-                              בצע סנכרון של נתוני הפרויקט כדי לטעון את השלבים מהתבניות
-                            </Text>
-                            <Button
-                              leftIcon={<FiRefreshCw />}
-                              colorScheme="blue"
-                              onClick={handleSyncProjectData}
-                              isLoading={loading}
-                            >
-                              סנכרון נתוני פרויקט
-                            </Button>
-                          </CardBody>
-                        </Card>
-                      )}
-                    </Box>
-                  </TabPanel>
-                  
-                  {/* תצוגת גאנט */}
-                  <TabPanel>
-                    <Box>
-                      {tasks.length > 0 ? (
-                        <TaskGantt
-                          tasks={tasks as any}
-                          onTaskDrop={handleTaskDrop}
-                        />
-                      ) : (
-                        <Card p={8} textAlign="center" variant="outline">
-                          <CardBody>
-                            <Icon as={FiActivity} w={12} h={12} color="gray.400" mb={4} />
-                            <Heading size="md" mb={2}>אין משימות להצגה בגאנט</Heading>
-                            <Text mb={6} color="gray.500">
-                              צור משימות עם תאריכי התחלה וסיום כדי להציג אותן בתצוגת גאנט
-                            </Text>
-                            <Button
-                              leftIcon={<FiPlus />}
-                              colorScheme="blue"
-                              onClick={() => {
-                                setSelectedTask(null);
-                                setIsTaskModalOpen(true);
-                              }}
-                            >
-                              צור משימה חדשה
-                            </Button>
-                          </CardBody>
-                        </Card>
-                      )}
-                    </Box>
-                  </TabPanel>
-                  
-                  {/* תצוגת עץ */}
-                  <TabPanel>
-                    <TaskTree 
-                      tasks={tasks as any} 
-                      projectId={id}
-                      onTaskEdited={handleEditTask}
-                      onTaskDeleted={handleDeleteTask}
-                      onTaskStatusChanged={handleStatusChange}
-                      loading={loading}
-                    />
-                  </TabPanel>
-                  
-                  {/* תצוגת שלבים */}
-                  <TabPanel>
-                    <Box py={4}>
-                      <Heading size="md" mb={4}>ניהול שלבי הפרויקט</Heading>
-                      <Text mb={4} color="gray.600">
-                        כאן תוכל לנהל את שלבי הפרויקט - להוסיף שלבים חדשים, לערוך או למחוק שלבים קיימים.
-                      </Text>
-                      <StageManager projectId={id} showTasks={true} />
-                    </Box>
-                  </TabPanel>
-                </TabPanels>
-              </Tabs>
-            </CardBody>
-          </Card>
+          <ProjectTabs
+            tabIndex={tabIndex}
+            setTabIndex={setTabIndex}
+            projectId={id}
+            tasks={tasks}
+            stages={stages}
+            projectName={project.name}
+            loading={loading}
+            onCreateTask={handleCreateTask}
+            onTaskCreated={handleTaskCreated}
+            onTaskUpdated={handleTaskUpdated}
+            onTaskDeleted={handleDeleteTask}
+            onTaskEdited={handleEditTask}
+            onTaskStatusChanged={handleStatusChange}
+            onTaskDrop={handleTaskDrop}
+          />
 
           {/* מודל עריכת משימה */}
           <TaskEditModal
@@ -987,128 +446,5 @@ export default function ProjectPage({ params }: ProjectPageProps) {
         </>
       )}
     </Box>
-  );
-}
-
-function ActionButtons({ projectId }: { projectId: string }) {
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isSyncingStages, setIsSyncingStages] = useState(false);
-  const router = useRouter();
-  const toast = useToast();
-  const cancelRef = useRef<HTMLButtonElement>(null);
-
-  const handleDelete = async () => {
-    try {
-      setIsDeleting(true);
-      
-      // מחיקת הפרויקט
-      await projectService.deleteProject(projectId);
-      
-      toast({
-        title: 'פרויקט נמחק',
-        description: 'הפרויקט נמחק בהצלחה',
-        status: 'success',
-        duration: 5000,
-        isClosable: true,
-      });
-      
-      // ניווט בחזרה לרשימת הפרויקטים
-      router.push('/dashboard/projects');
-    } catch (error) {
-      console.error('שגיאה במחיקת פרויקט:', error);
-      
-      toast({
-        title: 'שגיאה במחיקת פרויקט',
-        description: error instanceof Error ? error.message : 'אירעה שגיאה לא צפויה',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
-      setIsDeleting(false);
-      onClose();
-    }
-  };
-
-  const handleSyncStages = async () => {
-    try {
-      setIsSyncingStages(true);
-      
-      // קריאה לפונקציית סנכרון טבלאות פרויקט החדשה
-      const result = await projectService.syncProjectTables(projectId);
-      
-      toast({
-        title: 'טבלאות פרויקט סונכרנו בהצלחה',
-        description: result.message || 'סנכרון טבלאות הפרויקט הושלם בהצלחה',
-        status: 'success',
-        duration: 5000,
-        isClosable: true,
-      });
-      
-      // רענון הדף כדי להציג את הנתונים המעודכנים
-      router.refresh();
-    } catch (error) {
-      console.error('שגיאה בסנכרון טבלאות פרויקט:', error);
-      
-      toast({
-        title: 'שגיאה בסנכרון טבלאות פרויקט',
-        description: error instanceof Error ? error.message : 'אירעה שגיאה לא צפויה',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
-      setIsSyncingStages(false);
-    }
-  };
-
-  return (
-    <>
-      <Button
-        colorScheme="red"
-        variant="outline"
-        leftIcon={<FiTrash2 />}
-        onClick={onOpen}
-        size="sm"
-      >
-        מחק פרויקט
-      </Button>
-      
-      <Button
-        colorScheme="teal"
-        leftIcon={<FiRefreshCw />}
-        onClick={handleSyncStages}
-        isLoading={isSyncingStages}
-        loadingText="מסנכרן טבלאות..."
-        ml={2}
-        size="sm"
-      >
-        סנכרן טבלאות פרויקט
-      </Button>
-
-      <AlertDialog
-        isOpen={isOpen}
-        leastDestructiveRef={cancelRef}
-        onClose={onClose}
-      >
-        <AlertDialogOverlay>
-          <AlertDialogContent>
-            <AlertDialogHeader>מחיקת פרויקט</AlertDialogHeader>
-            <AlertDialogBody>
-              האם אתה בטוח שברצונך למחוק את הפרויקט? פעולה זו אינה הפיכה.
-            </AlertDialogBody>
-            <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={onClose}>
-                ביטול
-              </Button>
-              <Button colorScheme="red" onClick={handleDelete} ml={3} isLoading={isDeleting}>
-                מחק
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialogOverlay>
-      </AlertDialog>
-    </>
   );
 }

@@ -1,8 +1,10 @@
 import { Task as BaseTask, Stage, Project } from '@/types/supabase';
 
 // הרחבת הטיפוס של משימה לכלול מידע נוסף
-export interface Task extends Omit<BaseTask, 'assignees'> {
-  // מחליף את assignees המקורי
+export interface Task extends Omit<BaseTask, 'assignees' | 'assignees_info'> {
+  // שימוש ב-assignees_info במקום ב-assignees
+  assignees_info?: string[] | null;
+  // שמירה על תאימות לאחור
   assignees?: string[] | null;
   
   // תת-משימות

@@ -247,13 +247,13 @@ const TaskCard: React.FC<TaskCardProps> = ({
           )}
           
           {/* אחראי */}
-          {(task.responsible || (task.assignees && task.assignees.length > 0)) && (
-            <Tooltip label={task.responsible ? `אחראי: ${task.responsible}` : `מוקצה ל: ${task.assignees?.join(', ')}`}>
+          {(task.responsible || (task.assignees_info && task.assignees_info.length > 0) || (task.assignees && task.assignees.length > 0)) && (
+            <Tooltip label={task.responsible ? `אחראי: ${task.responsible}` : `מוקצה ל: ${(task.assignees_info || task.assignees)?.join(', ')}`}>
               <AvatarGroup size="xs" max={2}>
                 {task.responsible && (
                   <Avatar name={task.responsible} size="xs" />
                 )}
-                {task.assignees && task.assignees.map((assignee, index) => (
+                {(task.assignees_info || task.assignees) && (task.assignees_info || task.assignees)?.map((assignee, index) => (
                   <Avatar key={index} name={assignee} size="xs" />
                 ))}
               </AvatarGroup>

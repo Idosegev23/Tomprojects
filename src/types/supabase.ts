@@ -138,7 +138,7 @@ export interface Database {
           completed_date: string | null
           budget: number | null
           dependencies: string[] | null
-          assignees: string[] | null
+          assignees_info: string[] | null
           watchers: string[] | null
           labels: string[] | null
           deleted: boolean
@@ -167,7 +167,7 @@ export interface Database {
           completed_date?: string | null
           budget?: number | null
           dependencies?: string[] | null
-          assignees?: string[] | null
+          assignees_info?: string[] | null
           watchers?: string[] | null
           labels?: string[] | null
           deleted?: boolean
@@ -196,7 +196,7 @@ export interface Database {
           completed_date?: string | null
           budget?: number | null
           dependencies?: string[] | null
-          assignees?: string[] | null
+          assignees_info?: string[] | null
           watchers?: string[] | null
           labels?: string[] | null
           deleted?: boolean
@@ -235,9 +235,19 @@ export type Stage = Database['public']['Tables']['stages']['Row']
 export type NewStage = Database['public']['Tables']['stages']['Insert']
 export type UpdateStage = Database['public']['Tables']['stages']['Update']
 
-export type Task = Database['public']['Tables']['tasks']['Row']
-export type NewTask = Database['public']['Tables']['tasks']['Insert'] 
-export type UpdateTask = Database['public']['Tables']['tasks']['Update'] 
+// הגדרת הטיפוסים הבסיסיים מהדאטאבייס
+export type Task = Database['public']['Tables']['tasks']['Row'] & {
+  // הוספת שדה assignees לתאימות לאחור שיהיה זהה ל-assignees_info
+  assignees?: string[] | null;
+}
+export type NewTask = Database['public']['Tables']['tasks']['Insert'] & {
+  // הוספת שדה assignees לתאימות לאחור שיהיה זהה ל-assignees_info
+  assignees?: string[] | null;
+}
+export type UpdateTask = Database['public']['Tables']['tasks']['Update'] & {
+  // הוספת שדה assignees לתאימות לאחור שיהיה זהה ל-assignees_info
+  assignees?: string[] | null;
+}
 
 // טיפוס מורחב של Task שכולל גם את תתי-המשימות
 export interface TaskWithChildren extends Task {

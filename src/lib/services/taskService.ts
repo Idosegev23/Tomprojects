@@ -62,23 +62,84 @@ export const taskService = {
         task.id = crypto.randomUUID();
       }
       
+      // תאימות לאחור: אם יש assignees אבל אין assignees_info, נעתיק את הערך
+      if (task.assignees && !task.assignees_info) {
+        task.assignees_info = task.assignees;
+      }
+      
+      // יצירת עותק נקי של האובייקט task ללא שדות לא נתמכים
+      const cleanedTask = { ...task };
+
+      // הסרת שדות שלא קיימים בטבלה כדי למנוע שגיאות
+      const fieldsToRemove = [
+        'assignees', // השדה משתמש ב-assignees_info במקום
+        'start_date', // לא קיים בטבלה הספציפית
+        'actual_hours', // לא קיים בטבלה הספציפית
+        'completed_date', // לא קיים בטבלה הספציפית
+        'estimated_hours', // לא קיים בטבלה הספציפית
+        'budget', // לא קיים בטבלה הספציפית
+        'dependencies', // לא קיים בטבלה הספציפית
+        'watchers', // לא קיים בטבלה הספציפית
+        'labels', // לא קיים בטבלה הספציפית
+        'is_template', // לא קיים בטבלה הספציפית
+        'is_global_template', // לא קיים בטבלה הספציפית
+        'original_task_id', // לא קיים בטבלה הספציפית
+        'deleted', // לא קיים בטבלה הספציפית
+      ];
+      
+      // מחיקת השדות הלא רלוונטיים
+      for (const field of fieldsToRemove) {
+        if (field in cleanedTask) {
+          delete (cleanedTask as any)[field];
+        }
+      }
+      
+      // טיפול בשדות תאריך ריקים - הסרתם מהאובייקט
+      const dateFields = ['due_date']; // רק due_date קיים בטבלה
+      for (const field of dateFields) {
+        if (cleanedTask[field as keyof typeof cleanedTask] === '') {
+          delete cleanedTask[field as keyof typeof cleanedTask];
+        }
+      }
+      
+      // אם המקבל את assignees_info מסוג מערך, נמיר אותו ל-JSON
+      if (cleanedTask.assignees_info && Array.isArray(cleanedTask.assignees_info)) {
+        // כיוון שהטבלה מצפה ל-jsonb ולא למערך, נשמור את המערך כ-JSON
+        (cleanedTask as any).assignees_info = JSON.stringify(cleanedTask.assignees_info);
+      }
+      
       // אם יש project_id ואין hierarchical_number, נחשב את המספר ההיררכי הבא
-      if (task.project_id && !task.hierarchical_number) {
+      if (cleanedTask.project_id && !cleanedTask.hierarchical_number) {
         // אם יש parent_task_id, נחשב את המספר ההיררכי הבא כתת-משימה
-        if (task.parent_task_id) {
-          task.hierarchical_number = await this.getNextSubHierarchicalNumber(task.parent_task_id);
+        if (cleanedTask.parent_task_id) {
+          cleanedTask.hierarchical_number = await this.getNextSubHierarchicalNumber(cleanedTask.parent_task_id);
         } else {
           // אחרת, נחשב את המספר ההיררכי הבא כמשימת שורש
-          task.hierarchical_number = await this.getNextRootHierarchicalNumber(task.project_id);
+          cleanedTask.hierarchical_number = await this.getNextRootHierarchicalNumber(cleanedTask.project_id);
         }
       }
       
       // אם המשימה היא ללא פרויקט (תבנית גלובלית), נוסיף אותה לטבלה הראשית
-      if (!task.project_id) {
-        // הוספת תבנית גלובלית לטבלה הראשית
+      if (!cleanedTask.project_id) {
+        // הוספת תבנית גלובלית לטבלה הראשית - בטבלה הראשית יש יותר שדות
+        // לכן ניצור עותק מקורי בלי סינון מלא
+        const originalTask = { ...task };
+        // מחיקת רק assignees לתאימות
+        if ('assignees' in originalTask) {
+          delete (originalTask as any).assignees;
+        }
+        
+        // טיפול בשדות תאריך ריקים גם באובייקט המקורי
+        const originalDateFields = ['start_date', 'due_date', 'completed_date'];
+        for (const field of originalDateFields) {
+          if (originalTask[field as keyof typeof originalTask] === '') {
+            delete originalTask[field as keyof typeof originalTask];
+          }
+        }
+        
         const { data, error } = await supabase
           .from('tasks')
-          .insert(task)
+          .insert(originalTask)
           .select()
           .single();
         
@@ -92,7 +153,10 @@ export const taskService = {
       }
       
       // כאן מדובר במשימה עם project_id - נוסיף אותה רק לטבלה הייחודית של הפרויקט
-      const tableName = `project_${task.project_id}_tasks`;
+      const tableName = `project_${cleanedTask.project_id}_tasks`;
+      
+      // מדפיס את המידע שנשלח לשרת לצורך דיבוג
+      console.log('Clean task object to send:', cleanedTask);
       
       // בדיקה אם הטבלה הייחודית קיימת
       let tableExists = false;
@@ -117,9 +181,9 @@ export const taskService = {
       if (!tableExists) {
         try {
           await supabase.rpc('create_project_table', {
-            project_id: task.project_id
+            project_id: cleanedTask.project_id
           });
-          console.log(`Created project-specific table ${tableName} for project ${task.project_id}`);
+          console.log(`Created project-specific table ${tableName} for project ${cleanedTask.project_id}`);
           tableExists = true;
         } catch (createTableError) {
           console.error(`Error creating project-specific table ${tableName}:`, createTableError);
@@ -130,7 +194,7 @@ export const taskService = {
       // הוספת המשימה לטבלה הייחודית
       const { data, error } = await supabase
         .from(tableName)
-        .insert(task)
+        .insert(cleanedTask)
         .select()
         .single();
       
@@ -157,6 +221,41 @@ export const taskService = {
       delete (cleanTask as any).children;
     }
     
+    // תאימות לאחור: אם יש assignees אבל אין assignees_info, נעתיק את הערך
+    if (cleanTask.assignees && !cleanTask.assignees_info) {
+      cleanTask.assignees_info = cleanTask.assignees;
+    }
+    
+    // הסרת שדות שלא קיימים בטבלה כדי למנוע שגיאות
+    const fieldsToRemove = [
+      'assignees', // השדה משתמש ב-assignees_info במקום
+      'start_date', // לא קיים בטבלה הספציפית
+      'actual_hours', // לא קיים בטבלה הספציפית
+      'completed_date', // לא קיים בטבלה הספציפית
+      'estimated_hours', // לא קיים בטבלה הספציפית
+      'budget', // לא קיים בטבלה הספציפית
+      'dependencies', // לא קיים בטבלה הספציפית
+      'watchers', // לא קיים בטבלה הספציפית
+      'labels', // לא קיים בטבלה הספציפית
+      'is_template', // לא קיים בטבלה הספציפית
+      'is_global_template', // לא קיים בטבלה הספציפית
+      'original_task_id', // לא קיים בטבלה הספציפית
+      'deleted', // לא קיים בטבלה הספציפית
+    ];
+    
+    // מחיקת השדות הלא רלוונטיים
+    for (const field of fieldsToRemove) {
+      if (field in cleanTask) {
+        delete (cleanTask as any)[field];
+      }
+    }
+    
+    // אם המקבל את assignees_info מסוג מערך, נמיר אותו ל-JSON
+    if (cleanTask.assignees_info && Array.isArray(cleanTask.assignees_info)) {
+      // כיוון שהטבלה מצפה ל-jsonb ולא למערך, נשמור את המערך כ-JSON
+      (cleanTask as any).assignees_info = JSON.stringify(cleanTask.assignees_info);
+    }
+    
     // וידוא שיש parent_task_id תקין, אם לא קיים שינוי לnull
     if (cleanTask.parent_task_id === undefined) {
       // בדיקת האם יש קשר הורה קיים במסד הנתונים
@@ -172,7 +271,7 @@ export const taskService = {
     }
     
     // טיפול בשדות תאריך ריקים - הסרתם מהאובייקט
-    const dateFields = ['start_date', 'due_date', 'completed_date'];
+    const dateFields = ['due_date']; // רק due_date קיים בטבלה
     for (const field of dateFields) {
       if (cleanTask[field as keyof UpdateTask] === '') {
         delete cleanTask[field as keyof UpdateTask];
@@ -181,10 +280,27 @@ export const taskService = {
     
     console.log('Updating task with cleaned data:', cleanTask);
     
-    // עדכון בטבלה הראשית
+    // עדכון בטבלה הראשית - כאן נשתמש באובייקט מקורי בלי הסינון המלא
+    // כיוון שבטבלה הראשית יש יותר שדות
+    const originalTask = { ...task };
+    if ('assignees' in originalTask) {
+      delete (originalTask as any).assignees;
+    }
+    if ('children' in originalTask) {
+      delete (originalTask as any).children;
+    }
+    
+    // טיפול בשדות תאריך ריקים באובייקט המקורי
+    const originalDateFields = ['start_date', 'due_date', 'completed_date'];
+    for (const field of originalDateFields) {
+      if (originalTask[field as keyof UpdateTask] === '') {
+        delete originalTask[field as keyof UpdateTask];
+      }
+    }
+
     const { data, error } = await supabase
       .from('tasks')
-      .update(cleanTask)
+      .update(originalTask)
       .eq('id', id)
       .select()
       .single();
@@ -202,6 +318,27 @@ export const taskService = {
           task_id: data.id,
           project_id: data.project_id
         });
+        
+        // עדכון ישיר של טבלת הפרויקט הספציפית אם יש צורך
+        // אם נתקלים בבעיות עם update_task_in_project_table
+        const projectTable = `project_${data.project_id}_tasks`;
+        console.log(`Updating task directly in ${projectTable} with data:`, cleanTask);
+        
+        try {
+          const { error: directUpdateError } = await supabase
+            .from(projectTable)
+            .update(cleanTask)
+            .eq('id', id);
+            
+          if (directUpdateError) {
+            console.error(`Error in direct update of ${projectTable}:`, directUpdateError);
+          } else {
+            console.log(`Direct update of ${projectTable} successful`);
+          }
+        } catch (directUpdateErr) {
+          console.error(`Exception in direct update of ${projectTable}:`, directUpdateErr);
+        }
+        
         console.log(`Task ${data.id} updated in project-specific table for project ${data.project_id}`);
       } catch (projectTableError) {
         console.error(`Error updating task in project-specific table for project ${data.project_id}:`, projectTableError);
@@ -236,7 +373,7 @@ export const taskService = {
         });
         console.log(`Task ${id} deleted from project-specific table for project ${taskToDelete.project_id}`);
       } catch (projectTableError) {
-        console.error(`Error deleting task from project-specific table for project ${taskToDelete.project_id}:`, projectTableError);
+        console.error(`Error deleting task from project-specific table for project ${taskToDelete?.project_id}:`, projectTableError);
         // נמשיך גם אם יש שגיאה במחיקה מהטבלה הספציפית
       }
     }
