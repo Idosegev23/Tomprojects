@@ -146,7 +146,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         let level = 2; // ברירת מחדל
         try {
           if (task.hierarchical_number) {
-            level = task.hierarchical_number.split('.').length;
+            level = (task.hierarchical_number as string).split('.').length;
           }
         } catch (error) {
           console.error('שגיאה בחישוב רמת המשימה:', error, task.hierarchical_number);
@@ -219,27 +219,41 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
           t.parent_task_id === null || t.parent_task_id === undefined
         );
         
+        // פונקציית עזר לבדיקה האם ערך הוא מחרוזת תקינה
+        const isValidString = (value: any): boolean => {
+          return typeof value === 'string' && value !== null && value.length > 0;
+        };
+        
         // מיון המשימות לפי כותרת
         const sortedRootTasks = rootTasks.sort((a, b) => {
           // מיון לפי מספר היררכי אם קיים, אחרת לפי כותרת
-          if (a.hierarchical_number && b.hierarchical_number) {
-            // שימוש במיון מספרי במקום localeCompare למנוע שגיאות
-            const aNum = a.hierarchical_number.split('.').map(Number);
-            const bNum = b.hierarchical_number.split('.').map(Number);
-            
-            for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
-              if (aNum[i] !== bNum[i]) {
-                return aNum[i] - bNum[i];
+          if (isValidString(a.hierarchical_number) && isValidString(b.hierarchical_number)) {
+            try {
+              // שימוש במיון מספרי במקום localeCompare למנוע שגיאות
+              const aNum = (a.hierarchical_number as string).split('.').map(Number);
+              const bNum = (b.hierarchical_number as string).split('.').map(Number);
+              
+              for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
+                if (aNum[i] !== bNum[i]) {
+                  return aNum[i] - bNum[i];
+                }
               }
+              
+              return aNum.length - bNum.length;
+            } catch (error) {
+              console.error('שגיאה במיון לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
+              // במקרה של שגיאה, מיון לפי כותרת
+              return isValidString(a.title) && isValidString(b.title) ? 
+                a.title.localeCompare(b.title) : 0;
             }
-            
-            return aNum.length - bNum.length;
-          } else if (a.hierarchical_number) {
+          } else if (isValidString(a.hierarchical_number)) {
             return -1; // a מופיע קודם
-          } else if (b.hierarchical_number) {
+          } else if (isValidString(b.hierarchical_number)) {
             return 1; // b מופיע קודם
           }
-          return a.title.localeCompare(b.title);
+          // מיון לפי כותרת אם אין מספרים היררכיים
+          return isValidString(a.title) && isValidString(b.title) ? 
+            a.title.localeCompare(b.title) : 0;
         });
         
         setParentTasks(sortedRootTasks);
@@ -374,7 +388,6 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
       
       // בדיקה אם יש תתי-משימות למשימה זו
       try {
-        // שיפור הסינון: אנחנו רוצים את כל המשימות שה-parent_task_id שלהן הוא parentId
         const subTasks = potentialParentTasks.filter(task => 
           task.parent_task_id === parentId
         );
@@ -387,26 +400,37 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         console.log(`סה"כ נמצאו ${subTasks.length} תתי-משימות`);
         console.log(`----------------------------------------`);
         
+        // פונקציית עזר לבדיקה האם ערך הוא מחרוזת תקינה
+        const isValidString = (value: any): boolean => {
+          return typeof value === 'string' && value !== null && value.length > 0;
+        };
+        
         // מיון לפי מספר היררכי או כותרת
         const sortedSubTasks = subTasks.sort((a, b) => {
-          if (a.hierarchical_number && b.hierarchical_number) {
-            // שימוש במיון מספרי במקום localeCompare למנוע שגיאות
-            const aNum = a.hierarchical_number.split('.').map(Number);
-            const bNum = b.hierarchical_number.split('.').map(Number);
-            
-            for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
-              if (aNum[i] !== bNum[i]) {
-                return aNum[i] - bNum[i];
+          if (isValidString(a.hierarchical_number) && isValidString(b.hierarchical_number)) {
+            try {
+              const aNum = (a.hierarchical_number as string).split('.').map(Number);
+              const bNum = (b.hierarchical_number as string).split('.').map(Number);
+              
+              for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
+                if (aNum[i] !== bNum[i]) {
+                  return aNum[i] - bNum[i];
+                }
               }
+              
+              return aNum.length - bNum.length;
+            } catch (error) {
+              console.error('שגיאה במיון תתי-משימות לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
+              return isValidString(a.title) && isValidString(b.title) ? 
+                a.title.localeCompare(b.title || '') || 0 : 0;
             }
-            
-            return aNum.length - bNum.length;
-          } else if (a.hierarchical_number) {
+          } else if (isValidString(a.hierarchical_number)) {
             return -1; // a מופיע קודם
-          } else if (b.hierarchical_number) {
+          } else if (isValidString(b.hierarchical_number)) {
             return 1; // b מופיע קודם
           }
-          return a.title?.localeCompare(b.title || '') || 0;
+          return isValidString(a.title) && isValidString(b.title) ? 
+            a.title.localeCompare(b.title || '') || 0 : 0;
         });
         
         console.log(`נמצאו ${sortedSubTasks.length} תתי-משימות למשימה ${selectedParent.title}`);
@@ -471,26 +495,37 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         task.parent_task_id === taskId && task.id !== (task?.id || '')
       );
       
+      // פונקציית עזר לבדיקה האם ערך הוא מחרוזת תקינה
+      const isValidString = (value: any): boolean => {
+        return typeof value === 'string' && value !== null && value.length > 0;
+      };
+      
       // מיון לפי מספר היררכי או כותרת
       const sortedNextLevelTasks = nextLevelTasks.sort((a, b) => {
-        if (a.hierarchical_number && b.hierarchical_number) {
-          // שימוש במיון מספרי במקום localeCompare למנוע שגיאות
-          const aNum = a.hierarchical_number.split('.').map(Number);
-          const bNum = b.hierarchical_number.split('.').map(Number);
-          
-          for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
-            if (aNum[i] !== bNum[i]) {
-              return aNum[i] - bNum[i];
+        if (isValidString(a.hierarchical_number) && isValidString(b.hierarchical_number)) {
+          try {
+            const aNum = (a.hierarchical_number as string).split('.').map(Number);
+            const bNum = (b.hierarchical_number as string).split('.').map(Number);
+            
+            for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
+              if (aNum[i] !== bNum[i]) {
+                return aNum[i] - bNum[i];
+              }
             }
+            
+            return aNum.length - bNum.length;
+          } catch (error) {
+            console.error('שגיאה במיון משימות לרמה הבאה לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
+            return isValidString(a.title) && isValidString(b.title) ? 
+              a.title.localeCompare(b.title || '') || 0 : 0;
           }
-          
-          return aNum.length - bNum.length;
-        } else if (a.hierarchical_number) {
+        } else if (isValidString(a.hierarchical_number)) {
           return -1; // a מופיע קודם
-        } else if (b.hierarchical_number) {
+        } else if (isValidString(b.hierarchical_number)) {
           return 1; // b מופיע קודם
         }
-        return a.title?.localeCompare(b.title || '') || 0;
+        return isValidString(a.title) && isValidString(b.title) ? 
+          a.title.localeCompare(b.title || '') || 0 : 0;
       });
       
       console.log(`נמצאו ${sortedNextLevelTasks.length} תתי-משימות לתת-משימה ${selectedTask.title}`);

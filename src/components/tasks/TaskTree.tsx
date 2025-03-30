@@ -447,13 +447,18 @@ const TaskTree: React.FC<TaskTreeProps> = ({
         }
       });
       
+      // פונקציית עזר לבדיקה האם ערך הוא מחרוזת תקינה
+      const isValidString = (value: any): boolean => {
+        return typeof value === 'string' && value !== null && value.length > 0;
+      };
+      
       // מיון משימות האב לפי מספר היררכי או לפי תאריך יצירה אם אין מספר היררכי
       rootTasks.sort((a, b) => {
         // אם יש מספרים היררכיים לשתי המשימות
-        if (a.hierarchical_number && b.hierarchical_number) {
+        if (isValidString(a.hierarchical_number) && isValidString(b.hierarchical_number)) {
           try {
-            const aNum = a.hierarchical_number.split('.').map(Number);
-            const bNum = b.hierarchical_number.split('.').map(Number);
+            const aNum = (a.hierarchical_number as string).split('.').map(Number);
+            const bNum = (b.hierarchical_number as string).split('.').map(Number);
             
             for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
               if (aNum[i] !== bNum[i]) {
@@ -468,9 +473,9 @@ const TaskTree: React.FC<TaskTreeProps> = ({
           }
         } 
         // אם רק לאחת מהן יש מספר היררכי
-        else if (a.hierarchical_number) {
+        else if (isValidString(a.hierarchical_number)) {
           return -1; // a מופיע קודם
-        } else if (b.hierarchical_number) {
+        } else if (isValidString(b.hierarchical_number)) {
           return 1; // b מופיע קודם
         } 
         // אם אין מספרים היררכיים, מיון לפי תאריך יצירה אם קיים
@@ -488,10 +493,10 @@ const TaskTree: React.FC<TaskTreeProps> = ({
             // מיון תתי-משימות לפי מספר היררכי או תאריך יצירה
             task.children.sort((a, b) => {
               // אם יש מספרים היררכיים לשתי המשימות
-              if (a.hierarchical_number && b.hierarchical_number) {
+              if (isValidString(a.hierarchical_number) && isValidString(b.hierarchical_number)) {
                 try {
-                  const aNum = a.hierarchical_number.split('.').map(Number);
-                  const bNum = b.hierarchical_number.split('.').map(Number);
+                  const aNum = (a.hierarchical_number as string).split('.').map(Number);
+                  const bNum = (b.hierarchical_number as string).split('.').map(Number);
                   
                   for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
                     if (aNum[i] !== bNum[i]) {
@@ -506,9 +511,9 @@ const TaskTree: React.FC<TaskTreeProps> = ({
                 }
               } 
               // אם רק לאחת מהן יש מספר היררכי
-              else if (a.hierarchical_number) {
+              else if (isValidString(a.hierarchical_number)) {
                 return -1; // a מופיע קודם
-              } else if (b.hierarchical_number) {
+              } else if (isValidString(b.hierarchical_number)) {
                 return 1; // b מופיע קודם
               } 
               // אם אין מספרים היררכיים, מיון לפי תאריך יצירה אם קיים

@@ -632,6 +632,17 @@ export const taskService = {
       throw new Error(`Parent task ${parentTaskId} not found or has no hierarchical number`);
     }
     
+    // בדיקה שה-hierarchical_number הוא מחרוזת תקינה
+    const isValidString = (value: any): boolean => {
+      return typeof value === 'string' && value !== null && value.length > 0;
+    };
+    
+    if (!isValidString(parentTask.hierarchical_number)) {
+      console.warn(`Parent task ${parentTaskId} has invalid hierarchical number: ${parentTask.hierarchical_number}`);
+      // במקרה של ערך לא תקין, נחזיר ערך ברירת מחדל
+      return '1.1';
+    }
+    
     // קבלת תתי-המשימות הקיימות
     const { data, error } = await supabase
       .from('tasks')
@@ -646,11 +657,24 @@ export const taskService = {
     }
     
     if (data && data.length > 0 && data[0].hierarchical_number) {
-      // מצאנו את המספר האחרון, נגדיל את המספר האחרון ב-1
-      const parts = data[0].hierarchical_number.split('.');
-      const lastPart = parseInt(parts[parts.length - 1]);
-      parts[parts.length - 1] = (lastPart + 1).toString();
-      return parts.join('.');
+      // וידוא שה-hierarchical_number של תת-המשימה הוא מחרוזת תקינה
+      if (!isValidString(data[0].hierarchical_number)) {
+        console.warn(`Subtask of parent ${parentTaskId} has invalid hierarchical number: ${data[0].hierarchical_number}`);
+        // במקרה של ערך לא תקין, נשתמש במספר של האב ונוסיף ".1"
+        return `${parentTask.hierarchical_number}.1`;
+      }
+      
+      try {
+        // מצאנו את המספר האחרון, נגדיל את המספר האחרון ב-1
+        const parts = (data[0].hierarchical_number as string).split('.');
+        const lastPart = parseInt(parts[parts.length - 1]);
+        parts[parts.length - 1] = (lastPart + 1).toString();
+        return parts.join('.');
+      } catch (error) {
+        console.error(`Error parsing hierarchical number for subtasks of parent ${parentTaskId}:`, error);
+        // במקרה של שגיאה, נחזיר ".1" למספר של האב
+        return `${parentTask.hierarchical_number}.1`;
+      }
     }
     
     // אם אין תתי-משימות קיימות, נוסיף ".1" למספר ההיררכי של האב
@@ -1185,8 +1209,17 @@ export const taskService = {
       if (!a.hierarchical_number || !b.hierarchical_number) return 0;
       
       try {
-        const aParts = a.hierarchical_number.split('.').map(Number);
-        const bParts = b.hierarchical_number.split('.').map(Number);
+        // פונקציית עזר לבדיקה האם ערך הוא מחרוזת תקינה
+        const isValidString = (value: any): boolean => {
+          return typeof value === 'string' && value !== null && value.length > 0;
+        };
+        
+        if (!isValidString(a.hierarchical_number) || !isValidString(b.hierarchical_number)) {
+          return a.hierarchical_number ? -1 : (b.hierarchical_number ? 1 : 0);
+        }
+        
+        const aParts = (a.hierarchical_number as string).split('.').map(Number);
+        const bParts = (b.hierarchical_number as string).split('.').map(Number);
         
         for (let i = 0; i < Math.min(aParts.length, bParts.length); i++) {
           if (aParts[i] !== bParts[i]) {
@@ -1402,8 +1435,17 @@ export const taskService = {
           }
           
           try {
-            const aParts = a.hierarchical_number.split('.').map(Number);
-            const bParts = b.hierarchical_number.split('.').map(Number);
+            // פונקציית עזר לבדיקה האם ערך הוא מחרוזת תקינה
+            const isValidString = (value: any): boolean => {
+              return typeof value === 'string' && value !== null && value.length > 0;
+            };
+            
+            if (!isValidString(a.hierarchical_number) || !isValidString(b.hierarchical_number)) {
+              return a.hierarchical_number ? -1 : (b.hierarchical_number ? 1 : 0);
+            }
+            
+            const aParts = (a.hierarchical_number as string).split('.').map(Number);
+            const bParts = (b.hierarchical_number as string).split('.').map(Number);
             
             for (let i = 0; i < Math.min(aParts.length, bParts.length); i++) {
               if (aParts[i] !== bParts[i]) {
