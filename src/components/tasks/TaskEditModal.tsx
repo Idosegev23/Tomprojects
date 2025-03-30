@@ -42,7 +42,7 @@ import {
 import { AddIcon, EditIcon } from '@chakra-ui/icons';
 import { Task } from '@/types/supabase';
 import taskService from '@/lib/services/taskService';
-import { FaCalendarAlt, FaClock, FaClipboardCheck, FaList, FaTasks, FaUserCircle, FaUsers } from 'react-icons/fa';
+import { FaCalendarAlt, FaClock, FaClipboardCheck, FaList, FaTasks, FaUserCircle, FaUsers, FaChevronLeft } from 'react-icons/fa';
 import { CheckIcon } from '@chakra-ui/icons';
 
 // מדרג עדיפויות עם צבעים
@@ -105,6 +105,11 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   const [isSubtask, setIsSubtask] = useState(false);
   const [newAssignee, setNewAssignee] = useState('');
   const [activeTab, setActiveTab] = useState(0);
+  const [potentialParentTasks, setPotentialParentTasks] = useState<Task[]>([]);
+  const [childTaskOptions, setChildTaskOptions] = useState<Task[]>([]);
+  const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
+  const [selectedPath, setSelectedPath] = useState<string[]>([]);
+  const [hierarchyPath, setHierarchyPath] = useState<Array<{id: string, title: string}>>([]);
   
   const toast = useToast();
   
@@ -123,6 +128,20 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                         Array.isArray(task.assignees) ? task.assignees : [],
       });
       setIsSubtask(!!task.parent_task_id);
+      
+      // קביעת רמת המשימה בהתבסס על hierarchical_number או parent_task_id
+      if (task.parent_task_id) {
+        const level = task.hierarchical_number ? task.hierarchical_number.split('.').length : 2;
+        setSelectedPath([task.id]);
+        setHierarchyPath([{ id: task.id, title: task.title || '' }]);
+        setChildTaskOptions([]);
+        setSelectedParentId(task.parent_task_id);
+      } else {
+        setSelectedPath([]);
+        setHierarchyPath([]);
+        setChildTaskOptions([]);
+        setSelectedParentId(null);
+      }
     } else {
       // איפוס הטופס בעת יצירת משימה חדשה
       setFormData({
@@ -138,6 +157,10 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         assignees_info: [], // שימוש ב-assignees_info במקום assignees
       });
       setIsSubtask(false);
+      setSelectedPath([]);
+      setHierarchyPath([]);
+      setChildTaskOptions([]);
+      setSelectedParentId(null);
     }
     
     // טעינת משימות אב פוטנציאליות
@@ -148,31 +171,63 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         
         console.log("כל המשימות שנטענו:", tasks.length);
         
-        // סינון פשוט יותר - משימות שאין להן parent_task_id, 
-        // ולא כולל את המשימה הנוכחית עצמה
-        const filteredTasks = tasks.filter(t => {
+        // טעינת כל המשימות שיכולות לשמש כמשימות אב
+        const potentialTasks = tasks.filter(t => {
           // לא להציג את המשימה הנוכחית כמשימת אב פוטנציאלית
           if (task && t.id === task.id) return false;
           
           // לא להציג משימות שכבר הן תת-משימות של המשימה הנוכחית (אם יש)
           if (task && t.parent_task_id === task.id) return false;
           
-          // משימה יכולה להיות אב אם אין לה parent_task_id (null או undefined)
-          return t.parent_task_id === null || t.parent_task_id === undefined;
+          return true;
         });
         
-        console.log('מספר משימות אב פוטנציאליות לאחר סינון:', filteredTasks.length);
-        filteredTasks.forEach(t => {
-          console.log(`משימה: ${t.title}, ID: ${t.id}, parent_task_id: ${t.parent_task_id || 'אין'}`);
+        // מיפוי לפי id לצורך גישה מהירה
+        const tasksMap = new Map();
+        potentialTasks.forEach(t => tasksMap.set(t.id, t));
+        
+        // רישום מידע דיבוג על היררכיית המשימות
+        console.log("--------- מידע משימות ---------");
+        potentialTasks.forEach(t => {
+          console.log(`משימה: ${t.title} (ID: ${t.id}), parent_id: ${t.parent_task_id || 'אין'}, מספר היררכי: ${t.hierarchical_number || 'אין'}`);
         });
+        console.log("--------------------------------");
+        
+        setPotentialParentTasks(potentialTasks);
+        
+        // סינון משימות שורש (ללא parent_task_id)
+        const rootTasks = potentialTasks.filter(t => 
+          t.parent_task_id === null || t.parent_task_id === undefined
+        );
         
         // מיון המשימות לפי כותרת
-        const sortedParents = filteredTasks.sort((a, b) => {
-          // מיון לפי כותרת
+        const sortedRootTasks = rootTasks.sort((a, b) => {
+          // מיון לפי מספר היררכי אם קיים, אחרת לפי כותרת
+          if (a.hierarchical_number && b.hierarchical_number) {
+            return a.hierarchical_number.localeCompare(b.hierarchical_number);
+          }
           return a.title.localeCompare(b.title);
         });
         
-        setParentTasks(sortedParents);
+        setParentTasks(sortedRootTasks);
+        
+        console.log('מספר משימות אב שורשיות:', sortedRootTasks.length);
+        
+        // אם זה מצב עריכה וכבר יש משימת אב, טען את תתי-המשימות שלה
+        if (task && task.parent_task_id) {
+          const parentTask = tasksMap.get(task.parent_task_id);
+          if (parentTask) {
+            console.log(`טוען תתי-משימות של ${parentTask.title} (משימת האב הנוכחית)`);
+            
+            // מצא את כל תתי-המשימות של משימת האב
+            const subTasks = potentialTasks.filter(t => 
+              t.parent_task_id === task.parent_task_id && t.id !== task.id
+            );
+            
+            console.log(`נמצאו ${subTasks.length} תתי-משימות למשימת האב ${parentTask.title}`);
+            setChildTaskOptions(subTasks);
+          }
+        }
       } catch (error) {
         console.error('Error loading parent tasks:', error);
         toast({
@@ -243,6 +298,151 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     if (!isChecked) {
       // אם זו לא תת-משימה, מאפסים את משימת האב
       setFormData(prev => ({ ...prev, parent_task_id: null }));
+      setSelectedParentId(null);
+      setSelectedPath([]);
+      setHierarchyPath([]);
+      setChildTaskOptions([]);
+    }
+  };
+  
+  // טיפול בשינוי בחירת משימת האב
+  const handleParentTaskChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const parentId = e.target.value;
+    
+    // ניקוי מסלול ההיררכיה הקודם
+    setSelectedPath([]);
+    setHierarchyPath([]);
+    setChildTaskOptions([]);
+    
+    if (!parentId) {
+      setFormData(prev => ({ ...prev, parent_task_id: null }));
+      setSelectedParentId(null);
+      return;
+    }
+    
+    // עדכון משימת האב הנבחרת
+    setSelectedParentId(parentId);
+    setFormData(prev => ({ ...prev, parent_task_id: parentId }));
+    
+    // מציאת משימת האב הנבחרת מתוך הרשימה
+    const selectedParent = potentialParentTasks.find(task => task.id === parentId);
+    if (selectedParent) {
+      // הוספת המשימה למסלול ההיררכיה
+      setHierarchyPath([{ id: parentId, title: selectedParent.title || '' }]);
+      
+      console.log(`נבחרה משימת אב: ${selectedParent.title} (ID: ${parentId})`);
+      console.log(`מחפש תתי-משימות של ${selectedParent.title}...`);
+      
+      // הדפסת כל המשימות לצורך דיבוג
+      console.log("כל המשימות הפוטנציאליות:");
+      potentialParentTasks.forEach(t => {
+        console.log(`משימה: ${t.title} (ID: ${t.id}), parent_id: ${t.parent_task_id || 'אין'}`);
+      });
+      
+      // בדיקה אם יש תתי-משימות למשימה זו
+      try {
+        // שיפור הסינון: אנחנו רוצים את כל המשימות שה-parent_task_id שלהן הוא parentId
+        const subTasks = potentialParentTasks.filter(task => 
+          task.parent_task_id === parentId
+        );
+        
+        // הדפסת כל תתי-המשימות שנמצאו (דיבוג)
+        console.log(`----- תתי-משימות של ${selectedParent.title} -----`);
+        subTasks.forEach(st => {
+          console.log(`תת-משימה: ${st.title} (ID: ${st.id}), parent_id: ${st.parent_task_id}`);
+        });
+        console.log(`סה"כ נמצאו ${subTasks.length} תתי-משימות`);
+        console.log(`----------------------------------------`);
+        
+        // מיון לפי מספר היררכי או כותרת
+        const sortedSubTasks = subTasks.sort((a, b) => {
+          if (a.hierarchical_number && b.hierarchical_number) {
+            return a.hierarchical_number.localeCompare(b.hierarchical_number);
+          }
+          return a.title?.localeCompare(b.title || '') || 0;
+        });
+        
+        console.log(`נמצאו ${sortedSubTasks.length} תתי-משימות למשימה ${selectedParent.title}`);
+        setChildTaskOptions(sortedSubTasks);
+        
+        // אם אין תתי-משימות, מציג הודעה בלוג
+        if (sortedSubTasks.length === 0) {
+          console.log(`אין תתי-משימות למשימה ${selectedParent.title}`);
+        }
+      } catch (error) {
+        console.error('שגיאה בטעינת תתי-משימות:', error);
+        toast({
+          title: "שגיאה בטעינת תתי-משימות",
+          description: "אירעה שגיאה בטעינת תתי-המשימות",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    }
+  };
+  
+  // טיפול בשינוי בחירת תת-משימה
+  const handleSubTaskSelection = async (level: number, taskId: string) => {
+    if (!taskId) {
+      // אם נבחר הערך הריק, נשאיר את ה-parent_task_id כמשימת האב הראשית
+      const previousLevelTask = level === 0 ? selectedParentId : selectedPath[level - 1];
+      setFormData(prev => ({ ...prev, parent_task_id: previousLevelTask }));
+      
+      // ניקוי השדות בכל הרמות שלאחר הרמה הנוכחית
+      const newPath = selectedPath.slice(0, level);
+      setSelectedPath(newPath);
+      
+      const newHierarchyPath = hierarchyPath.slice(0, level + 1);
+      setHierarchyPath(newHierarchyPath);
+      return;
+    }
+    
+    // שמירת הבחירה בשלב הנוכחי
+    const selectedTask = potentialParentTasks.find(task => task.id === taskId);
+    if (!selectedTask) return;
+    
+    // עדכון מסלול ההיררכיה עד לרמה הנוכחית
+    const newPath = [...selectedPath];
+    newPath[level] = taskId;
+    setSelectedPath(newPath);
+    
+    // עדכון התצוגה של מסלול ההיררכיה
+    const newHierarchyPath = [...hierarchyPath];
+    while (newHierarchyPath.length <= level + 1) {
+      newHierarchyPath.push({ id: '', title: '' });
+    }
+    newHierarchyPath[level + 1] = { id: taskId, title: selectedTask.title || '' };
+    setHierarchyPath(newHierarchyPath.filter(item => item.id !== '')); // ניקוי פריטים ריקים
+    
+    // עדכון parent_task_id למשימה הנבחרת האחרונה
+    setFormData(prev => ({ ...prev, parent_task_id: taskId }));
+    
+    // בדיקה אם יש תתי-משימות למשימה זו
+    try {
+      const nextLevelTasks = potentialParentTasks.filter(task => 
+        task.parent_task_id === taskId && task.id !== (task?.id || '')
+      );
+      
+      // מיון לפי מספר היררכי או כותרת
+      const sortedNextLevelTasks = nextLevelTasks.sort((a, b) => {
+        if (a.hierarchical_number && b.hierarchical_number) {
+          return a.hierarchical_number.localeCompare(b.hierarchical_number);
+        }
+        return a.title?.localeCompare(b.title || '') || 0;
+      });
+      
+      console.log(`נמצאו ${sortedNextLevelTasks.length} תתי-משימות לתת-משימה ${selectedTask.title}`);
+      
+      // עדכון אפשרויות תתי-המשימות לרמה הבאה
+      if (level === 0) {
+        setChildTaskOptions(sortedNextLevelTasks);
+      } else {
+        // אם זו רמה שנייה או גבוהה יותר, נעדכן את האפשרויות בצורה מתאימה
+        // (במקרה זה אפשר להוסיף לוגיקה מורכבת יותר אם צריך)
+      }
+    } catch (error) {
+      console.error('שגיאה בטעינת תתי-משימות לרמה הבאה:', error);
     }
   };
   
@@ -277,13 +477,28 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     try {
       let result;
       
+      // הכנת אובייקט הנתונים לשליחה
+      const taskData: Partial<ExtendedTask> = {
+        ...formData,
+        project_id: projectId,
+      };
+      
+      // בדיקת האם יש צורך לעדכן את המספר ההיררכי
+      if (isSubtask && formData.parent_task_id) {
+        console.log(`יוצר/מעדכן תת-משימה ברמה: ${selectedPath.length - 1}, עם משימת אב: ${selectedParentId}`);
+        
+        // לא צריך להגדיר את hierarchical_number ידנית - השרת יחשב אותו
+        // אבל אנחנו כן מגדירים את parent_task_id
+        taskData.parent_task_id = formData.parent_task_id;
+      } else {
+        // משימת שורש ללא משימת אב
+        taskData.parent_task_id = null;
+        
+        // hierarchical_number יחושב על ידי השרת
+      }
+      
       if (isEditMode && task) {
         // עדכון משימה קיימת
-        const taskData = {
-          ...formData,
-          project_id: projectId,
-        };
-        
         result = await taskService.updateTask(task.id, taskData);
         
         toast({
@@ -310,13 +525,22 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
           return;
         }
         
-        const taskData = {
-          ...formData,
-          title: formData.title,
+        // וידוא שיש לנו את כל השדות הנדרשים
+        const newTaskData = {
+          title: formData.title || '',
+          description: formData.description || null,
           project_id: projectId,
+          status: formData.status || 'todo',
+          priority: formData.priority || 'medium',
+          parent_task_id: taskData.parent_task_id,
+          start_date: formData.start_date || null,
+          due_date: formData.due_date || null,
+          responsible: formData.responsible || null,
+          assignees: Array.isArray(formData.assignees) ? formData.assignees : 
+                     Array.isArray(formData.assignees_info) ? formData.assignees_info : [],
         };
         
-        result = await taskService.createTask(taskData);
+        result = await taskService.createTask(newTaskData);
         
         toast({
           title: "המשימה נוצרה בהצלחה",
@@ -560,6 +784,13 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   // רינדור תת-משימה
   const renderRelationships = () => (
     <VStack spacing={4} align="stretch">
+      <Box mb={4}>
+        <Text fontSize="lg" fontWeight="bold" mb={2}>קשרים היררכיים</Text>
+        <Text fontSize="sm" color="gray.600">
+          משימות יכולות להיות מסודרות בצורה היררכית. בחר משימת אב ואז תוכל לבחור גם תת-משימה מתוך הרשימה אם קיימות תתי-משימות.
+        </Text>
+      </Box>
+      
       <FormControl display="flex" alignItems="center">
         <FormLabel mb={0} htmlFor="subtask-toggle" fontWeight="bold">
           הגדר כתת-משימה
@@ -573,31 +804,120 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
       </FormControl>
       
       {isSubtask && (
-        <FormControl isInvalid={!!errors.parent_task_id}>
-          <FormLabel fontWeight="bold">משימת אב</FormLabel>
-          {parentTasks.length > 0 ? (
-            <Select 
-              name="parent_task_id" 
-              value={formData.parent_task_id || ''} 
-              onChange={handleChange}
-              placeholder="בחר משימת אב"
-              borderRadius="md"
-            >
-              {parentTasks.map(parentTask => (
-                <option key={parentTask.id} value={parentTask.id}>
-                  {parentTask.hierarchical_number ? `${parentTask.hierarchical_number} - ` : ''}
-                  {parentTask.title}
-                  {parentTask.status && ` (${getStatusLabel(parentTask.status)})`}
-                </option>
-              ))}
-            </Select>
-          ) : (
-            <Text color="orange.500" mt={2}>
-              אין משימות שיכולות לשמש כמשימות אב. צור קודם משימות ראשיות.
-            </Text>
+        <>
+          {/* בחירת משימת אב */}
+          <FormControl isInvalid={!!errors.parent_task_id}>
+            <FormLabel fontWeight="bold">משימת אב</FormLabel>
+            {parentTasks.length > 0 ? (
+              <Select 
+                name="parent_task_id"
+                value={selectedParentId || ''} 
+                onChange={handleParentTaskChange}
+                placeholder="בחר משימת אב"
+                borderRadius="md"
+              >
+                <option value="">בחר משימת אב</option>
+                {parentTasks.map(parentTask => (
+                  <option key={parentTask.id} value={parentTask.id}>
+                    {parentTask.hierarchical_number ? `${parentTask.hierarchical_number} - ` : ''}
+                    {parentTask.title}
+                    {parentTask.status && ` (${getStatusLabel(parentTask.status)})`}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <Text color="orange.500" mt={2}>
+                אין משימות שיכולות לשמש כמשימות אב. צור קודם משימות ראשיות.
+              </Text>
+            )}
+            {errors.parent_task_id && <FormErrorMessage>{errors.parent_task_id}</FormErrorMessage>}
+          </FormControl>
+          
+          {/* תצוגת מסלול היררכיה */}
+          {hierarchyPath.length > 0 && (
+            <Box mt={2} mb={2}>
+              <Text fontSize="sm" fontWeight="medium" mb={1}>מסלול היררכיה:</Text>
+              <Flex wrap="wrap" gap={1} alignItems="center">
+                {hierarchyPath.map((item, index) => (
+                  <React.Fragment key={item.id || index}>
+                    {index > 0 && <Icon as={FaChevronLeft} color="gray.500" fontSize="xs" />}
+                    <Tag 
+                      size="md" 
+                      colorScheme={index === hierarchyPath.length - 1 ? "blue" : "gray"}
+                      variant={index === hierarchyPath.length - 1 ? "solid" : "subtle"}
+                    >
+                      {item.title}
+                    </Tag>
+                  </React.Fragment>
+                ))}
+              </Flex>
+            </Box>
           )}
-          {errors.parent_task_id && <FormErrorMessage>{errors.parent_task_id}</FormErrorMessage>}
-        </FormControl>
+          
+          {/* בחירת תת-משימה אם יש משימת אב נבחרת */}
+          {selectedParentId && (
+            <FormControl mt={3}>
+              <FormLabel fontWeight="bold">
+                תת-משימה {childTaskOptions.length === 0 ? '(אין תתי-משימות זמינות)' : '(אופציונלי)'}
+              </FormLabel>
+              <Select
+                value={selectedPath[0] || ''}
+                onChange={(e) => handleSubTaskSelection(0, e.target.value)}
+                placeholder="בחר תת-משימה (אופציונלי)"
+                borderRadius="md"
+                isDisabled={childTaskOptions.length === 0}
+              >
+                <option value="">השאר תחת המשימה הראשית</option>
+                {childTaskOptions.map(task => (
+                  <option key={task.id} value={task.id}>
+                    {task.hierarchical_number ? `${task.hierarchical_number} - ` : ''}
+                    {task.title}
+                  </option>
+                ))}
+              </Select>
+              <Text fontSize="sm" color="gray.500" mt={1}>
+                {childTaskOptions.length > 0 
+                  ? "בחר תת-משימה אם ברצונך למקם את המשימה החדשה תחתיה במקום תחת המשימה הראשית" 
+                  : "אין תתי-משימות למשימה זו. המשימה החדשה תהיה תת-משימה ישירה של המשימה הראשית"}
+              </Text>
+            </FormControl>
+          )}
+          
+          {/* שדה בחירה רקורסיבי עבור תתי-משימות ברמה השנייה */}
+          {selectedPath.length > 0 && selectedPath[0] && (
+            <FormControl mt={3}>
+              <FormLabel fontWeight="bold">תת-משימה נוספת (אופציונלי)</FormLabel>
+              <Select
+                value={selectedPath[1] || ''}
+                onChange={(e) => handleSubTaskSelection(1, e.target.value)}
+                placeholder="בחר תת-משימה נוספת (אופציונלי)"
+                borderRadius="md"
+              >
+                <option value="">השאר תחת התת-משימה הנוכחית</option>
+                {potentialParentTasks
+                  .filter(task => task.parent_task_id === selectedPath[0])
+                  .map(task => (
+                    <option key={task.id} value={task.id}>
+                      {task.hierarchical_number ? `${task.hierarchical_number} - ` : ''}
+                      {task.title}
+                    </option>
+                  ))}
+              </Select>
+              <Text fontSize="sm" color="gray.500" mt={1}>
+                בחר תת-משימה נוספת אם ברצונך למקם את המשימה החדשה עמוק יותר בהיררכיה
+              </Text>
+            </FormControl>
+          )}
+          
+          <Box mt={4} p={3} bg="blue.50" borderRadius="md" borderWidth="1px" borderColor="blue.200">
+            <Text fontSize="sm" fontWeight="medium" color="blue.700">
+              <strong>הערה:</strong> המספור ההיררכי ייווצר אוטומטית בהתאם למשימת האב או תת-המשימה שנבחרה.
+            </Text>
+            <Text fontSize="sm" color="blue.600" mt={1}>
+              המשימה החדשה תמוקם תחת המשימה האחרונה שבחרת במסלול ההיררכיה.
+            </Text>
+          </Box>
+        </>
       )}
     </VStack>
   );

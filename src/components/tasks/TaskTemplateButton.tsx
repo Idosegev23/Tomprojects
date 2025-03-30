@@ -151,38 +151,29 @@ const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({
     }
   };
   
-  // הצגת הכפתור לפי סגנון שהועבר
-  const getButton = () => {
-    if (buttonText) {
-      return (
-        <Button
-          leftIcon={<FiCopy />}
-          variant={variant}
-          size={size}
-          isLoading={loading}
-        >
-          {buttonText}
-        </Button>
-      );
-    }
-    
-    return (
-      <IconButton
-        icon={<FiCopy />}
-        variant={variant}
-        size={size}
-        aria-label="תבניות משימות"
-        isLoading={loading}
-      />
-    );
-  };
-  
   return (
     <>
       <Menu closeOnSelect={true}>
-        <MenuButton as={React.Fragment}>
-          {getButton()}
-        </MenuButton>
+        {buttonText ? (
+          <MenuButton
+            as={Button}
+            leftIcon={<FiCopy />}
+            variant={variant}
+            size={size}
+            isLoading={loading}
+          >
+            {buttonText}
+          </MenuButton>
+        ) : (
+          <MenuButton
+            as={IconButton}
+            icon={<FiCopy />}
+            variant={variant}
+            size={size}
+            aria-label="תבניות משימות"
+            isLoading={loading}
+          />
+        )}
         <MenuList zIndex={1000} onBlur={(e) => {
           // סגירת התפריט כאשר הוא מאבד פוקוס אם הלחיצה הייתה מחוץ לתפריט
           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
