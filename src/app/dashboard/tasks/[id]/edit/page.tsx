@@ -22,6 +22,7 @@ import {
   Grid,
   GridItem,
   InputGroup,
+  InputRightElement,
   IconButton,
   Badge,
   useColorModeValue,
@@ -62,16 +63,14 @@ export default function EditTask() {
     stage_id: '',
     parent_task_id: '',
     hierarchical_number: '',
-    priority: '',
-    status: '',
+    priority: 'medium',
+    status: 'todo',
     due_date: '',
     category: '',
     responsible: '',
     dropbox_folder: '',
     estimated_hours: 0,
     assignees: [],
-    tags: [],
-    start_date: '',
   });
   
   const [projects, setProjects] = useState<Project[]>([]);
@@ -137,7 +136,7 @@ export default function EditTask() {
         
         setOriginalTask(taskData);
         
-        // עדכון ערכי הטופס
+        // עדכון ערכי הטופס - רק השדות הקיימים במסד הנתונים
         setTask({
           title: taskData.title,
           description: taskData.description || '',
@@ -145,15 +144,13 @@ export default function EditTask() {
           stage_id: taskData.stage_id || '',
           parent_task_id: taskData.parent_task_id || '',
           hierarchical_number: taskData.hierarchical_number || '',
-          priority: taskData.priority,
-          status: taskData.status,
+          priority: taskData.priority || 'medium',
+          status: taskData.status || 'todo',
           due_date: formatDateForInput(taskData.due_date),
-          start_date: formatDateForInput(taskData.start_date),
           category: taskData.category || '',
           responsible: taskData.responsible || '',
           dropbox_folder: taskData.dropbox_folder || '',
           estimated_hours: taskData.estimated_hours || 0,
-          tags: taskData.tags || [],
           assignees: taskData.assignees || [],
         });
         
@@ -370,20 +367,20 @@ export default function EditTask() {
         throw new Error('לא ניתן לעדכן משימה שלא נטענה כראוי');
       }
       
-      // יצירת אובייקט העדכון
+      // יצירת אובייקט העדכון - רק שדות הקיימים במסד הנתונים
       const updateData: Partial<ExtendedTask> = {
         title: task.title,
         description: task.description,
         project_id: task.project_id,
         stage_id: task.stage_id || null,
         parent_task_id: task.parent_task_id || null,
+        hierarchical_number: task.hierarchical_number || null,
         priority: task.priority,
         status: task.status,
         category: task.category || null,
         responsible: task.responsible || null,
         dropbox_folder: task.dropbox_folder || '',
         estimated_hours: task.estimated_hours,
-        tags: task.tags || [],
         assignees: task.assignees || [],
       };
       
@@ -392,12 +389,6 @@ export default function EditTask() {
         updateData.due_date = task.due_date;
       } else {
         updateData.due_date = null;
-      }
-      
-      if (task.start_date) {
-        updateData.start_date = task.start_date;
-      } else {
-        updateData.start_date = null;
       }
       
       // עדכון המשימה
@@ -537,6 +528,7 @@ export default function EditTask() {
                     value={task.project_id || ''}
                     onChange={handleChange}
                     placeholder="בחר פרויקט"
+                    isDisabled={projects.length === 0}
                     bg="white"
                   >
                     {projects.map(project => (
@@ -544,10 +536,15 @@ export default function EditTask() {
                     ))}
                   </Select>
                   {errors.project_id && <FormErrorMessage>{errors.project_id}</FormErrorMessage>}
+                  {projects.length === 0 && (
+                    <Text fontSize="sm" color="red.500" mt={1}>
+                      אין פרויקטים זמינים. אנא צור פרויקט תחילה.
+                    </Text>
+                  )}
                 </FormControl>
                 
                 {/* שלב בפרויקט */}
-                <FormControl isRequired={stages.length > 0} isInvalid={!!errors.stage_id}>
+                <FormControl isInvalid={!!errors.stage_id}>
                   <FormLabel display="flex" alignItems="center">
                     <Icon as={FiLayers} mr={2} color="purple.500" />
                     שלב בפרויקט
@@ -556,8 +553,8 @@ export default function EditTask() {
                     name="stage_id"
                     value={task.stage_id || ''}
                     onChange={handleChange}
-                    placeholder={stages.length === 0 ? "אין שלבים זמינים" : "בחר שלב בפרויקט"}
-                    isDisabled={!task.project_id || stages.length === 0 || loadingStages}
+                    placeholder={loadingStages ? "טוען שלבים..." : stages.length === 0 ? "אין שלבים זמינים" : "בחר שלב"}
+                    isDisabled={loadingStages || stages.length === 0 || !task.project_id}
                     bg="white"
                   >
                     {stages.map(stage => (
@@ -570,21 +567,21 @@ export default function EditTask() {
                 {/* משימת אב */}
                 <FormControl>
                   <FormLabel display="flex" alignItems="center">
-                    <Icon as={FiLink} mr={2} color="orange.500" />
+                    <Icon as={FiLayers} mr={2} color="teal.500" />
                     משימת אב
                   </FormLabel>
                   <Select
                     name="parent_task_id"
                     value={task.parent_task_id || ''}
                     onChange={handleChange}
-                    placeholder="בחר משימת אב (אופציונלי)"
-                    isDisabled={!task.project_id || parentTasks.length === 0 || tasksLoading}
+                    placeholder={tasksLoading ? "טוען משימות..." : parentTasks.length === 0 ? "אין משימות זמינות" : "בחר משימת אב (אופציונלי)"}
+                    isDisabled={tasksLoading || parentTasks.length === 0 || !task.project_id}
                     bg="white"
                   >
                     <option value="">ללא משימת אב</option>
                     {parentTasks.map(parentTask => (
                       <option key={parentTask.id} value={parentTask.id}>
-                        {parentTask.hierarchical_number ? `${parentTask.hierarchical_number} - ` : ''}{parentTask.title}
+                        {parentTask.hierarchical_number ? `${parentTask.hierarchical_number}. ` : ''}{parentTask.title}
                       </option>
                     ))}
                   </Select>
@@ -599,7 +596,7 @@ export default function EditTask() {
                     </FormLabel>
                     <Input
                       name="hierarchical_number"
-                      value={task.hierarchical_number || generateHierarchicalNumber()}
+                      value={(task.hierarchical_number || generateHierarchicalNumber() || '')}
                       onChange={handleChange}
                       placeholder="יחושב אוטומטית"
                       isReadOnly
@@ -614,22 +611,24 @@ export default function EditTask() {
                 {/* קטגוריה */}
                 <FormControl>
                   <FormLabel display="flex" alignItems="center">
-                    <Icon as={FiTag} mr={2} color="green.500" />
+                    <Icon as={FiTag} mr={2} color="orange.500" />
                     קטגוריה
                   </FormLabel>
                   <Select
                     name="category"
                     value={task.category || ''}
                     onChange={handleChange}
+                    placeholder="בחר קטגוריה (אופציונלי)"
                     bg="white"
                   >
                     <option value="">ללא קטגוריה</option>
-                    <option value="פיתוח">פיתוח</option>
-                    <option value="עיצוב">עיצוב</option>
-                    <option value="תוכן">תוכן</option>
-                    <option value="שיווק">שיווק</option>
-                    <option value="תשתיות">תשתיות</option>
-                    <option value="אחר">אחר</option>
+                    <option value="development">פיתוח</option>
+                    <option value="design">עיצוב</option>
+                    <option value="documentation">תיעוד</option>
+                    <option value="testing">בדיקות</option>
+                    <option value="deployment">הטמעה</option>
+                    <option value="maintenance">תחזוקה</option>
+                    <option value="other">אחר</option>
                   </Select>
                 </FormControl>
                 
@@ -643,7 +642,7 @@ export default function EditTask() {
                     name="responsible"
                     value={task.responsible || ''}
                     onChange={handleChange}
-                    placeholder="הזן שם האחראי"
+                    placeholder="שם האחראי לביצוע המשימה"
                     bg="white"
                   />
                 </FormControl>
@@ -651,42 +650,18 @@ export default function EditTask() {
                 {/* תיקיית דרופבוקס */}
                 <FormControl>
                   <FormLabel display="flex" alignItems="center">
-                    <Icon as={FiDroplet} mr={2} color="blue.400" />
-                    תיקיית דרופבוקס
+                    <Icon as={FiFolder} mr={2} color="blue.400" />
+                    תיקיית Dropbox
                   </FormLabel>
                   <Input
                     name="dropbox_folder"
                     value={task.dropbox_folder || ''}
                     onChange={handleChange}
-                    placeholder="הזן קישור לתיקיית דרופבוקס"
+                    placeholder="קישור לתיקיית Dropbox"
                     bg="white"
                   />
                 </FormControl>
               </SimpleGrid>
-            </Card>
-            
-            <Card bg={cardBg} borderColor={borderColor} borderWidth="1px" p={6} mb={6} borderRadius="md" boxShadow="sm">
-              <Text fontSize="lg" fontWeight="bold" mb={4} display="flex" alignItems="center">
-                <Icon as={FiUsers} mr={2} />
-                צוות המשימה
-              </Text>
-              
-              <FormControl>
-                <FormLabel display="flex" alignItems="center">
-                  <Icon as={FiUsers} mr={2} color="blue.500" />
-                  אחראים למשימה
-                </FormLabel>
-                <Input
-                  name="assignees"
-                  placeholder="הוסף חברי צוות מופרדים בפסיקים"
-                  value={task.assignees?.join(', ') || ''}
-                  onChange={(e) => handleAssigneesChange(e.target.value)}
-                  bg="white"
-                />
-                <Text fontSize="xs" color="gray.500" mt={1}>
-                  הזן שמות או מזהים מופרדים בפסיקים
-                </Text>
-              </FormControl>
             </Card>
             
             <Card bg={cardBg} borderColor={borderColor} borderWidth="1px" p={6} mb={6} borderRadius="md" boxShadow="sm">
@@ -704,13 +679,14 @@ export default function EditTask() {
                   </FormLabel>
                   <Select
                     name="priority"
-                    value={task.priority || ''}
+                    value={task.priority || 'medium'}
                     onChange={handleChange}
                     bg="white"
                   >
                     <option value="low">נמוכה</option>
                     <option value="medium">בינונית</option>
                     <option value="high">גבוהה</option>
+                    <option value="urgent">דחופה</option>
                   </Select>
                 </FormControl>
                 
@@ -722,7 +698,7 @@ export default function EditTask() {
                   </FormLabel>
                   <Select
                     name="status"
-                    value={task.status || ''}
+                    value={task.status || 'todo'}
                     onChange={handleChange}
                     bg="white"
                   >
@@ -730,25 +706,28 @@ export default function EditTask() {
                     <option value="in_progress">בתהליך</option>
                     <option value="review">בבדיקה</option>
                     <option value="done">הושלם</option>
+                    <option value="blocked">חסום</option>
                   </Select>
                 </FormControl>
                 
                 {/* זמן משוער לביצוע */}
                 <FormControl isInvalid={!!errors.estimated_hours}>
                   <FormLabel display="flex" alignItems="center">
-                    <Icon as={FiClock} mr={2} color="orange.500" />
-                    זמן משוער (שעות)
+                    <Icon as={FiClock} mr={2} color="cyan.500" />
+                    שעות משוערות
                   </FormLabel>
                   <InputGroup>
                     <Input
                       name="estimated_hours"
                       type="number"
-                      value={task.estimated_hours || 0}
+                      min="0"
+                      step="0.5"
+                      value={task.estimated_hours?.toString() || ''}
                       onChange={handleChange}
-                      placeholder="הזן מספר שעות"
+                      placeholder="0"
                       bg="white"
-                      min={0}
                     />
+                    <InputRightElement pointerEvents="none" children="שעות" />
                   </InputGroup>
                   {errors.estimated_hours && <FormErrorMessage>{errors.estimated_hours}</FormErrorMessage>}
                 </FormControl>
@@ -763,7 +742,7 @@ export default function EditTask() {
                 {/* תאריך יעד */}
                 <FormControl>
                   <FormLabel display="flex" alignItems="center">
-                    <Icon as={FiCalendar} mr={2} color="red.500" />
+                    <Icon as={FiCalendar} mr={2} color="yellow.500" />
                     תאריך יעד
                   </FormLabel>
                   <Input
@@ -835,6 +814,19 @@ export default function EditTask() {
                 </Box>
                 
                 <Divider />
+                
+                <FormControl mt={4}>
+                  <FormLabel display="flex" alignItems="center">
+                    <Icon as={FiUsers} mr={2} color="blue.500" />
+                    צוות המשימה
+                  </FormLabel>
+                  <Input
+                    name="assignees"
+                    placeholder="הוסף חברי צוות מופרדים בפסיקים"
+                    value={task.assignees?.join(', ') || ''}
+                    onChange={(e) => handleAssigneesChange(e.target.value)}
+                  />
+                </FormControl>
                 
                 <Button 
                   colorScheme="primary" 
