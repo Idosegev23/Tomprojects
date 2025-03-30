@@ -170,10 +170,14 @@ const StageEditModal: React.FC<StageEditModalProps> = ({
       const prefixes = new Set<string>();
       tasks.forEach(task => {
         if (task.hierarchical_number) {
-          // הוצאת הספרה הראשית (לפני הנקודה הראשונה)
-          const mainNumber = task.hierarchical_number.split('.')[0];
-          if (mainNumber) {
-            prefixes.add(mainNumber);
+          try {
+            // הוצאת הספרה הראשית (לפני הנקודה הראשונה)
+            const mainNumber = task.hierarchical_number.split('.')[0];
+            if (mainNumber) {
+              prefixes.add(mainNumber);
+            }
+          } catch (error) {
+            console.error('שגיאה בחילוץ המספר ההיררכי הראשי:', error, task.hierarchical_number);
           }
         }
       });

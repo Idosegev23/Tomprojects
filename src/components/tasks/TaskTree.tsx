@@ -451,16 +451,21 @@ const TaskTree: React.FC<TaskTreeProps> = ({
       rootTasks.sort((a, b) => {
         // אם יש מספרים היררכיים לשתי המשימות
         if (a.hierarchical_number && b.hierarchical_number) {
-          const aNum = a.hierarchical_number.split('.').map(Number);
-          const bNum = b.hierarchical_number.split('.').map(Number);
-          
-          for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
-            if (aNum[i] !== bNum[i]) {
-              return aNum[i] - bNum[i];
+          try {
+            const aNum = a.hierarchical_number.split('.').map(Number);
+            const bNum = b.hierarchical_number.split('.').map(Number);
+            
+            for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
+              if (aNum[i] !== bNum[i]) {
+                return aNum[i] - bNum[i];
+              }
             }
+            
+            return aNum.length - bNum.length;
+          } catch (error) {
+            console.error('שגיאה במיון לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
+            return 0;
           }
-          
-          return aNum.length - bNum.length;
         } 
         // אם רק לאחת מהן יש מספר היררכי
         else if (a.hierarchical_number) {
@@ -484,16 +489,21 @@ const TaskTree: React.FC<TaskTreeProps> = ({
             task.children.sort((a, b) => {
               // אם יש מספרים היררכיים לשתי המשימות
               if (a.hierarchical_number && b.hierarchical_number) {
-                const aNum = a.hierarchical_number.split('.').map(Number);
-                const bNum = b.hierarchical_number.split('.').map(Number);
-                
-                for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
-                  if (aNum[i] !== bNum[i]) {
-                    return aNum[i] - bNum[i];
+                try {
+                  const aNum = a.hierarchical_number.split('.').map(Number);
+                  const bNum = b.hierarchical_number.split('.').map(Number);
+                  
+                  for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
+                    if (aNum[i] !== bNum[i]) {
+                      return aNum[i] - bNum[i];
+                    }
                   }
+                  
+                  return aNum.length - bNum.length;
+                } catch (error) {
+                  console.error('שגיאה במיון תתי-משימות לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
+                  return 0;
                 }
-                
-                return aNum.length - bNum.length;
               } 
               // אם רק לאחת מהן יש מספר היררכי
               else if (a.hierarchical_number) {

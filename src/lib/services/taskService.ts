@@ -1184,16 +1184,21 @@ export const taskService = {
     return allTasks.sort((a, b) => {
       if (!a.hierarchical_number || !b.hierarchical_number) return 0;
       
-      const aParts = a.hierarchical_number.split('.').map(Number);
-      const bParts = b.hierarchical_number.split('.').map(Number);
-      
-      for (let i = 0; i < Math.min(aParts.length, bParts.length); i++) {
-        if (aParts[i] !== bParts[i]) {
-          return aParts[i] - bParts[i];
+      try {
+        const aParts = a.hierarchical_number.split('.').map(Number);
+        const bParts = b.hierarchical_number.split('.').map(Number);
+        
+        for (let i = 0; i < Math.min(aParts.length, bParts.length); i++) {
+          if (aParts[i] !== bParts[i]) {
+            return aParts[i] - bParts[i];
+          }
         }
+        
+        return aParts.length - bParts.length;
+      } catch (error) {
+        console.error('שגיאה במיון לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
+        return 0;
       }
-      
-      return aParts.length - bParts.length;
     });
   },
   
@@ -1396,16 +1401,21 @@ export const taskService = {
             return a.hierarchical_number ? -1 : (b.hierarchical_number ? 1 : 0);
           }
           
-          const aParts = a.hierarchical_number.split('.').map(Number);
-          const bParts = b.hierarchical_number.split('.').map(Number);
-          
-          for (let i = 0; i < Math.min(aParts.length, bParts.length); i++) {
-            if (aParts[i] !== bParts[i]) {
-              return aParts[i] - bParts[i];
+          try {
+            const aParts = a.hierarchical_number.split('.').map(Number);
+            const bParts = b.hierarchical_number.split('.').map(Number);
+            
+            for (let i = 0; i < Math.min(aParts.length, bParts.length); i++) {
+              if (aParts[i] !== bParts[i]) {
+                return aParts[i] - bParts[i];
+              }
             }
+            
+            return aParts.length - bParts.length;
+          } catch (error) {
+            console.error('שגיאה במיון לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
+            return 0;
           }
-          
-          return aParts.length - bParts.length;
         });
       };
       

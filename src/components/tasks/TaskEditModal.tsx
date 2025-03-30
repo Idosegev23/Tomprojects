@@ -143,7 +143,14 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
       
       // קביעת רמת המשימה בהתבסס על hierarchical_number או parent_task_id
       if (task.parent_task_id) {
-        const level = task.hierarchical_number ? task.hierarchical_number.split('.').length : 2;
+        let level = 2; // ברירת מחדל
+        try {
+          if (task.hierarchical_number) {
+            level = task.hierarchical_number.split('.').length;
+          }
+        } catch (error) {
+          console.error('שגיאה בחישוב רמת המשימה:', error, task.hierarchical_number);
+        }
         setSelectedPath([task.id]);
         setHierarchyPath([{ id: task.id, title: task.title || '' }]);
         setChildTaskOptions([]);
