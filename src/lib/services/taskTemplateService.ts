@@ -11,35 +11,66 @@ export const taskTemplateService = {
    */
   async saveTemplate(templateData: {
     name: string;
-    is_default: boolean;
+    is_default: boolean; // השדה נשאר לתאימות אחורה אבל לא נעשה בו שימוש
     task_data: Partial<Task>;
   }): Promise<Task> {
     try {
-      console.log('שומר תבנית משימה חדשה:', templateData.name);
+      console.log('שומר תבנית משימה חדשה');
       
-      // יצירת שם התבנית
-      const templateTitle = `[TEMPLATE] ${templateData.name || templateData.task_data.title || ''}`;
+      // חישוב מספר הירארכי חדש - קבלת כל התבניות הקיימות לחישוב המספר הבא
+      let hierarchicalNumber = '1'; // ברירת מחדל
+      try {
+        const templates = await this.getAllTemplates();
+        console.log(`נמצאו ${templates.length} תבניות קיימות לחישוב המספר ההיררכי`);
+        
+        if (templates.length > 0) {
+          // מיון התבניות לפי המספר ההיררכי
+          const sortedTemplates = templates.filter(t => t.hierarchical_number)
+            .sort((a, b) => {
+              if (!a.hierarchical_number) return 1;
+              if (!b.hierarchical_number) return -1;
+              return parseInt(a.hierarchical_number) - parseInt(b.hierarchical_number);
+            });
+          
+          // מציאת המספר האחרון ששימש
+          const lastTemplate = sortedTemplates[sortedTemplates.length - 1];
+          if (lastTemplate && lastTemplate.hierarchical_number) {
+            // חישוב המספר הבא
+            const lastNumber = parseInt(lastTemplate.hierarchical_number);
+            hierarchicalNumber = String(lastNumber + 1);
+            console.log(`המספר ההיררכי האחרון: ${lastTemplate.hierarchical_number}, המספר החדש: ${hierarchicalNumber}`);
+          }
+        }
+      } catch (error) {
+        console.warn('שגיאה בחישוב מספר היררכי חדש:', error);
+        // נשאר עם ברירת המחדל '1'
+      }
       
-      // יצירת אובייקט המשימה שיישמר כתבנית
-      const templateTask: NewTask = {
-        title: templateTitle,
-        project_id: null, // תבניות לא משויכות לפרויקט - המרה מפורשת לסוג הנכון
+      // הכנת אובייקט המשימה החדש (תבנית)
+      const templateTask: Partial<Task> = {
+        id: crypto.randomUUID(), // יצירת מזהה חדש
+        title: '',
+        description: templateData.task_data.description,
+        project_id: undefined, // תבניות הן גלובליות, בסופו של דבר נשמר כ-null בבסיס הנתונים
+        hierarchical_number: hierarchicalNumber, // הגדרת המספר ההיררכי החדש
+        parent_task_id: templateData.task_data.parent_task_id, // העברת משימת אב אם קיימת
+        status: templateData.task_data.status,
+        priority: templateData.task_data.priority,
+        category: templateData.task_data.category,
+        responsible: templateData.task_data.responsible, // שימוש במערכת כאחראי לתבניות ברירת מחדל
+        due_date: templateData.task_data.due_date, // תאריך יעד אם קיים
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        // העתקת נתונים נוספים מהמשימה המקורית
-        description: templateData.task_data.description,
-        category: templateData.task_data.category,
-        status: templateData.task_data.status || 'לא התחיל',
-        priority: templateData.task_data.priority || 'בינוני',
-        responsible: templateData.task_data.responsible,
-        hierarchical_number: templateData.task_data.hierarchical_number,
-        parent_task_id: templateData.task_data.parent_task_id,
       };
       
-      // תיעוד המידע לגבי השמירה
-      console.log('נתוני תבנית משימה לשמירה:', {
-        title: templateTask.title,
-      });
+      // קביעת שם התבנית
+      const baseTemplateName = templateData.name || templateData.task_data.title || 'תבנית ללא שם';
+      
+      // כבר לא משתמשים בתג [TEMPLATE] - שימוש בכותרת כפי שהיא
+      templateTask.title = baseTemplateName;
+      console.log(`שומר תבנית בשם: ${baseTemplateName} עם מספר היררכי ${hierarchicalNumber}`);
+      
+      console.log('פרטי התבנית שנשמרת:', templateTask);
       
       // שמירת התבנית בטבלת המשימות
       const { data, error } = await supabase
@@ -53,11 +84,11 @@ export const taskTemplateService = {
         throw new Error(`שגיאה בשמירת תבנית משימה: ${error.message}`);
       }
       
-      console.log('תבנית המשימה נשמרה בהצלחה:', data.title);
+      console.log('תבנית משימה נשמרה בהצלחה:', data);
       return data;
-    } catch (err) {
-      console.error('שגיאה בשמירת תבנית משימה:', err);
-      throw new Error(err instanceof Error ? err.message : 'שגיאה לא ידועה');
+    } catch (error) {
+      console.error('שגיאה בשמירת תבנית משימה:', error);
+      throw new Error(`שגיאה בשמירת תבנית משימה: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`);
     }
   },
   
@@ -67,12 +98,12 @@ export const taskTemplateService = {
    */
   async getAllTemplates(): Promise<Task[]> {
     try {
-      console.log('מחפש תבניות משימות לפי תיוג בכותרת...');
-      // מחזיר רק משימות שהן תבניות (לפי תיוג בכותרת)
+      console.log('מחפש תבניות משימות...');
+      // מחזיר רק משימות שאין להן פרויקט ספציפי כי אלה התבניות
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
-        .ilike('title', '%[TEMPLATE]%')
+        .is('project_id', null)
         .order('title', { ascending: true });
       
       if (error) {
@@ -80,7 +111,7 @@ export const taskTemplateService = {
         throw new Error(error.message);
       }
       
-      console.log(`נמצאו ${data?.length || 0} תבניות משימות לפי תיוג בכותרת`);
+      console.log(`נמצאו ${data?.length || 0} תבניות משימות`);
       return data || [];
     } catch (err) {
       console.error('שגיאה בקבלת תבניות משימות:', err);
@@ -94,11 +125,12 @@ export const taskTemplateService = {
    */
   async getDefaultTemplates(): Promise<Task[]> {
     try {
-      // מחזיר רק משימות שהן תבניות ברירת מחדל לפי הכותרת
+      // תבניות ברירת מחדל הן תבניות שהאחראי עליהן הוא "מערכת"
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
-        .ilike('title', '%[TEMPLATE-DEFAULT]%')
+        .is('project_id', null)
+        .eq('responsible', 'מערכת')  // תבניות ברירת מחדל מוגדרות כמשויכות למערכת
         .order('title', { ascending: true });
       
       if (error) {
@@ -125,7 +157,7 @@ export const taskTemplateService = {
         .from('tasks')
         .select('*')
         .eq('id', id)
-        .ilike('title', '%[TEMPLATE]%')
+        .is('project_id', null)  // תבניות הן משימות ללא פרויקט ספציפי
         .single();
       
       if (error) {
@@ -158,16 +190,9 @@ export const taskTemplateService = {
         throw new Error(`לא נמצאה תבנית משימה עם מזהה ${id}`);
       }
       
-      // שומר על התיוג של התבנית בכותרת
-      let title = templateData.title || existingTemplate.title;
-      if (!title.includes('[TEMPLATE]')) {
-        title = `[TEMPLATE] ${title.replace(/\[TEMPLATE\]|\[TEMPLATE-DEFAULT\]/g, '').trim()}`;
-      }
-      
-      // עדכון רק שדות מותרים
+      // עדכון שדות
       const updateData: Partial<Task> = {
         ...templateData,
-        title,
         updated_at: new Date().toISOString(),
       };
       
@@ -243,12 +268,9 @@ export const taskTemplateService = {
       // מכין העתק של נתוני התבנית לפני העריכה
       const templateCopy = { ...template };
       
-      // הסרת תיוג התבנית מהכותרת
-      const cleanTitle = templateCopy.title.replace(/\[TEMPLATE\]|\[TEMPLATE-DEFAULT\]/g, '').trim();
-      
       // יצירת אובייקט המשימה החדשה - שימוש בטיפוס NewTask
       const newTaskData: NewTask = {
-        title: cleanTitle,
+        title: templateCopy.title,
         description: templateCopy.description,
         priority: templateCopy.priority,
         status: templateCopy.status,

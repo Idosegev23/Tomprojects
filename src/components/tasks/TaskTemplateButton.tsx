@@ -38,9 +38,9 @@ interface TaskTemplateButtonProps {
   buttonText?: string;
 }
 
-// פונקציית עזר להסרת תיוג התבנית מהכותרת ולהצגת השם האמיתי של המשימה
+// פונקציית עזר להצגת שם התבנית
 const getCleanTemplateName = (title: string) => {
-  return title?.replace(/\[TEMPLATE\]|\[TEMPLATE-DEFAULT\]/g, '').trim() || '';
+  return title?.trim() || '';
 };
 
 const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({

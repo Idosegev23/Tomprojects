@@ -479,7 +479,10 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   };
   
   // שמירת המשימה
-  const handleSubmit = async () => {
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (loading) return;
+    
     if (!validateForm()) {
       return;
     }
@@ -524,6 +527,8 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
           onTaskUpdated(result);
         }
         
+        // איפוס מצב הטעינה לפני סיום הפונקציה
+        setLoading(false);
         onClose();
       } else {
         // יצירת משימה חדשה
@@ -554,7 +559,11 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                      Array.isArray(formData.assignees_info) ? formData.assignees_info : [],
         };
         
+        // ביצוע קריאה לשרת ליצירת המשימה
         result = await taskService.createTask(newTaskData);
+        
+        // שמירת המשימה שנוצרה לשימוש בפופאפ התבנית
+        setCreatedTaskData(result);
         
         toast({
           title: "המשימה נוצרה בהצלחה",
@@ -567,11 +576,11 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
           onTaskCreated(result);
         }
         
-        // שמירת המשימה שנוצרה לשימוש בפופאפ התבנית
-        setCreatedTaskData(result);
-        
         // פתיחת פופאפ לשאלה האם לשמור כתבנית
         setTemplateName(result.title); // הצעה לשם התבנית
+        
+        // חשוב לאפס את מצב הטעינה לפני פתיחת הדיאלוג
+        setLoading(false);
         setIsTemplateDialogOpen(true);
       }
     } catch (error) {
@@ -583,11 +592,9 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         duration: 5000,
         isClosable: true,
       });
+      
+      // תמיד לאפס את מצב הטעינה גם במקרה של שגיאה
       setLoading(false);
-    } finally {
-      if (isEditMode) {
-        setLoading(false);
-      }
     }
   };
   
@@ -601,15 +608,16 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
       // הכנת המידע של התבנית
       const templateData = {
         name: templateName || createdTaskData.title,
-        is_default: true, // מסמן שזוהי תבנית ברירת מחדל
+        is_default: false, // שינוי להסרת השימוש ב-is_default כי העמודה לא קיימת
         task_data: {
           title: createdTaskData.title,
           description: createdTaskData.description,
           status: createdTaskData.status,
           priority: createdTaskData.priority,
           parent_task_id: createdTaskData.parent_task_id,
-          hierarchical_path: hierarchyPath.map(h => h.id),
-          responsible: createdTaskData.responsible,
+          hierarchical_number: createdTaskData.hierarchical_number, // שמירת המספר ההיררכי אם קיים
+          category: createdTaskData.category,
+          responsible: "מערכת", // קביעת "מערכת" כאחראי כדי לסמן שזו תבנית ברירת מחדל
           // שדות נוספים שאתה רוצה לשמור בתבנית
         }
       };

@@ -552,34 +552,76 @@ export const taskService = {
     }
   },
   
-  // קבלת המספר ההיררכי הבא למשימת אב בפרויקט
+  /**
+   * קבלת המספר ההיררכי הבא למשימה שורשית בפרויקט
+   * @param {string | null} projectId - מזהה הפרויקט, או null עבור תבניות גלובליות
+   * @returns {Promise<string>} - המספר ההיררכי הבא
+   */
   async getNextRootHierarchicalNumber(projectId: string | null): Promise<string> {
-    // אם אין project_id, נחזיר "1" כברירת מחדל
-    if (!projectId) {
-      return "1";
+    try {
+      console.log(`מחשב מספר היררכי חדש למשימה שורשית בפרויקט ${projectId || 'גלובלי'}`);
+      
+      // שליפת כל המשימות השייכות לפרויקט זה
+      let query = supabase
+        .from('tasks')
+        .select('*');
+      
+      // סינון לפי פרויקט ספציפי או עבור תבניות (project_id = null)
+      if (projectId) {
+        query = query.eq('project_id', projectId);
+      } else {
+        query = query.is('project_id', null);
+      }
+      
+      // משימות שורשיות בלבד (ללא משימת אב)
+      query = query.is('parent_task_id', null);
+      
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('שגיאה בקבלת משימות שורשיות:', error);
+        throw new Error(error.message);
+      }
+      
+      console.log(`נמצאו ${data?.length || 0} משימות שורשיות בפרויקט ${projectId || 'גלובלי'}`);
+      
+      // אם אין משימות, מתחילים מ-1
+      if (!data?.length) {
+        console.log('אין משימות שורשיות קיימות, מחזיר מספר היררכי 1');
+        return '1';
+      }
+      
+      // מיון וסינון המשימות השורשיות עם מספר היררכי
+      const rootTasks = data
+        .filter(task => task.hierarchical_number && /^\d+$/.test(task.hierarchical_number))
+        .sort((a, b) => {
+          const numA = parseInt(a.hierarchical_number);
+          const numB = parseInt(b.hierarchical_number);
+          return numA - numB;
+        });
+      
+      // לוג המשימות השורשיות למטרות דיבוג
+      console.log('משימות שורשיות (מסוננות ומסודרות):');
+      rootTasks.forEach(task => {
+        console.log(`- משימה ${task.id}: היררכיה ${task.hierarchical_number}, כותרת: ${task.title}`);
+      });
+      
+      // מציאת המספר ההיררכי הגבוה ביותר והגדלתו ב-1
+      if (rootTasks.length > 0) {
+        const lastRootTask = rootTasks[rootTasks.length - 1];
+        const lastNumber = parseInt(lastRootTask.hierarchical_number);
+        const nextNumber = lastNumber + 1;
+        console.log(`המספר ההיררכי האחרון: ${lastNumber}, המספר החדש: ${nextNumber}`);
+        return nextNumber.toString();
+      }
+      
+      // אם אין משימות עם מספר היררכי, מתחילים מ-1
+      console.log('אין משימות שורשיות עם מספר היררכי, מחזיר מספר היררכי 1');
+      return '1';
+    } catch (error) {
+      console.error('שגיאה בחישוב מספר היררכי חדש:', error);
+      throw new Error('שגיאה בחישוב מספר היררכי חדש: ' + (error instanceof Error ? error.message : 'שגיאה לא ידועה'));
     }
-    
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('hierarchical_number')
-      .eq('project_id', projectId)
-      .is('parent_task_id', null)
-      .order('hierarchical_number', { ascending: false })
-      .limit(1);
-    
-    if (error) {
-      console.error(`Error getting next hierarchical number for project ${projectId}:`, error);
-      throw new Error(error.message);
-    }
-    
-    if (data && data.length > 0 && data[0].hierarchical_number) {
-      // מצאנו את המספר האחרון, נגדיל ב-1
-      const lastNumber = parseInt(data[0].hierarchical_number.split('.')[0]);
-      return `${lastNumber + 1}`;
-    }
-    
-    // אם אין משימות קיימות, נתחיל מ-1
-    return '1';
   },
   
   // קבלת המספר ההיררכי הבא לתת-משימה
