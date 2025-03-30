@@ -216,7 +216,21 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         const sortedRootTasks = rootTasks.sort((a, b) => {
           // מיון לפי מספר היררכי אם קיים, אחרת לפי כותרת
           if (a.hierarchical_number && b.hierarchical_number) {
-            return a.hierarchical_number.localeCompare(b.hierarchical_number);
+            // שימוש במיון מספרי במקום localeCompare למנוע שגיאות
+            const aNum = a.hierarchical_number.split('.').map(Number);
+            const bNum = b.hierarchical_number.split('.').map(Number);
+            
+            for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
+              if (aNum[i] !== bNum[i]) {
+                return aNum[i] - bNum[i];
+              }
+            }
+            
+            return aNum.length - bNum.length;
+          } else if (a.hierarchical_number) {
+            return -1; // a מופיע קודם
+          } else if (b.hierarchical_number) {
+            return 1; // b מופיע קודם
           }
           return a.title.localeCompare(b.title);
         });
@@ -369,7 +383,21 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         // מיון לפי מספר היררכי או כותרת
         const sortedSubTasks = subTasks.sort((a, b) => {
           if (a.hierarchical_number && b.hierarchical_number) {
-            return a.hierarchical_number.localeCompare(b.hierarchical_number);
+            // שימוש במיון מספרי במקום localeCompare למנוע שגיאות
+            const aNum = a.hierarchical_number.split('.').map(Number);
+            const bNum = b.hierarchical_number.split('.').map(Number);
+            
+            for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
+              if (aNum[i] !== bNum[i]) {
+                return aNum[i] - bNum[i];
+              }
+            }
+            
+            return aNum.length - bNum.length;
+          } else if (a.hierarchical_number) {
+            return -1; // a מופיע קודם
+          } else if (b.hierarchical_number) {
+            return 1; // b מופיע קודם
           }
           return a.title?.localeCompare(b.title || '') || 0;
         });
@@ -439,7 +467,21 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
       // מיון לפי מספר היררכי או כותרת
       const sortedNextLevelTasks = nextLevelTasks.sort((a, b) => {
         if (a.hierarchical_number && b.hierarchical_number) {
-          return a.hierarchical_number.localeCompare(b.hierarchical_number);
+          // שימוש במיון מספרי במקום localeCompare למנוע שגיאות
+          const aNum = a.hierarchical_number.split('.').map(Number);
+          const bNum = b.hierarchical_number.split('.').map(Number);
+          
+          for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
+            if (aNum[i] !== bNum[i]) {
+              return aNum[i] - bNum[i];
+            }
+          }
+          
+          return aNum.length - bNum.length;
+        } else if (a.hierarchical_number) {
+          return -1; // a מופיע קודם
+        } else if (b.hierarchical_number) {
+          return 1; // b מופיע קודם
         }
         return a.title?.localeCompare(b.title || '') || 0;
       });
@@ -617,7 +659,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
           parent_task_id: createdTaskData.parent_task_id,
           hierarchical_number: createdTaskData.hierarchical_number, // שמירת המספר ההיררכי אם קיים
           category: createdTaskData.category,
-          responsible: "מערכת", // קביעת "מערכת" כאחראי כדי לסמן שזו תבנית ברירת מחדל
+          responsible: null, // שינוי מ-"מערכת" ל-null כדי למנוע שגיאת סינטקס UUID
           // שדות נוספים שאתה רוצה לשמור בתבנית
         }
       };

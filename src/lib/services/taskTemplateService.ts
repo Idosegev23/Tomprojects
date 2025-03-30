@@ -57,7 +57,7 @@ export const taskTemplateService = {
         status: templateData.task_data.status,
         priority: templateData.task_data.priority,
         category: templateData.task_data.category,
-        responsible: templateData.task_data.responsible, // שימוש במערכת כאחראי לתבניות ברירת מחדל
+        responsible: null, // שינוי מ-"מערכת" ל-null כדי למנוע שגיאת סינטקס UUID
         due_date: templateData.task_data.due_date, // תאריך יעד אם קיים
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

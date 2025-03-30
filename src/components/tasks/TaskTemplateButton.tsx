@@ -152,7 +152,7 @@ const TaskTemplateButton: React.FC<TaskTemplateButtonProps> = ({
           status: currentTask.status,
           parent_task_id: currentTask.parent_task_id,
           hierarchical_number: currentTask.hierarchical_number,
-          responsible: currentTask.responsible,
+          responsible: null,
           category: currentTask.category,
           // שדות נוספים שרוצים לשמור
         }
