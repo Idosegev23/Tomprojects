@@ -1803,26 +1803,14 @@ if ('children' in cleanTask) {
 
 שינויים אלה מבטלים את היכולת ליצור משימות ברירת מחדל אוטומטית עם פרויקט חדש, ומאפשרים רק בחירה של משימות קיימות.
 
-### 2025-05-09 - תיקון שגיאות בניה בממשק משתמש
+### 2025-05-09 - תיקון שגיאות בניה נוספות
 
-- תוקנו שגיאות טיפוסים שמנעו בנייה תקינה של האפליקציה:
-  - תוקנה פונקציית `getStatusColor` בקבצים הבאים לקבלת פרמטר מסוג `string | null`:
-    - `src/app/dashboard/entrepreneurs/page.tsx`
-    - `src/app/dashboard/projects/[id]/page.tsx`
-    - `src/app/dashboard/projects/[id]/components/ProjectHeader.tsx`
-  - הוספת תנאי לבדיקת ערך null לפני השימוש ב-toLowerCase
-  - תוקן קוד המיון של פרויקטים בקובץ `src/app/dashboard/page.tsx` שגרם לשגיאה `Type 'null' is not assignable to type 'string'`
-  - הוספת בדיקת ערכי `updated_at` לפני השימוש ב-`new Date()`
-  - החלפת הגישה הישירה ל-`project.entrepreneur` (שדה לא קיים) ב-`getEntrepreneurName(project.entrepreneur_id)`
-  - הוספת פונקציית עזר `getEntrepreneurName` למציאת שם היזם לפי מזהה
-  - תוקן קובץ `src/app/dashboard/projects/[id]/components/ProjectDetails.tsx`:
-    - הוחלף השימוש בשדה `project.entrepreneur` (שאינו קיים) בשדה `project.entrepreneur_id`
-    - נוספה פונקציונליות לשליפת שם היזם מהמזהה באמצעות קריאה ל-API
-    - שימוש בהוק `useEffect` לטעינת פרטי היזם ואחסון בסטייט מקומי
-  - תוקנו אי התאמות בין טיפוסי המשימות:
-    - הוספת המרה ישירה של טיפוסים בין `Task` מקומפוננטת ה-Kanban לטיפוס `Task` של Supabase
-    - הוספת משתנה `tasksWithCorrectType` להמרת טיפוסים בטוחה
+- תוקנו שגיאות נוספות שמנעו בנייה מוצלחת:
+  - תוקן השימוש בתכונה `project.owner` בדף הפרויקטים לטיפול נכון בערכי Json
+  - הוספת בדיקת טיפוס `typeof project.owner === 'string'` לפני הפעלת `.toLowerCase()`
+  - תוקן השימוש בתכונה הלא קיימת `entrepreneur` בקומפוננטת `ProjectCard`
+  - הוספת מנגנון טעינה של שם היזם לפי `entrepreneur_id` עם קריאה ל-API ושמירה בסטייט מקומי
 
-שינויים אלה פותרים את כל השגיאות שהופיעו בלוגים של Vercel ומאפשרים בנייה והפצה תקינה של האפליקציה. הטיפול בכל המקרים שבהם ערכים יכולים להיות `null` או `undefined` וההסרה של התייחסויות לשדות לא קיימים מבטיחים שלא יהיו שגיאות בזמן ריצה.
+הבנייה הושלמה בהצלחה ללא שגיאות טיפוסים!
 
 

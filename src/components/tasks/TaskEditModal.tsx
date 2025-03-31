@@ -302,7 +302,42 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
             );
             
             console.log(`נמצאו ${subTasks.length} תתי-משימות למשימת האב ${parentTask.title}`);
-            setChildTaskOptions(subTasks);
+            
+            // פונקציית עזר לבדיקה האם ערך הוא מחרוזת תקינה
+            const isValidString = (value: any): boolean => {
+              return typeof value === 'string' && value !== null && value.length > 0;
+            };
+            
+            // מיון תתי-המשימות לפי מספר היררכי או כותרת
+            const sortedSubTasks = subTasks.sort((a, b) => {
+              if (isValidString(a.hierarchical_number) && isValidString(b.hierarchical_number)) {
+                try {
+                  const aNum = (a.hierarchical_number as string).split('.').map(Number);
+                  const bNum = (b.hierarchical_number as string).split('.').map(Number);
+                  
+                  for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
+                    if (aNum[i] !== bNum[i]) {
+                      return aNum[i] - bNum[i];
+                    }
+                  }
+                  
+                  return aNum.length - bNum.length;
+                } catch (error) {
+                  console.error('שגיאה במיון תתי-משימות לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
+                  return isValidString(a.title) && isValidString(b.title) ? 
+                    a.title.localeCompare(b.title || '') || 0 : 0;
+                }
+              } else if (isValidString(a.hierarchical_number)) {
+                return -1; // a מופיע קודם
+              } else if (isValidString(b.hierarchical_number)) {
+                return 1; // b מופיע קודם
+              }
+              return isValidString(a.title) && isValidString(b.title) ? 
+                a.title.localeCompare(b.title || '') || 0 : 0;
+            });
+            
+            console.log(`נמצאו ${sortedSubTasks.length} תתי-משימות למשימה ${parentTask.title}`);
+            setChildTaskOptions(sortedSubTasks);
           }
         }
       } catch (error) {
@@ -1196,6 +1231,30 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                 <option value="">השאר תחת התת-משימה הנוכחית</option>
                 {potentialParentTasks
                   .filter(task => task.parent_task_id === selectedPath[0])
+                  .sort((a, b) => {
+                    // מיון המשימות בסדר היררכי
+                    if (typeof a.hierarchical_number === 'string' && typeof b.hierarchical_number === 'string') {
+                      try {
+                        const aParts = a.hierarchical_number.split('.').map(Number);
+                        const bParts = b.hierarchical_number.split('.').map(Number);
+                        
+                        for (let i = 0; i < Math.min(aParts.length, bParts.length); i++) {
+                          if (aParts[i] !== bParts[i]) {
+                            return aParts[i] - bParts[i];
+                          }
+                        }
+                        
+                        return aParts.length - bParts.length;
+                      } catch (error) {
+                        return a.title?.localeCompare(b.title || '') || 0;
+                      }
+                    } else if (a.hierarchical_number) {
+                      return -1;
+                    } else if (b.hierarchical_number) {
+                      return 1;
+                    }
+                    return a.title?.localeCompare(b.title || '') || 0;
+                  })
                   .map(task => (
                     <option key={task.id} value={task.id}>
                       {task.hierarchical_number ? `${task.hierarchical_number} - ` : ''}

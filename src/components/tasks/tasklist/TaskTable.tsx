@@ -64,7 +64,28 @@ const TaskTable: React.FC<TaskTableProps> = ({
           break;
         case 'hierarchical_number':
           if (a.hierarchical_number && b.hierarchical_number) {
-            comparison = a.hierarchical_number.localeCompare(b.hierarchical_number);
+            if (typeof a.hierarchical_number === 'string' && typeof b.hierarchical_number === 'string') {
+              try {
+                const aParts = a.hierarchical_number.split('.').map(Number);
+                const bParts = b.hierarchical_number.split('.').map(Number);
+                
+                for (let i = 0; i < Math.min(aParts.length, bParts.length); i++) {
+                  if (aParts[i] !== bParts[i]) {
+                    comparison = aParts[i] - bParts[i];
+                    break;
+                  }
+                }
+                
+                if (comparison === 0) {
+                  comparison = aParts.length - bParts.length;
+                }
+              } catch (error) {
+                console.error('שגיאה במיון לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
+                comparison = 0;
+              }
+            } else {
+              comparison = String(a.hierarchical_number).localeCompare(String(b.hierarchical_number));
+            }
           } else if (a.hierarchical_number) {
             comparison = -1;
           } else if (b.hierarchical_number) {
