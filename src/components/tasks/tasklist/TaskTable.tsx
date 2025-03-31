@@ -34,8 +34,8 @@ const TaskTable: React.FC<TaskTableProps> = ({
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const hoverBgColor = useColorModeValue('gray.50', 'gray.700');
   
-  // הוספת state למיונים
-  const [sortField, setSortField] = useState<SortField>(null);
+  // הוספת state למיונים - קביעת hierarchical_number כברירת מחדל
+  const [sortField, setSortField] = useState<SortField>('hierarchical_number');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   
   // טיפול בלחיצה על עמודה למיון

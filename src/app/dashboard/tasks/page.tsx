@@ -60,7 +60,7 @@ export default function Tasks() {
   const [entrepreneurs, setEntrepreneurs] = useState<Entrepreneur[]>([]);
   
   // הוספת מצב למיון
-  const [sortBy, setSortBy] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('hierarchical_number');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -282,6 +282,37 @@ export default function Tasks() {
     
     // מיון לפי הקריטריון שנבחר
     switch (sortBy) {
+      case 'hierarchical_number': // מיון לפי מספר היררכי
+        // פונקציית עזר לבדיקה האם ערך הוא מחרוזת תקינה
+        const isValidString = (value: any): boolean => {
+          return typeof value === 'string' && value !== null && value.length > 0;
+        };
+        
+        if (isValidString(a.hierarchical_number) && isValidString(b.hierarchical_number)) {
+          try {
+            const aNum = (a.hierarchical_number as string).split('.').map(Number);
+            const bNum = (b.hierarchical_number as string).split('.').map(Number);
+            
+            for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
+              if (aNum[i] !== bNum[i]) {
+                return sortDirection === 'asc' ? aNum[i] - bNum[i] : bNum[i] - aNum[i];
+              }
+            }
+            
+            return sortDirection === 'asc' ? 
+              aNum.length - bNum.length : 
+              bNum.length - aNum.length;
+          } catch (error) {
+            console.error('שגיאה במיון לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
+            return 0;
+          }
+        } else if (isValidString(a.hierarchical_number)) {
+          return sortDirection === 'asc' ? -1 : 1;
+        } else if (isValidString(b.hierarchical_number)) {
+          return sortDirection === 'asc' ? 1 : -1;
+        }
+        return 0;
+      
       case 'due_date': // מיון לפי תאריך יעד
         if (!a.due_date && !b.due_date) return 0;
         if (!a.due_date) return sortDirection === 'asc' ? 1 : -1;
@@ -383,6 +414,7 @@ export default function Tasks() {
   // אפשרויות מיון
   const sortOptions = [
     { value: '', label: 'ללא מיון' },
+    { value: 'hierarchical_number', label: 'מספר היררכי' },
     { value: 'due_date', label: 'תאריך יעד' },
     { value: 'priority', label: 'עדיפות' },
     { value: 'estimated_hours', label: 'זמן לביצוע' },
