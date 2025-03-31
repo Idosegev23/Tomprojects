@@ -110,7 +110,12 @@ export default function Dashboard() {
   // פרויקטים אחרונים (5 האחרונים)
   const recentProjects = [...filteredProjects]
     .sort((a, b) => {
-      // בדיקה שאין ערכי null
+      // בדיקה שאין ערכי null או undefined
+      if (!a.updated_at && !b.updated_at) return 0;
+      if (!a.updated_at) return 1;
+      if (!b.updated_at) return -1;
+      
+      // המרה בטוחה יותר לטיימסטמפ
       const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
       const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
       return dateB - dateA;

@@ -263,9 +263,48 @@ export default function EditTask() {
     try {
       setTasksLoading(true);
       const tasksData = await taskService.getTasks({ projectId });
+      
       // סינון המשימה הנוכחית מהרשימה כדי למנוע לולאות
       const filteredTasks = tasksData.filter(t => t.id !== taskId);
-      setParentTasks(filteredTasks);
+      
+      // פונקציית עזר לבדיקה האם ערך הוא מחרוזת תקינה
+      const isValidString = (value: any): boolean => {
+        return typeof value === 'string' && value !== null && value.length > 0;
+      };
+      
+      // מיון המשימות לפי מספר היררכי
+      const sortedTasks = [...filteredTasks].sort((a, b) => {
+        if (isValidString(a.hierarchical_number) && isValidString(b.hierarchical_number)) {
+          try {
+            // מיון לפי חלקי המספר ההיררכי
+            const aNum = (a.hierarchical_number as string).split('.').map(Number);
+            const bNum = (b.hierarchical_number as string).split('.').map(Number);
+            
+            for (let i = 0; i < Math.min(aNum.length, bNum.length); i++) {
+              if (aNum[i] !== bNum[i]) {
+                return aNum[i] - bNum[i];
+              }
+            }
+            
+            return aNum.length - bNum.length;
+          } catch (error) {
+            console.error('שגיאה במיון לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
+            // במקרה של שגיאה, מיון לפי כותרת
+            return isValidString(a.title) && isValidString(b.title) ? 
+              a.title.localeCompare(b.title) : 0;
+          }
+        } else if (isValidString(a.hierarchical_number)) {
+          return -1; // a מופיע קודם
+        } else if (isValidString(b.hierarchical_number)) {
+          return 1; // b מופיע קודם
+        }
+        
+        // מיון לפי כותרת אם אין מספרים היררכיים
+        return isValidString(a.title) && isValidString(b.title) ? 
+          a.title.localeCompare(b.title) : 0;
+      });
+      
+      setParentTasks(sortedTasks);
     } catch (err) {
       console.error('שגיאה בטעינת משימות:', err);
       toast({
