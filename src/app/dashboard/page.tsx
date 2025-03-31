@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, 
   SimpleGrid, 
@@ -14,6 +14,7 @@ import {
   Card, 
   CardBody,
   CardHeader,
+  CardFooter,
   Icon,
   Select,
   Button,
@@ -27,9 +28,39 @@ import {
   Th,
   Td,
   Badge,
-  Link
+  Link,
+  Tooltip,
+  Progress,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  Divider,
+  Tag,
+  TagLabel,
+  TagLeftIcon,
+  AlertIcon,
+  Alert,
+  useColorModeValue,
+  Tabs,
+  TabList,
+  Tab,
+  TabPanels,
+  TabPanel
 } from '@chakra-ui/react';
-import { FiUsers, FiFolder, FiCheckSquare, FiAlertCircle, FiUser } from 'react-icons/fi';
+import { 
+  FiUsers, 
+  FiFolder, 
+  FiCheckSquare, 
+  FiAlertCircle, 
+  FiCalendar,
+  FiClock,
+  FiFilter,
+  FiRefreshCw,
+  FiBell,
+  FiTrendingUp,
+  FiBarChart2
+} from 'react-icons/fi';
 import NextLink from 'next/link';
 import projectService from '@/lib/services/projectService';
 import taskService from '@/lib/services/taskService';
@@ -42,7 +73,11 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [entrepreneurs, setEntrepreneurs] = useState<{ id: string, name: string }[]>([]);
   const [selectedEntrepreneur, setSelectedEntrepreneur] = useState<string>('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const searchParams = useSearchParams();
   
   // טעינת נתונים
@@ -50,6 +85,7 @@ export default function Dashboard() {
     const fetchData = async () => {
       try {
         setLoading(true);
+        setError(null);
         
         // טעינת פרויקטים
         const projectsData = await projectService.getProjects();
@@ -74,63 +110,175 @@ export default function Dashboard() {
               console.log(`נבחר יזם מה-URL: ${foundEntrepreneur.name} (${foundEntrepreneur.id})`);
             }
           }
+          
+          // בדיקה אם יש פרמטר status ב-URL
+          const statusParam = searchParams.get('status');
+          if (statusParam) {
+            setSelectedStatus(statusParam);
+          }
+          
         } catch (error) {
           console.error('שגיאה בטעינת יזמים:', error);
+          setError('שגיאה בטעינת נתוני יזמים');
         }
+        
+        // עדכון זמן הרענון האחרון
+        setLastUpdated(new Date());
       } catch (error) {
         console.error('שגיאה בטעינת נתונים:', error);
+        setError('שגיאה בטעינת נתונים');
       } finally {
         setLoading(false);
+        setRefreshing(false);
       }
     };
     
     fetchData();
   }, [searchParams]);
   
-  // סינון פרויקטים לפי יזם
-  const filteredProjects = selectedEntrepreneur
-    ? projects.filter(project => project.entrepreneur_id === selectedEntrepreneur)
-    : projects;
+  // פונקציה לרענון הנתונים
+  const refreshData = async () => {
+    setRefreshing(true);
+    try {
+      // טעינת פרויקטים
+      const projectsData = await projectService.getProjects();
+      setProjects(projectsData);
+      
+      // טעינת משימות
+      const tasksData = await taskService.getTasks();
+      setTasks(tasksData);
+      
+      // עדכון זמן הרענון האחרון
+      setLastUpdated(new Date());
+      setError(null);
+    } catch (error) {
+      console.error('שגיאה ברענון נתונים:', error);
+      setError('שגיאה ברענון נתונים');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  
+  // סינון פרויקטים לפי יזם וסטטוס
+  const filteredProjects = useMemo(() => {
+    let result = [...projects];
+    
+    // סינון לפי יזם
+    if (selectedEntrepreneur) {
+      result = result.filter(project => project.entrepreneur_id === selectedEntrepreneur);
+    }
+    
+    // סינון לפי סטטוס
+    if (selectedStatus) {
+      result = result.filter(project => project.status === selectedStatus);
+    }
+    
+    return result;
+  }, [projects, selectedEntrepreneur, selectedStatus]);
   
   // סינון משימות לפי יזם
-  const filteredTasks = selectedEntrepreneur
-    ? tasks.filter(task => {
+  const filteredTasks = useMemo(() => {
+    let result = [...tasks];
+    
+    // סינון לפי יזם (דרך הפרויקט)
+    if (selectedEntrepreneur) {
+      result = result.filter(task => {
         const projectOfTask = projects.find(p => p.id === task.project_id);
         return projectOfTask?.entrepreneur_id === selectedEntrepreneur;
-      })
-    : tasks;
+      });
+    }
+    
+    return result;
+  }, [tasks, projects, selectedEntrepreneur]);
   
   // חישוב סטטיסטיקות
-  const activeProjects = filteredProjects.filter(p => p.status === 'active').length;
-  const openTasks = filteredTasks.filter(t => t.status !== 'done').length;
-  const lateTasks = filteredTasks.filter(t => 
-    t.due_date && new Date(t.due_date) < new Date() && t.status !== 'done'
-  ).length;
+  const stats = useMemo(() => {
+    const activeProjects = filteredProjects.filter(p => p.status === 'active').length;
+    const completedProjects = filteredProjects.filter(p => p.status === 'completed').length;
+    const openTasks = filteredTasks.filter(t => t.status !== 'done').length;
+    const completedTasks = filteredTasks.filter(t => t.status === 'done').length;
+    const highPriorityTasks = filteredTasks.filter(t => t.priority === 'high' && t.status !== 'done').length;
+    const lateTasks = filteredTasks.filter(t => 
+      t.due_date && new Date(t.due_date) < new Date() && t.status !== 'done'
+    ).length;
+    
+    // חישוב אחוז משימות שהושלמו
+    const taskCompletionRate = tasks.length > 0
+      ? Math.round((completedTasks / tasks.length) * 100)
+      : 0;
+    
+    // חישוב אחוז פרויקטים שהושלמו
+    const projectCompletionRate = projects.length > 0
+      ? Math.round((completedProjects / projects.length) * 100)
+      : 0;
+      
+    return {
+      activeProjects,
+      completedProjects,
+      openTasks,
+      completedTasks,
+      highPriorityTasks,
+      lateTasks,
+      taskCompletionRate,
+      projectCompletionRate
+    };
+  }, [filteredProjects, filteredTasks, tasks.length, projects.length]);
   
   // פרויקטים אחרונים (5 האחרונים)
-  const recentProjects = [...filteredProjects]
-    .sort((a, b) => {
-      // בדיקה שאין ערכי null או undefined
-      if (!a.updated_at && !b.updated_at) return 0;
-      if (!a.updated_at) return 1;
-      if (!b.updated_at) return -1;
-      
-      // המרה בטוחה יותר לטיימסטמפ
-      const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
-      const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
-      return dateB - dateA;
-    })
-    .slice(0, 5);
+  const recentProjects = useMemo(() => {
+    return [...filteredProjects]
+      .sort((a, b) => {
+        // בדיקה שאין ערכי null או undefined
+        if (!a.updated_at && !b.updated_at) return 0;
+        if (!a.updated_at) return 1;
+        if (!b.updated_at) return -1;
+        
+        // המרה בטוחה יותר לטיימסטמפ
+        const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+        const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+        return dateB - dateA;
+      })
+      .slice(0, 5);
+  }, [filteredProjects]);
   
-  // משימות דחופות (משימות שמועד היעד שלהן קרוב או עבר)
-  const urgentTasks = [...filteredTasks]
-    .filter(t => t.due_date && t.status !== 'done')
-    .sort((a, b) => {
-      if (!a.due_date) return 1;
-      if (!b.due_date) return -1;
-      return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-    })
-    .slice(0, 5);
+  // משימות דחופות
+  const urgentTasks = useMemo(() => {
+    const today = new Date();
+    const nextWeek = new Date();
+    nextWeek.setDate(today.getDate() + 7);
+    
+    return [...filteredTasks]
+      .filter(t => {
+        // משימות שעוד לא הושלמו
+        if (t.status === 'done') return false;
+        
+        // משימות ללא תאריך יעד לא ייחשבו דחופות
+        if (!t.due_date) return false;
+        
+        const dueDate = new Date(t.due_date);
+        
+        // משימות בעדיפות גבוהה או באיחור
+        return (
+          t.priority === 'high' || 
+          dueDate < today || 
+          (dueDate >= today && dueDate <= nextWeek)
+        );
+      })
+      .sort((a, b) => {
+        // קודם מיון לפי תאריך יעד
+        if (a.due_date && b.due_date) {
+          const dateA = new Date(a.due_date).getTime();
+          const dateB = new Date(b.due_date).getTime();
+          if (dateA !== dateB) return dateA - dateB;
+        }
+        
+        // אם תאריכי היעד זהים, מיון לפי עדיפות
+        const priorityOrder = { high: 0, medium: 1, low: 2 };
+        return (priorityOrder[a.priority as keyof typeof priorityOrder] || 999) - 
+               (priorityOrder[b.priority as keyof typeof priorityOrder] || 999);
+      })
+      .slice(0, 5);
+  }, [filteredTasks]);
   
   // פונקציה להמרת תאריך לפורמט מקומי
   const formatDate = (dateString: string | null) => {
@@ -140,6 +288,83 @@ export default function Dashboard() {
       return new Date(dateString).toLocaleDateString('he-IL');
     } catch (e) {
       return 'תאריך לא תקין';
+    }
+  };
+  
+  // פונקציה לפורמט של זמן אחרון
+  const formatLastUpdated = (date: Date | null) => {
+    if (!date) return 'טרם עודכן';
+    
+    try {
+      return new Intl.DateTimeFormat('he-IL', {
+        day: 'numeric',
+        month: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+      }).format(date);
+    } catch (e) {
+      return 'זמן לא תקין';
+    }
+  };
+  
+  // פונקציה לבדיקה אם משימה באיחור
+  const isTaskOverdue = (dueDate: string | null) => {
+    if (!dueDate) return false;
+    
+    try {
+      const taskDueDate = new Date(dueDate);
+      const today = new Date();
+      return taskDueDate < today;
+    } catch (e) {
+      return false;
+    }
+  };
+  
+  // פונקציה לחישוב כמה זמן נותר עד לתאריך היעד
+  const getDueDateStatus = (dueDate: string | null) => {
+    if (!dueDate) return { text: 'ללא תאריך יעד', color: 'gray' };
+    
+    try {
+      const taskDueDate = new Date(dueDate);
+      const today = new Date();
+      
+      // איפוס שעה כדי להשוות רק ברמת היום
+      today.setHours(0, 0, 0, 0);
+      const tempTaskDueDate = new Date(taskDueDate);
+      tempTaskDueDate.setHours(0, 0, 0, 0);
+      
+      const diffTime = tempTaskDueDate.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays < 0) {
+        return { 
+          text: `${Math.abs(diffDays)} ${Math.abs(diffDays) === 1 ? 'יום' : 'ימים'} באיחור`, 
+          color: 'red' 
+        };
+      } else if (diffDays === 0) {
+        return { 
+          text: 'היום', 
+          color: 'orange' 
+        };
+      } else if (diffDays === 1) {
+        return { 
+          text: 'מחר', 
+          color: 'orange' 
+        };
+      } else if (diffDays <= 3) {
+        return { 
+          text: `בעוד ${diffDays} ימים`, 
+          color: 'yellow' 
+        };
+      } else {
+        return { 
+          text: formatDate(dueDate), 
+          color: 'green' 
+        };
+      }
+    } catch (e) {
+      return { text: 'תאריך לא תקין', color: 'gray' };
     }
   };
   
@@ -217,210 +442,384 @@ export default function Dashboard() {
   
   return (
     <Box>
-      <Flex 
-        direction={{ base: 'column', md: 'row' }} 
-        justify="space-between" 
-        align={{ base: 'start', md: 'center' }} 
-        mb={6}
-      >
-        <Heading size={{ base: 'md', md: 'lg' }} mb={{ base: 3, md: 0 }}>דשבורד</Heading>
-        
-        <HStack spacing={3}>
-          <Select 
-            placeholder="סנן לפי יזם" 
-            value={selectedEntrepreneur} 
-            onChange={(e) => {
-              setSelectedEntrepreneur(e.target.value);
-              // עדכון ה-URL כדי לאפשר שיתוף/שמירה של המצב הנוכחי
-              const url = new URL(window.location.href);
-              if (e.target.value) {
-                url.searchParams.set('entrepreneur', e.target.value);
-              } else {
-                url.searchParams.delete('entrepreneur');
-              }
-              window.history.pushState({}, '', url.toString());
-              // הסרת פוקוס מהתפריט אחרי בחירה
-              (e.target as HTMLSelectElement).blur();
-            }}
-            size={{ base: 'sm', md: 'md' }}
-            maxW={{ base: '200px', md: '250px' }}
-          >
-            <option value="">כל היזמים</option>
-            {entrepreneurs.map((entrepreneur) => (
-              <option key={entrepreneur.id} value={entrepreneur.id}>
-                {entrepreneur.name}
-              </option>
-            ))}
-          </Select>
-          
-          <Button 
-            size={{ base: 'sm', md: 'md' }}
-            onClick={() => {
-              setSelectedEntrepreneur('');
-              // מחיקת הפרמטר מה-URL
-              const url = new URL(window.location.href);
-              url.searchParams.delete('entrepreneur');
-              window.history.pushState({}, '', url.toString());
-            }}
-            isDisabled={!selectedEntrepreneur}
-          >
-            נקה סינון
-          </Button>
-        </HStack>
-      </Flex>
-      
-      {loading ? (
-        <Flex justify="center" align="center" h="200px">
-          <Spinner size="xl" color="primary.500" />
-        </Flex>
-      ) : (
-        <>
-          {/* סטטיסטיקות */}
-          <SimpleGrid 
-            columns={{ base: 1, sm: 2, md: 4 }} 
-            spacing={{ base: 3, md: 5 }}
-            mb={8}
-          >
-            <StatCard 
-              title="פרויקטים פעילים" 
-              value={filteredProjects.filter(p => p.status !== 'completed').length} 
-              helpText="סה״כ פרויקטים פעילים" 
-              icon={FiFolder} 
-              color="blue.500" 
-            />
-            <StatCard 
-              title="משימות פתוחות" 
-              value={filteredTasks.filter(t => t.status !== 'done').length} 
-              helpText="סה״כ משימות שטרם הושלמו" 
-              icon={FiCheckSquare} 
-              color="green.500" 
-            />
-            <StatCard 
-              title="משימות דחופות" 
-              value={filteredTasks.filter(t => t.priority === 'high' && t.status !== 'done').length} 
-              helpText="משימות בעדיפות גבוהה" 
-              icon={FiAlertCircle} 
-              color="red.500" 
-            />
-            <StatCard 
-              title="יזמים" 
-              value={entrepreneurs.length} 
-              helpText="סה״כ יזמים פעילים" 
-              icon={FiUsers} 
-              color="purple.500" 
-            />
-          </SimpleGrid>
-          
-          {/* פרויקטים אחרונים */}
-          <Card mb={6} variant="outline">
-            <CardHeader pb={0}>
-              <Flex justify="space-between" align="center">
-                <Heading size={{ base: 'sm', md: 'md' }}>פרויקטים אחרונים</Heading>
-                <Button 
-                  as={NextLink} 
-                  href="/dashboard/projects" 
-                  size={{ base: 'xs', md: 'sm' }}
-                  variant="ghost"
-                >
-                  צפה בכל הפרויקטים
-                </Button>
-              </Flex>
-            </CardHeader>
-            <CardBody>
-              <Box overflowX="auto">
-                <Table size={{ base: 'sm', md: 'md' }} variant="simple">
-                  <Thead>
-                    <Tr>
-                      <Th>שם</Th>
-                      <Th display={{ base: 'none', md: 'table-cell' }}>יזם</Th>
-                      <Th display={{ base: 'none', md: 'table-cell' }}>סטטוס</Th>
-                      <Th display={{ base: 'none', lg: 'table-cell' }}>תאריך יעד</Th>
-                      <Th>התקדמות</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {filteredProjects.slice(0, 5).map((project) => (
-                      <Tr key={project.id}>
-                        <Td>
-                          <Link as={NextLink} href={`/dashboard/projects/${project.id}`} color="primary.600" fontWeight="medium">
-                            {project.name}
-                          </Link>
-                        </Td>
-                        <Td display={{ base: 'none', md: 'table-cell' }}>{getEntrepreneurName(project.entrepreneur_id)}</Td>
-                        <Td display={{ base: 'none', md: 'table-cell' }}>
-                          <Badge colorScheme={getStatusColor(project.status || '')}>
-                            {getStatusText(project.status || '')}
-                          </Badge>
-                        </Td>
-                        <Td display={{ base: 'none', lg: 'table-cell' }}>{formatDate(project.planned_end_date)}</Td>
-                        <Td>{project.progress || 0}%</Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </Box>
-            </CardBody>
-          </Card>
-          
-          {/* משימות דחופות */}
-          <Card variant="outline">
-            <CardHeader pb={0}>
-              <Flex justify="space-between" align="center">
-                <Heading size={{ base: 'sm', md: 'md' }}>משימות דחופות</Heading>
-                <Button 
-                  as={NextLink} 
-                  href="/dashboard/tasks" 
-                  size={{ base: 'xs', md: 'sm' }}
-                  variant="ghost"
-                >
-                  צפה בכל המשימות
-                </Button>
-              </Flex>
-            </CardHeader>
-            <CardBody>
-              <Box overflowX="auto">
-                <Table size={{ base: 'sm', md: 'md' }} variant="simple">
-                  <Thead>
-                    <Tr>
-                      <Th>כותרת</Th>
-                      <Th display={{ base: 'none', md: 'table-cell' }}>פרויקט</Th>
-                      <Th display={{ base: 'none', md: 'table-cell' }}>סטטוס</Th>
-                      <Th display={{ base: 'none', lg: 'table-cell' }}>תאריך יעד</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {filteredTasks
-                      .filter(task => task.priority === 'high' && task.status !== 'done')
-                      .slice(0, 5)
-                      .map((task) => (
-                        <Tr key={task.id}>
-                          <Td>
-                            <Link as={NextLink} href={`/dashboard/tasks/${task.id}`} color="primary.600" fontWeight="medium">
-                              {task.title}
-                            </Link>
-                          </Td>
-                          <Td display={{ base: 'none', md: 'table-cell' }}>
-                            {task.project_id ? (
-                              <Link as={NextLink} href={`/dashboard/projects/${task.project_id}`}>
-                                {getProjectName(task.project_id)}
-                              </Link>
-                            ) : '-'}
-                          </Td>
-                          <Td display={{ base: 'none', md: 'table-cell' }}>
-                            <Badge colorScheme={getTaskStatusColor(task.status || '')}>
-                              {getTaskStatusText(task.status || '')}
-                            </Badge>
-                          </Td>
-                          <Td display={{ base: 'none', lg: 'table-cell' }}>{formatDate(task.due_date)}</Td>
-                        </Tr>
-                      ))}
-                  </Tbody>
-                </Table>
-              </Box>
-            </CardBody>
-          </Card>
-        </>
+      {/* הודעת שגיאה */}
+      {error && (
+        <Alert status="error" mb={4} borderRadius="md">
+          <AlertIcon />
+          {error}
+        </Alert>
       )}
+      
+      {/* כותרת ופקדי סינון */}
+      <Card mb={6} variant="outline">
+        <CardBody>
+          <Flex 
+            direction={{ base: 'column', md: 'row' }} 
+            justify="space-between" 
+            align={{ base: 'start', md: 'center' }} 
+            wrap="wrap"
+            gap={3}
+          >
+            <VStack align="flex-start" spacing={1}>
+              <Heading size={{ base: 'md', md: 'lg' }}>דשבורד ניהול</Heading>
+              <HStack>
+                <Icon as={FiRefreshCw} color="gray.500" />
+                <Text fontSize="sm" color="gray.500">
+                  עודכן לאחרונה: {formatLastUpdated(lastUpdated)}
+                </Text>
+              </HStack>
+            </VStack>
+            
+            <HStack spacing={3} flexWrap="wrap">
+              <Menu closeOnSelect={false}>
+                <MenuButton as={Button} rightIcon={<FiFilter />} size={{ base: 'sm', md: 'md' }}>
+                  סנן
+                </MenuButton>
+                <MenuList>
+                  <Box px={3} py={2}>
+                    <Text fontWeight="bold" mb={2}>סנן לפי יזם</Text>
+                    <Select 
+                      placeholder="בחר יזם" 
+                      value={selectedEntrepreneur} 
+                      onChange={(e) => {
+                        setSelectedEntrepreneur(e.target.value);
+                        // עדכון ה-URL
+                        const url = new URL(window.location.href);
+                        if (e.target.value) {
+                          url.searchParams.set('entrepreneur', e.target.value);
+                        } else {
+                          url.searchParams.delete('entrepreneur');
+                        }
+                        window.history.pushState({}, '', url.toString());
+                      }}
+                      size="sm"
+                      mb={3}
+                    >
+                      <option value="">כל היזמים</option>
+                      {entrepreneurs.map((entrepreneur) => (
+                        <option key={entrepreneur.id} value={entrepreneur.id}>
+                          {entrepreneur.name}
+                        </option>
+                      ))}
+                    </Select>
+                    
+                    <Text fontWeight="bold" mb={2}>סנן לפי סטטוס</Text>
+                    <Select 
+                      placeholder="בחר סטטוס" 
+                      value={selectedStatus} 
+                      onChange={(e) => {
+                        setSelectedStatus(e.target.value);
+                        // עדכון ה-URL
+                        const url = new URL(window.location.href);
+                        if (e.target.value) {
+                          url.searchParams.set('status', e.target.value);
+                        } else {
+                          url.searchParams.delete('status');
+                        }
+                        window.history.pushState({}, '', url.toString());
+                      }}
+                      size="sm"
+                    >
+                      <option value="">כל הסטטוסים</option>
+                      <option value="active">פעיל</option>
+                      <option value="planning">בתכנון</option>
+                      <option value="on hold">בהמתנה</option>
+                      <option value="completed">הושלם</option>
+                      <option value="cancelled">בוטל</option>
+                    </Select>
+                  </Box>
+                  <MenuItem onClick={() => {
+                    setSelectedEntrepreneur('');
+                    setSelectedStatus('');
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('entrepreneur');
+                    url.searchParams.delete('status');
+                    window.history.pushState({}, '', url.toString());
+                  }}>
+                    נקה את כל הסינונים
+                  </MenuItem>
+                </MenuList>
+              </Menu>
+              
+              <Button 
+                leftIcon={<FiRefreshCw />} 
+                onClick={refreshData} 
+                isLoading={refreshing}
+                loadingText="מרענן..."
+                size={{ base: 'sm', md: 'md' }}
+                colorScheme="blue"
+              >
+                רענן נתונים
+              </Button>
+              
+              <HStack spacing={1}>
+                {selectedEntrepreneur && (
+                  <Tag size={{ base: 'sm', md: 'md' }} colorScheme="blue" borderRadius="full">
+                    <TagLeftIcon as={FiUsers} />
+                    <TagLabel>{getEntrepreneurName(selectedEntrepreneur)}</TagLabel>
+                  </Tag>
+                )}
+                
+                {selectedStatus && (
+                  <Tag size={{ base: 'sm', md: 'md' }} colorScheme={getStatusColor(selectedStatus)} borderRadius="full">
+                    <TagLabel>{getStatusText(selectedStatus)}</TagLabel>
+                  </Tag>
+                )}
+              </HStack>
+            </HStack>
+          </Flex>
+        </CardBody>
+      </Card>
+      
+      {/* סטטיסטיקות */}
+      <SimpleGrid 
+        columns={{ base: 1, sm: 2, md: 4 }} 
+        spacing={{ base: 3, md: 5 }}
+        mb={8}
+      >
+        <StatCard 
+          title="פרויקטים פעילים" 
+          value={stats.activeProjects} 
+          helpText="סה״כ פרויקטים פעילים" 
+          icon={FiFolder} 
+          color="blue.500" 
+        />
+        <StatCard 
+          title="משימות פתוחות" 
+          value={stats.openTasks} 
+          helpText="סה״כ משימות שטרם הושלמו" 
+          icon={FiCheckSquare} 
+          color="green.500" 
+        />
+        <StatCard 
+          title="משימות דחופות" 
+          value={stats.highPriorityTasks} 
+          helpText="משימות בעדיפות גבוהה" 
+          icon={FiAlertCircle} 
+          color="red.500" 
+        />
+        <StatCard 
+          title="יזמים" 
+          value={entrepreneurs.length} 
+          helpText="סה״כ יזמים פעילים" 
+          icon={FiUsers} 
+          color="purple.500" 
+        />
+      </SimpleGrid>
+      
+      {/* שיעור ההשלמה הכולל */}
+      <Card mb={6} variant="outline">
+        <CardBody>
+          <Flex direction={{ base: 'column', md: 'row' }} gap={6}>
+            <Box flex="1">
+              <Flex justify="space-between" mb={2}>
+                <Text fontWeight="medium">השלמת פרויקטים</Text>
+                <Text fontWeight="bold">{stats.projectCompletionRate}%</Text>
+              </Flex>
+              <Progress 
+                value={stats.projectCompletionRate} 
+                colorScheme="blue" 
+                size="lg"
+                borderRadius="md"
+                hasStripe
+              />
+            </Box>
+            
+            <Box flex="1">
+              <Flex justify="space-between" mb={2}>
+                <Text fontWeight="medium">השלמת משימות</Text>
+                <Text fontWeight="bold">{stats.taskCompletionRate}%</Text>
+              </Flex>
+              <Progress 
+                value={stats.taskCompletionRate} 
+                colorScheme="green" 
+                size="lg"
+                borderRadius="md"
+                hasStripe
+              />
+            </Box>
+          </Flex>
+        </CardBody>
+      </Card>
+      
+      {/* טאבים לפרויקטים ולמשימות */}
+      <Tabs variant="soft-rounded" colorScheme="primary" mb={6}>
+        <TabList mb={4}>
+          <Tab _selected={{ color: 'white', bg: 'primary.500' }}>פרויקטים אחרונים</Tab>
+          <Tab _selected={{ color: 'white', bg: 'primary.500' }}>משימות דחופות</Tab>
+        </TabList>
+        
+        <TabPanels>
+          {/* פאנל פרויקטים */}
+          <TabPanel px={0}>
+            <Card variant="outline">
+              <CardHeader pb={0}>
+                <Flex justify="space-between" align="center">
+                  <Heading size={{ base: 'sm', md: 'md' }}>פרויקטים אחרונים</Heading>
+                  <Button 
+                    as={NextLink} 
+                    href="/dashboard/projects" 
+                    size={{ base: 'xs', md: 'sm' }}
+                    rightIcon={<FiBarChart2 />}
+                    colorScheme="primary"
+                    variant="outline"
+                  >
+                    צפה בכל הפרויקטים
+                  </Button>
+                </Flex>
+              </CardHeader>
+              <CardBody>
+                <Box overflowX="auto">
+                  <Table size={{ base: 'sm', md: 'md' }} variant="simple">
+                    <Thead>
+                      <Tr>
+                        <Th>שם</Th>
+                        <Th display={{ base: 'none', md: 'table-cell' }}>יזם</Th>
+                        <Th display={{ base: 'none', md: 'table-cell' }}>סטטוס</Th>
+                        <Th display={{ base: 'none', lg: 'table-cell' }}>תאריך יעד</Th>
+                        <Th>התקדמות</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {recentProjects.length > 0 ? (
+                        recentProjects.map((project) => (
+                          <Tr key={project.id}>
+                            <Td>
+                              <Link as={NextLink} href={`/dashboard/projects/${project.id}`} color="primary.600" fontWeight="medium">
+                                {project.name}
+                              </Link>
+                            </Td>
+                            <Td display={{ base: 'none', md: 'table-cell' }}>{getEntrepreneurName(project.entrepreneur_id)}</Td>
+                            <Td display={{ base: 'none', md: 'table-cell' }}>
+                              <Badge colorScheme={getStatusColor(project.status || '')}>
+                                {getStatusText(project.status || '')}
+                              </Badge>
+                            </Td>
+                            <Td display={{ base: 'none', lg: 'table-cell' }}>{formatDate(project.planned_end_date)}</Td>
+                            <Td>
+                              <HStack spacing={2} align="center">
+                                <Progress 
+                                  value={project.progress || 0} 
+                                  size="sm" 
+                                  colorScheme={
+                                    (project.progress || 0) < 25 ? 'red' : 
+                                    (project.progress || 0) < 50 ? 'orange' : 
+                                    (project.progress || 0) < 75 ? 'yellow' : 'green'
+                                  }
+                                  w="70px"
+                                  borderRadius="full"
+                                />
+                                <Text fontSize="sm">{project.progress || 0}%</Text>
+                              </HStack>
+                            </Td>
+                          </Tr>
+                        ))
+                      ) : (
+                        <Tr>
+                          <Td colSpan={5} textAlign="center">אין פרויקטים להצגה</Td>
+                        </Tr>
+                      )}
+                    </Tbody>
+                  </Table>
+                </Box>
+              </CardBody>
+            </Card>
+          </TabPanel>
+          
+          {/* פאנל משימות */}
+          <TabPanel px={0}>
+            <Card variant="outline">
+              <CardHeader pb={0}>
+                <Flex justify="space-between" align="center">
+                  <Heading size={{ base: 'sm', md: 'md' }}>משימות דחופות</Heading>
+                  <Button 
+                    as={NextLink} 
+                    href="/dashboard/tasks" 
+                    size={{ base: 'xs', md: 'sm' }}
+                    rightIcon={<FiCheckSquare />}
+                    colorScheme="primary"
+                    variant="outline"
+                  >
+                    צפה בכל המשימות
+                  </Button>
+                </Flex>
+              </CardHeader>
+              <CardBody>
+                <Box overflowX="auto">
+                  <Table size={{ base: 'sm', md: 'md' }} variant="simple">
+                    <Thead>
+                      <Tr>
+                        <Th>כותרת</Th>
+                        <Th display={{ base: 'none', md: 'table-cell' }}>פרויקט</Th>
+                        <Th display={{ base: 'none', md: 'table-cell' }}>סטטוס</Th>
+                        <Th display={{ base: 'none', lg: 'table-cell' }}>תאריך יעד</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {urgentTasks.length > 0 ? (
+                        urgentTasks.map((task) => {
+                          const dueStatus = getDueDateStatus(task.due_date);
+                          return (
+                            <Tr key={task.id}>
+                              <Td>
+                                <HStack spacing={2}>
+                                  {task.priority === 'high' && (
+                                    <Tooltip label="עדיפות גבוהה" placement="top">
+                                      <Icon as={FiAlertCircle} color="red.500" />
+                                    </Tooltip>
+                                  )}
+                                  <Link 
+                                    as={NextLink} 
+                                    href={`/dashboard/tasks/${task.id}`} 
+                                    color="primary.600" 
+                                    fontWeight="medium"
+                                  >
+                                    {task.title}
+                                  </Link>
+                                </HStack>
+                              </Td>
+                              <Td display={{ base: 'none', md: 'table-cell' }}>
+                                {task.project_id ? (
+                                  <Link as={NextLink} href={`/dashboard/projects/${task.project_id}`}>
+                                    {getProjectName(task.project_id)}
+                                  </Link>
+                                ) : '-'}
+                              </Td>
+                              <Td display={{ base: 'none', md: 'table-cell' }}>
+                                <Badge colorScheme={getTaskStatusColor(task.status || '')}>
+                                  {getTaskStatusText(task.status || '')}
+                                </Badge>
+                              </Td>
+                              <Td display={{ base: 'none', lg: 'table-cell' }}>
+                                <Tag colorScheme={dueStatus.color} size="sm">
+                                  {isTaskOverdue(task.due_date) ? (
+                                    <Tooltip label="משימה באיחור!" placement="top">
+                                      <HStack spacing={1}>
+                                        <Icon as={FiClock} />
+                                        <TagLabel>{dueStatus.text}</TagLabel>
+                                      </HStack>
+                                    </Tooltip>
+                                  ) : (
+                                    <TagLabel>{dueStatus.text}</TagLabel>
+                                  )}
+                                </Tag>
+                              </Td>
+                            </Tr>
+                          );
+                        })
+                      ) : (
+                        <Tr>
+                          <Td colSpan={4} textAlign="center">אין משימות דחופות להצגה</Td>
+                        </Tr>
+                      )}
+                    </Tbody>
+                  </Table>
+                </Box>
+              </CardBody>
+            </Card>
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
     </Box>
   );
 }
@@ -434,24 +833,47 @@ interface StatCardProps {
 }
 
 function StatCard({ title, value, helpText, icon, color }: StatCardProps) {
+  const bgColor = useColorModeValue(`${color}10`, `${color}30`);
+  
   return (
-    <Card variant="outline">
+    <Card 
+      variant="outline" 
+      _hover={{ 
+        transform: 'translateY(-4px)', 
+        shadow: 'md',
+        borderColor: color
+      }}
+      transition="all 0.2s ease-in-out"
+    >
       <CardBody>
         <Flex align="center">
           <Box
-            p={2}
-            borderRadius="md"
-            bg={`${color}10`}
+            p={3}
+            borderRadius="full"
+            bg={bgColor}
             color={color}
-            mr={3}
-            display={{ base: 'none', sm: 'block' }}
+            mr={4}
+            display={{ base: 'none', sm: 'flex' }}
+            alignItems="center"
+            justifyContent="center"
           >
             <Icon as={icon} boxSize={{ base: 5, md: 6 }} />
           </Box>
           <Stat>
-            <StatLabel fontSize={{ base: 'xs', md: 'sm' }}>{title}</StatLabel>
-            <StatNumber fontSize={{ base: 'xl', md: '2xl' }}>{value}</StatNumber>
-            {helpText && <StatHelpText fontSize={{ base: 'xs', md: 'sm' }}>{helpText}</StatHelpText>}
+            <StatLabel fontSize={{ base: 'xs', md: 'sm' }} fontWeight="medium" mb={1}>{title}</StatLabel>
+            <StatNumber fontSize={{ base: 'xl', md: '2xl' }} fontWeight="bold" color={color}>
+              {value}
+            </StatNumber>
+            {helpText && (
+              <StatHelpText 
+                fontSize={{ base: 'xs', md: 'sm' }} 
+                mt={1} 
+                mb={0}
+                color="gray.500"
+              >
+                {helpText}
+              </StatHelpText>
+            )}
           </Stat>
         </Flex>
       </CardBody>
