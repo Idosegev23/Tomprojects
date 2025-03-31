@@ -21,7 +21,7 @@ import { Project } from '@/types/supabase';
 interface ProjectHeaderProps {
   project: Project;
   onOpenDeleteDialog: () => void;
-  getStatusColor: (status: string) => string;
+  getStatusColor: (status: string | null) => string;
 }
 
 export default function ProjectHeader({ project, onOpenDeleteDialog, getStatusColor }: ProjectHeaderProps) {
@@ -48,7 +48,7 @@ export default function ProjectHeader({ project, onOpenDeleteDialog, getStatusCo
           />
         </Tooltip>
         <Heading size={{ base: 'md', md: 'lg' }}>{project.name}</Heading>
-        <Tooltip label={`סטטוס: ${project.status}`}>
+        <Tooltip label={`סטטוס: ${project.status || 'לא מוגדר'}`}>
           <Badge 
             colorScheme={getStatusColor(project.status)} 
             fontSize="md" 
@@ -56,7 +56,7 @@ export default function ProjectHeader({ project, onOpenDeleteDialog, getStatusCo
             py={1}
             borderRadius="full"
           >
-            {project.status}
+            {project.status || 'לא מוגדר'}
           </Badge>
         </Tooltip>
       </HStack>

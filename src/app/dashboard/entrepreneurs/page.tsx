@@ -91,7 +91,9 @@ export default function EntrepreneursPage() {
   };
 
   // פונקציה לקבלת צבע לפי סטטוס
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string | null) => {
+    if (!status) return 'gray';
+    
     switch (status.toLowerCase()) {
       case 'active':
       case 'פעיל': return 'green';

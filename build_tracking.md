@@ -1077,7 +1077,6 @@ node run_sql.js sql/insert_numeric_stages_tasks.sql
 - הוענקו הרשאות מלאות על טבלת tasks גם למשתמשים לא מאומתים (anon) כדי לאפשר גישה ללא הגבלות
 
 השיפור פותר בעיות שמתרחשות כאשר משתמשים מנסים לגשת לנתוני משימות ותבניות משימות, ומבטיח פעולה חלקה של המערכת ללא הודעות שגיאה הקשורות להרשאות.
-
 ### 2025-03-31 - תיקון פונקציות RPC להצגת משימות פרויקט
 
 - נוצרה מיגרציה חדשה `20250331000002_fix_rpc_functions.sql` לתיקון פונקציות הבאות:
@@ -1803,4 +1802,27 @@ if ('children' in cleanTask) {
 4. נוצר קובץ מיגרציה `sql/migrations/remove_default_tasks.sql` שמעדכן את פונקציית הדאטאבייס לביטול יצירת המשימות האוטומטיות
 
 שינויים אלה מבטלים את היכולת ליצור משימות ברירת מחדל אוטומטית עם פרויקט חדש, ומאפשרים רק בחירה של משימות קיימות.
+
+### 2025-05-09 - תיקון שגיאות בניה בממשק משתמש
+
+- תוקנו שגיאות טיפוסים שמנעו בנייה תקינה של האפליקציה:
+  - תוקנה פונקציית `getStatusColor` בקבצים הבאים לקבלת פרמטר מסוג `string | null`:
+    - `src/app/dashboard/entrepreneurs/page.tsx`
+    - `src/app/dashboard/projects/[id]/page.tsx`
+    - `src/app/dashboard/projects/[id]/components/ProjectHeader.tsx`
+  - הוספת תנאי לבדיקת ערך null לפני השימוש ב-toLowerCase
+  - תוקן קוד המיון של פרויקטים בקובץ `src/app/dashboard/page.tsx` שגרם לשגיאה `Type 'null' is not assignable to type 'string'`
+  - הוספת בדיקת ערכי `updated_at` לפני השימוש ב-`new Date()`
+  - החלפת הגישה הישירה ל-`project.entrepreneur` (שדה לא קיים) ב-`getEntrepreneurName(project.entrepreneur_id)`
+  - הוספת פונקציית עזר `getEntrepreneurName` למציאת שם היזם לפי מזהה
+  - תוקן קובץ `src/app/dashboard/projects/[id]/components/ProjectDetails.tsx`:
+    - הוחלף השימוש בשדה `project.entrepreneur` (שאינו קיים) בשדה `project.entrepreneur_id`
+    - נוספה פונקציונליות לשליפת שם היזם מהמזהה באמצעות קריאה ל-API
+    - שימוש בהוק `useEffect` לטעינת פרטי היזם ואחסון בסטייט מקומי
+  - תוקנו אי התאמות בין טיפוסי המשימות:
+    - הוספת המרה ישירה של טיפוסים בין `Task` מקומפוננטת ה-Kanban לטיפוס `Task` של Supabase
+    - הוספת משתנה `tasksWithCorrectType` להמרת טיפוסים בטוחה
+
+שינויים אלה פותרים את כל השגיאות שהופיעו בלוגים של Vercel ומאפשרים בנייה והפצה תקינה של האפליקציה. הטיפול בכל המקרים שבהם ערכים יכולים להיות `null` או `undefined` וההסרה של התייחסויות לשדות לא קיימים מבטיחים שלא יהיו שגיאות בזמן ריצה.
+
 

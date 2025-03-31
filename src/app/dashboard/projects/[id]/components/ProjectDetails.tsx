@@ -22,8 +22,9 @@ import {
   FiUsers,
   FiInfo as InfoIcon
 } from 'react-icons/fi';
-import { Project } from '@/types/supabase';
-import { Task } from '@/components/tasks/kanban/types';
+import { Project, Task } from '@/types/supabase';
+import { useEffect, useState } from 'react';
+import entrepreneurService from '@/lib/services/entrepreneurService';
 
 interface ProjectDetailsProps {
   project: Project;
@@ -33,6 +34,26 @@ interface ProjectDetailsProps {
 }
 
 export default function ProjectDetails({ project, tasks, progress, formatDate }: ProjectDetailsProps) {
+  const [entrepreneurName, setEntrepreneurName] = useState<string | null>(null);
+  
+  // קבלת שם היזם על פי המזהה
+  useEffect(() => {
+    const fetchEntrepreneurName = async () => {
+      if (project.entrepreneur_id) {
+        try {
+          const entrepreneur = await entrepreneurService.getEntrepreneurById(project.entrepreneur_id);
+          if (entrepreneur) {
+            setEntrepreneurName(entrepreneur.name);
+          }
+        } catch (error) {
+          console.error('שגיאה בטעינת פרטי היזם:', error);
+        }
+      }
+    };
+    
+    fetchEntrepreneurName();
+  }, [project.entrepreneur_id]);
+
   return (
     <>
       {project.description && (
@@ -116,7 +137,7 @@ export default function ProjectDetails({ project, tasks, progress, formatDate }:
           </CardBody>
         </Card>
 
-        {project.entrepreneur && (
+        {project.entrepreneur_id && entrepreneurName && (
           <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
             <CardBody>
               <Stat>
@@ -126,7 +147,7 @@ export default function ProjectDetails({ project, tasks, progress, formatDate }:
                     <Text>יזם</Text>
                   </HStack>
                 </StatLabel>
-                <StatNumber fontSize="lg">{project.entrepreneur}</StatNumber>
+                <StatNumber fontSize="lg">{entrepreneurName}</StatNumber>
               </Stat>
             </CardBody>
           </Card>

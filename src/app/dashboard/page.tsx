@@ -109,7 +109,12 @@ export default function Dashboard() {
   
   // פרויקטים אחרונים (5 האחרונים)
   const recentProjects = [...filteredProjects]
-    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .sort((a, b) => {
+      // בדיקה שאין ערכי null
+      const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+      const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+      return dateB - dateA;
+    })
     .slice(0, 5);
   
   // משימות דחופות (משימות שמועד היעד שלהן קרוב או עבר)
@@ -188,6 +193,13 @@ export default function Dashboard() {
   const getProjectName = (projectId: string) => {
     const project = projects.find(p => p.id === projectId);
     return project ? project.name : 'לא משויך';
+  };
+  
+  // פונקציה לקבלת שם היזם לפי מזהה
+  const getEntrepreneurName = (entrepreneurId: string | null) => {
+    if (!entrepreneurId) return '-';
+    const entrepreneur = entrepreneurs.find(e => e.id === entrepreneurId);
+    return entrepreneur ? entrepreneur.name : '-';
   };
   
   if (loading) {
@@ -329,7 +341,7 @@ export default function Dashboard() {
                             {project.name}
                           </Link>
                         </Td>
-                        <Td display={{ base: 'none', md: 'table-cell' }}>{project.entrepreneur || '-'}</Td>
+                        <Td display={{ base: 'none', md: 'table-cell' }}>{getEntrepreneurName(project.entrepreneur_id)}</Td>
                         <Td display={{ base: 'none', md: 'table-cell' }}>
                           <Badge colorScheme={getStatusColor(project.status || '')}>
                             {getStatusText(project.status || '')}

@@ -25,7 +25,7 @@ import { FiAlertCircle } from 'react-icons/fi';
 import projectService from '@/lib/services/projectService';
 import taskService from '@/lib/services/taskService';
 import stageService from '@/lib/services/stageService';
-import { Project } from '@/types/supabase';
+import { Project, Task as SupabaseTask } from '@/types/supabase';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 import TaskEditModal from '@/components/tasks/TaskEditModal';
 import AssignTasksModal from '@/components/tasks/AssignTasksModal';
@@ -174,7 +174,9 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   };
   
   // פונקציה שמחזירה צבע לפי סטטוס
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string | null) => {
+    if (!status) return 'gray';
+    
     switch (status.toLowerCase()) {
       case 'active':
       case 'פעיל': return 'green';
@@ -335,6 +337,9 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     }
   };
   
+  // הבטחה שהמשימות תואמות את הטיפוס המצופה
+  const tasksWithCorrectType = tasks as unknown as SupabaseTask[];
+  
   return (
     <Box>
       {loading ? (
@@ -366,7 +371,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
             {/* פרטי הפרויקט */}
             <ProjectDetails 
               project={project} 
-              tasks={tasks} 
+              tasks={tasksWithCorrectType} 
               progress={progress} 
               formatDate={formatDate} 
             />

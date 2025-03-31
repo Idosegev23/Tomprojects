@@ -32,15 +32,16 @@ import { FiPlus, FiSearch, FiMoreVertical, FiEdit, FiTrash2, FiClock, FiAlertCir
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import projectService from '@/lib/services/projectService';
-import { Project } from '@/types/supabase';
+import entrepreneurService from '@/lib/services/entrepreneurService';
+import { Project, Entrepreneur } from '@/types/supabase';
 
 export default function Projects() {
   const [searchQuery, setSearchQuery] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filterByEntrepreneur, setFilterByEntrepreneur] = useState<string | null>(null);
-  const [entrepreneurs, setEntrepreneurs] = useState<string[]>([]);
+  const [entrepreneurs, setEntrepreneurs] = useState<Entrepreneur[]>([]);
+  const [selectedEntrepreneurId, setSelectedEntrepreneurId] = useState<string | null>(null);
   
   const router = useRouter();
   const toast = useToast();
@@ -53,15 +54,9 @@ export default function Projects() {
         const data = await projectService.getProjects();
         setProjects(data);
         
-        // חילוץ רשימת היזמים הייחודיים
-        const uniqueEntrepreneurs = Array.from(
-          new Set(
-            data
-              .map(project => project.entrepreneur)
-              .filter(entrepreneur => entrepreneur !== null && entrepreneur !== '') as string[]
-          )
-        );
-        setEntrepreneurs(uniqueEntrepreneurs);
+        // טעינת יזמים כאובייקטים מלאים במקום רק שמות
+        const entrepreneursData = await entrepreneurService.getEntrepreneurs();
+        setEntrepreneurs(entrepreneursData);
       } catch (err) {
         console.error('שגיאה בטעינת פרויקטים:', err);
         setError('אירעה שגיאה בטעינת הפרויקטים. אנא נסה שוב מאוחר יותר.');
@@ -119,16 +114,17 @@ export default function Projects() {
   const filteredProjects = projects.filter(project => {
     const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (project.description && project.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (project.owner && project.owner.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (project.entrepreneur && project.entrepreneur.toLowerCase().includes(searchQuery.toLowerCase()));
+      (typeof project.owner === 'string' && project.owner.toLowerCase().includes(searchQuery.toLowerCase()));
     
-    const matchesEntrepreneur = !filterByEntrepreneur || project.entrepreneur === filterByEntrepreneur;
+    const matchesEntrepreneur = !selectedEntrepreneurId || project.entrepreneur_id === selectedEntrepreneurId;
     
     return matchesSearch && matchesEntrepreneur;
   });
   
   // פונקציה שמחזירה צבע לפי סטטוס
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string | null) => {
+    if (!status) return 'gray';
+    
     switch (status.toLowerCase()) {
       case 'active':
       case 'פעיל': return 'green';
@@ -209,15 +205,15 @@ export default function Projects() {
         
         <Select 
           placeholder="סנן לפי יזם" 
-          value={filterByEntrepreneur || ''}
-          onChange={(e) => setFilterByEntrepreneur(e.target.value || null)}
+          value={selectedEntrepreneurId || ''}
+          onChange={(e) => setSelectedEntrepreneurId(e.target.value || null)}
           maxW={{ base: 'full', md: '250px' }}
           size={{ base: 'sm', md: 'md' }}
         >
           <option value="">כל היזמים</option>
           {entrepreneurs.map((entrepreneur) => (
-            <option key={entrepreneur} value={entrepreneur}>
-              {entrepreneur}
+            <option key={entrepreneur.id} value={entrepreneur.id}>
+              {entrepreneur.name}
             </option>
           ))}
         </Select>
@@ -266,7 +262,7 @@ export default function Projects() {
 interface ProjectCardProps {
   project: Project;
   formatDate: (date: string | null) => string;
-  getStatusColor: (status: string) => string;
+  getStatusColor: (status: string | null) => string;
   getStatusText: (status: string) => string;
   onDelete: () => void;
 }
@@ -276,6 +272,7 @@ function ProjectCard({ project, formatDate, getStatusColor, getStatusText, onDel
   const [taskCount, setTaskCount] = useState<number | null>(null);
   const [completedTaskCount, setCompletedTaskCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [entrepreneurName, setEntrepreneurName] = useState<string | null>(null);
   
   // טעינת התקדמות הפרויקט ומידע על המשימות
   useEffect(() => {
@@ -287,6 +284,14 @@ function ProjectCard({ project, formatDate, getStatusColor, getStatusText, onDel
         const tasksData = await projectService.countTasksInProject(project.id);
         setTaskCount(tasksData.total);
         setCompletedTaskCount(tasksData.completed);
+        
+        // טעינת שם היזם
+        if (project.entrepreneur_id) {
+          const entrepreneur = await entrepreneurService.getEntrepreneurById(project.entrepreneur_id);
+          if (entrepreneur) {
+            setEntrepreneurName(entrepreneur.name);
+          }
+        }
       } catch (err) {
         console.error(`שגיאה בטעינת פרטי פרויקט ${project.id}:`, err);
       } finally {
@@ -295,7 +300,7 @@ function ProjectCard({ project, formatDate, getStatusColor, getStatusText, onDel
     };
     
     fetchProjectDetails();
-  }, [project.id]);
+  }, [project.id, project.entrepreneur_id]);
   
   return (
     <Card 
@@ -350,7 +355,9 @@ function ProjectCard({ project, formatDate, getStatusColor, getStatusText, onDel
         <VStack align="stretch" spacing={2}>
           <Flex justify="space-between">
             <Text fontSize={{ base: 'xs', md: 'sm' }} color="gray.600">יזם:</Text>
-            <Text fontSize={{ base: 'xs', md: 'sm' }} fontWeight="medium">{project.entrepreneur || 'לא הוגדר'}</Text>
+            <Text fontSize={{ base: 'xs', md: 'sm' }} fontWeight="medium">
+              {entrepreneurName || 'לא הוגדר'}
+            </Text>
           </Flex>
           
           <Flex justify="space-between">
