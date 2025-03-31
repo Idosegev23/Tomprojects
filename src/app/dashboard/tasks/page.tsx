@@ -47,7 +47,8 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import taskService from '@/lib/services/taskService';
 import projectService from '@/lib/services/projectService';
-import { Task, Project } from '@/types/supabase';
+import entrepreneurService from '@/lib/services/entrepreneurService';
+import { Task, Project, Entrepreneur } from '@/types/supabase';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 
 export default function Tasks() {
@@ -56,7 +57,7 @@ export default function Tasks() {
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [selectedPriority, setSelectedPriority] = useState<string>('');
   const [selectedEntrepreneur, setSelectedEntrepreneur] = useState<string>('');
-  const [entrepreneurs, setEntrepreneurs] = useState<string[]>([]);
+  const [entrepreneurs, setEntrepreneurs] = useState<Entrepreneur[]>([]);
   
   // הוספת מצב למיון
   const [sortBy, setSortBy] = useState<string>('');
@@ -89,15 +90,13 @@ export default function Tasks() {
         const projectsData = await projectService.getProjects();
         setProjects(projectsData);
         
-        // חילוץ רשימת היזמים הייחודיים
-        const uniqueEntrepreneurs = Array.from(
-          new Set(
-            projectsData
-              .map(project => project.entrepreneur)
-              .filter(entrepreneur => entrepreneur !== null && entrepreneur !== '') as string[]
-          )
-        );
-        setEntrepreneurs(uniqueEntrepreneurs);
+        // שליפת היזמים כדי להציג את השמות שלהם
+        try {
+          const entrepreneursData = await entrepreneurService.getEntrepreneurs();
+          setEntrepreneurs(entrepreneursData);
+        } catch (entrepreneurError) {
+          console.error('שגיאה בטעינת יזמים:', entrepreneurError);
+        }
       } catch (err) {
         console.error('שגיאה בטעינת פרויקטים:', err);
         toast({
@@ -144,7 +143,7 @@ export default function Tasks() {
         if (selectedEntrepreneur) {
           // מציאת פרויקטים של היזם הנבחר
           const entrepreneurProjectIds = projects
-            .filter(project => project.entrepreneur === selectedEntrepreneur)
+            .filter(project => project.entrepreneur_id === selectedEntrepreneur)
             .map(project => project.id);
           
           // סינון משימות שהן חלק מהפרויקטים של היזם
@@ -356,6 +355,14 @@ export default function Tasks() {
     return project ? project.name : 'לא משויך לפרויקט';
   };
   
+  // פונקציה לקבלת שם היזם לפי מזהה
+  const getEntrepreneurName = (entrepreneurId: string | null) => {
+    if (!entrepreneurId) return 'לא מוגדר';
+    
+    const entrepreneur = entrepreneurs.find(e => e.id === entrepreneurId);
+    return entrepreneur ? entrepreneur.name : 'לא נמצא';
+  };
+  
   // מצבי סטטוס אפשריים
   const statusOptions = [
     { value: '', label: 'כל הסטטוסים' },
@@ -511,8 +518,8 @@ export default function Tasks() {
             >
               <option value="">כל היזמים</option>
               {entrepreneurs.map((entrepreneur) => (
-                <option key={entrepreneur} value={entrepreneur}>
-                  {entrepreneur}
+                <option key={entrepreneur.id} value={entrepreneur.id}>
+                  {entrepreneur.name}
                 </option>
               ))}
             </Select>
@@ -545,10 +552,12 @@ export default function Tasks() {
                       formatDate={formatDate} 
                       getPriorityColor={getPriorityColor} 
                       getProjectName={getProjectName}
+                      getEntrepreneurName={getEntrepreneurName}
                       onStatusChange={handleStatusChange}
                       onDelete={() => handleDeleteTask(task.id)}
                       onEdit={() => router.push(`/dashboard/tasks/${task.id}/edit`)}
                       onView={() => router.push(`/dashboard/tasks/${task.id}`)}
+                      projects={projects}
                     />
                   ))}
                 </VStack>
@@ -576,10 +585,12 @@ interface TaskItemProps {
   formatDate: (date: string | null) => string;
   getPriorityColor: (priority: string) => string;
   getProjectName: (projectId: string) => string;
+  getEntrepreneurName: (entrepreneurId: string | null) => string;
   onStatusChange: (taskId: string, newStatus: string) => void;
   onDelete: () => void;
   onEdit: () => void;
   onView: () => void;
+  projects: Project[];
 }
 
 function TaskItem({ 
@@ -587,118 +598,55 @@ function TaskItem({
   formatDate, 
   getPriorityColor, 
   getProjectName,
+  getEntrepreneurName,
   onStatusChange,
   onDelete,
   onEdit,
-  onView
+  onView,
+  projects
 }: TaskItemProps) {
+  // מציאת פרטי הפרויקט
+  const projectName = getProjectName(task.project_id);
+  
+  // מציאת שם היזם של הפרויקט (אם יש)
+  // כאן נדאג למצוא את הפרויקט ואז להשתמש ב-entrepreneur_id שלו
+  const projectEntrepreneur = projects.find((p: Project) => p.id === task.project_id)?.entrepreneur_id || null;
+  const entrepreneurName = getEntrepreneurName(projectEntrepreneur);
+
   return (
     <Box 
       borderWidth="1px" 
-      borderRadius="md" 
-      p={{ base: 3, md: 4 }} 
-      bg="white" 
+      borderRadius="lg" 
+      overflow="hidden"
+      p={4}
+      mb={4}
+      bg="white"
       boxShadow="sm"
-      _hover={{ boxShadow: 'md' }}
+      _hover={{ boxShadow: "md" }}
       transition="all 0.2s"
     >
-      <Flex 
-        direction={{ base: 'column', md: 'row' }} 
-        justify="space-between" 
-        align={{ base: 'start', md: 'center' }}
-      >
-        <Flex 
-          flex="1" 
-          direction={{ base: 'column', md: 'row' }} 
-          align={{ base: 'start', md: 'center' }}
-          mb={{ base: 3, md: 0 }}
-        >
-          <Checkbox 
-            isChecked={task.status === 'done'} 
-            onChange={(e) => onStatusChange(task.id, e.target.checked ? 'done' : 'todo')}
-            mr={{ base: 0, md: 3 }}
-            mb={{ base: 2, md: 0 }}
-            colorScheme="green"
-          />
-          
-          <Box flex="1" onClick={onView} cursor="pointer">
-            <Text 
-              fontWeight="medium" 
-              fontSize={{ base: 'sm', md: 'md' }}
-              textDecoration={task.status === 'done' ? 'line-through' : 'none'}
-              color={task.status === 'done' ? 'gray.500' : 'inherit'}
-              mb={{ base: 1, md: 0 }}
-            >
-              {task.title}
-            </Text>
-            
-            <Flex 
-              wrap="wrap" 
-              gap={2} 
-              mt={{ base: 2, md: 1 }}
-              display={{ base: 'flex', md: 'none' }}
-            >
-              <Badge colorScheme={getPriorityColor(task.priority || '')}>
-                {task.priority}
+      <Flex justifyContent="space-between" alignItems="flex-start" mb={3}>
+        <VStack align="start" spacing={1} flex={1}>
+          <Heading size="sm">{task.title}</Heading>
+          <HStack spacing={2}>
+            {task.project_id && (
+              <Badge variant="subtle" colorScheme="blue">
+                {projectName}
               </Badge>
-              
-              <Badge variant="outline">
-                {task.status}
+            )}
+            {entrepreneurName && entrepreneurName !== 'לא מוגדר' && entrepreneurName !== 'לא נמצא' && (
+              <Badge variant="subtle" colorScheme="purple">
+                {entrepreneurName}
               </Badge>
-              
-              {task.project_id && (
-                <Badge variant="subtle" colorScheme="blue">
-                  {getProjectName(task.project_id)}
-                </Badge>
-              )}
-              
-              {task.due_date && (
-                <Badge 
-                  colorScheme={
-                    new Date(task.due_date) < new Date() && task.status !== 'done' 
-                      ? 'red' 
-                      : 'gray'
-                  }
-                >
-                  {formatDate(task.due_date)}
-                </Badge>
-              )}
-            </Flex>
-          </Box>
-        </Flex>
-        
-        <Flex 
-          align="center" 
-          gap={{ base: 1, md: 3 }}
-          display={{ base: 'none', md: 'flex' }}
-        >
-          {task.project_id && (
-            <Badge variant="subtle" colorScheme="blue">
-              {getProjectName(task.project_id)}
+            )}
+            <Badge 
+              colorScheme={getPriorityColor(task.priority)}
+              variant="solid"
+            >
+              {task.priority}
             </Badge>
-          )}
-          
-          <Badge colorScheme={getPriorityColor(task.priority || '')}>
-            {task.priority}
-          </Badge>
-          
-          <Badge variant="outline">
-            {task.status}
-          </Badge>
-          
-          {task.due_date && (
-            <Text 
-              fontSize="sm" 
-              color={
-                new Date(task.due_date) < new Date() && task.status !== 'done' 
-                  ? 'red.500' 
-                  : 'gray.500'
-              }
-            >
-              {formatDate(task.due_date)}
-            </Text>
-          )}
-        </Flex>
+          </HStack>
+        </VStack>
         
         <HStack spacing={1} mt={{ base: 2, md: 0 }}>
           <IconButton

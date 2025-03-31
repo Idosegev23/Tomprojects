@@ -39,59 +39,59 @@ export interface Database {
         Row: {
           id: string
           name: string
-          owner: string | null
-          created_at: string
-          updated_at: string
-          status: string
+          description: string | null
+          entrepreneur_id: string | null
+          status: string | null
+          priority: string | null
+          department: string | null
+          responsible: string | null
           total_budget: number | null
           planned_start_date: string | null
           planned_end_date: string | null
           actual_start_date: string | null
           actual_end_date: string | null
-          project_manager_id: string | null
-          priority: string
-          progress: number
-          description: string | null
-          entrepreneur: string | null
-          entrepreneur_id: string | null
+          progress: number | null
+          created_at: string | null
+          updated_at: string | null
+          owner: Json | null
         }
         Insert: {
           id?: string
           name: string
-          owner?: string | null
-          created_at?: string
-          updated_at?: string
-          status?: string
+          description?: string | null
+          entrepreneur_id?: string | null
+          status?: string | null
+          priority?: string | null
+          department?: string | null
+          responsible?: string | null
           total_budget?: number | null
           planned_start_date?: string | null
           planned_end_date?: string | null
           actual_start_date?: string | null
           actual_end_date?: string | null
-          project_manager_id?: string | null
-          priority?: string
-          progress?: number
-          description?: string | null
-          entrepreneur?: string | null
-          entrepreneur_id?: string | null
+          progress?: number | null
+          created_at?: string | null
+          updated_at?: string | null
+          owner?: Json | null
         }
         Update: {
           id?: string
           name?: string
-          owner?: string | null
-          created_at?: string
-          updated_at?: string
-          status?: string
+          description?: string | null
+          entrepreneur_id?: string | null
+          status?: string | null
+          priority?: string | null
+          department?: string | null
+          responsible?: string | null
           total_budget?: number | null
           planned_start_date?: string | null
           planned_end_date?: string | null
           actual_start_date?: string | null
           actual_end_date?: string | null
-          project_manager_id?: string | null
-          priority?: string
-          progress?: number
-          description?: string | null
-          entrepreneur?: string | null
-          entrepreneur_id?: string | null
+          progress?: number | null
+          created_at?: string | null
+          updated_at?: string | null
+          owner?: Json | null
         }
       }
       stages: {

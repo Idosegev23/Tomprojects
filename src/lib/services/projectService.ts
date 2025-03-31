@@ -98,9 +98,34 @@ export const projectService = {
   
   // עדכון פרויקט קיים
   async updateProject(id: string, project: UpdateProject): Promise<Project> {
+    // וידוא שהשדות הנדרשים קיימים באובייקט העדכון
+    const validFields = [
+      'name', 'description', 'entrepreneur_id', 'status', 
+      'priority', 'department', 'responsible', 'total_budget',
+      'planned_start_date', 'planned_end_date', 
+      'actual_start_date', 'actual_end_date',
+      'progress', 'created_at', 'updated_at', 'owner'
+    ];
+    
+    // סינון שדות לא חוקיים מהאובייקט
+    const updateData: UpdateProject = {};
+    
+    // הוספת שדות חוקיים בלבד
+    for (const key of Object.keys(project)) {
+      if (validFields.includes(key)) {
+        // הוספת השדה רק אם הוא קיים ברשימת השדות החוקיים
+        (updateData as any)[key] = project[key as keyof UpdateProject];
+      }
+    }
+    
+    // הוספת שדה updated_at אם לא קיים
+    if (!updateData.updated_at) {
+      updateData.updated_at = new Date().toISOString();
+    }
+    
     const { data, error } = await supabase
       .from('projects')
-      .update(project)
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
@@ -369,21 +394,67 @@ export const projectService = {
         return false;
       }
 
-      // קריאה לפונקציית RPC
-      const { data, error } = await supabase.rpc('update_build_tracking', {
-        project_id_param: projectId,
-        tracking_data: trackingData
-      });
+      try {
+        // ניסיון ראשון - קריאה לפונקציית RPC
+        const { data, error } = await supabase.rpc('update_build_tracking', {
+          project_id_param: projectId,
+          tracking_data: trackingData
+        });
 
-      if (error) {
-        console.error("שגיאה בעדכון build_tracking:", error);
+        if (!error) {
+          console.log("build_tracking עודכן בהצלחה באמצעות RPC:", data);
+          return true;
+        }
+
+        // אם הפונקציה לא קיימת או יש שגיאה, ננסה לעדכן ישירות את עמודת owner
+        console.warn("אזהרה: נכשלה קריאה ל-RPC update_build_tracking:", error);
+        console.log("מנסה לעדכן את נתוני הבנייה בעמודת owner ישירות...");
+      } catch (rpcError) {
+        console.error("שגיאה בקריאה ל-RPC:", rpcError);
+        // המשך לניסיון ישיר לעדכון העמודה
+      }
+
+      // שליפת הערך הנוכחי של owner
+      const { data: currentProject, error: fetchError } = await supabase
+        .from('projects')
+        .select('owner')
+        .eq('id', projectId)
+        .single();
+
+      if (fetchError) {
+        console.error("שגיאה בשליפת ערך owner נוכחי:", fetchError);
         return false;
       }
 
-      console.log("build_tracking עודכן בהצלחה:", data);
+      // מיזוג הערך הקיים עם הערך החדש
+      const currentOwnerData = currentProject?.owner || {};
+      // שמירת המידע הקיים ב-owner והוספת חלק build_tracking
+      const updatedOwnerData = { 
+        ...currentOwnerData,
+        build_tracking: {
+          ...(currentOwnerData.build_tracking || {}),
+          ...trackingData
+        }
+      };
+
+      // עדכון ישיר של עמודת owner
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update({ 
+          owner: updatedOwnerData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', projectId);
+
+      if (updateError) {
+        console.error("שגיאה בעדכון ישיר של נתוני הבנייה:", updateError);
+        return false;
+      }
+
+      console.log("נתוני הבנייה עודכנו בהצלחה באמצעות עדכון ישיר של owner:", updatedOwnerData);
       return true;
     } catch (error) {
-      console.error("שגיאה בלתי צפויה בעדכון build_tracking:", error);
+      console.error("שגיאה בלתי צפויה בעדכון נתוני הבנייה:", error);
       return false;
     }
   },
@@ -398,19 +469,50 @@ export const projectService = {
         return null;
       }
 
-      // קריאה לפונקציית RPC
-      const { data, error } = await supabase.rpc('get_build_tracking', {
-        project_id_param: projectId
-      });
+      let rpcSuccess = false;
+      let buildTrackingData = {};
 
-      if (error) {
-        console.error("שגיאה בשליפת build_tracking:", error);
-        return null;
+      try {
+        // ניסיון ראשון - קריאה לפונקציית RPC
+        const { data, error } = await supabase.rpc('get_build_tracking', {
+          project_id_param: projectId
+        });
+
+        if (!error && data) {
+          console.log("נשלפו נתוני הבנייה בהצלחה באמצעות RPC");
+          rpcSuccess = true;
+          return data.build_tracking || {};
+        }
+
+        // אם הפונקציה לא קיימת או יש שגיאה, נשלוף ישירות מעמודת owner
+        console.warn("אזהרה: נכשלה קריאה ל-RPC get_build_tracking:", error);
+      } catch (rpcError) {
+        console.error("שגיאה בקריאה ל-RPC:", rpcError);
+        // המשך לשליפה ישירה מהעמודה
       }
 
-      return data.build_tracking || {};
+      if (!rpcSuccess) {
+        // שליפה ישירה מעמודת owner
+        console.log("מנסה לשלוף את נתוני הבנייה מעמודת owner ישירות...");
+        const { data, error } = await supabase
+          .from('projects')
+          .select('owner')
+          .eq('id', projectId)
+          .single();
+
+        if (error) {
+          console.error("שגיאה בשליפה ישירה של נתוני הבנייה:", error);
+          return null;
+        }
+
+        // במידה ו-owner קיים וכולל שדה build_tracking, נחזיר אותו
+        buildTrackingData = data?.owner?.build_tracking || {};
+        console.log("נשלפו נתוני הבנייה בהצלחה באמצעות שליפה ישירה מ-owner");
+      }
+
+      return buildTrackingData;
     } catch (error) {
-      console.error("שגיאה בלתי צפויה בשליפת build_tracking:", error);
+      console.error("שגיאה בלתי צפויה בשליפת נתוני הבנייה:", error);
       return null;
     }
   }

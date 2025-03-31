@@ -163,33 +163,35 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
     try {
       setIsSubmitting(true);
       
-      // קבלת מידע על היזם שנבחר אם קיים
-      let entrepreneurName = '';
-      if (project.entrepreneur_id) {
-        try {
-          const entrepreneur = await entrepreneurService.getEntrepreneurById(project.entrepreneur_id);
-          if (entrepreneur) {
-            entrepreneurName = entrepreneur.name;
-          }
-        } catch (error) {
-          console.error('שגיאה בקבלת פרטי היזם:', error);
-          // ממשיכים עם העדכון גם אם לא הצלחנו לקבל את שם היזם
-        }
-      }
-      
-      // הכנת אובייקט העדכון
+      // הכנת אובייקט העדכון עם כל השדות הנדרשים
       const updateData: UpdateProject = {
         name: project.name,
-        status: project.status,
         description: project.description,
+        status: project.status,
         updated_at: new Date().toISOString(),
         entrepreneur_id: project.entrepreneur_id,
-        entrepreneur: entrepreneurName, // עדכון שם היזם יחד עם המזהה
+        priority: project.priority || 'medium',
+        progress: project.progress,
+        total_budget: project.total_budget,
+        responsible: project.responsible,
+        department: project.department,
       };
       
-      // אם יש תאריך יעד, נוסיף אותו
+      // הוספת תאריכים אם קיימים
+      if (project.planned_start_date) {
+        updateData.planned_start_date = project.planned_start_date;
+      }
+      
       if (project.planned_end_date) {
         updateData.planned_end_date = project.planned_end_date;
+      }
+      
+      if (project.actual_start_date) {
+        updateData.actual_start_date = project.actual_start_date;
+      }
+      
+      if (project.actual_end_date) {
+        updateData.actual_end_date = project.actual_end_date;
       }
       
       // שליחה לשרת
