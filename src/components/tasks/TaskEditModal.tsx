@@ -132,13 +132,42 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   // טעינת נתוני המשימה בעת עריכה
   useEffect(() => {
     if (task) {
+      // טיפול ב-assignees_info כמערך (לא כמחרוזת JSON)
+      let assigneesInfoArray: string[] = [];
+      
+      // בדיקה אם יש assignees_info ומהו הפורמט שלו
+      if (task.assignees_info) {
+        // אם זה כבר מערך, נשתמש בו כמו שהוא
+        if (Array.isArray(task.assignees_info)) {
+          assigneesInfoArray = [...task.assignees_info];
+        } 
+        // אם זה מחרוזת JSON, ננסה לפרסר אותה
+        else if (typeof task.assignees_info === 'string') {
+          try {
+            assigneesInfoArray = JSON.parse(task.assignees_info);
+            if (!Array.isArray(assigneesInfoArray)) {
+              assigneesInfoArray = []; // אם התוצאה אינה מערך, נאפס
+            }
+          } catch (e) {
+            console.error('שגיאה בפירסור assignees_info:', e);
+            assigneesInfoArray = [];
+          }
+        }
+      }
+      // גיבוי: אם assignees_info ריק אך יש assignees, נשתמש בהם
+      else if (Array.isArray(task.assignees)) {
+        assigneesInfoArray = [...task.assignees];
+      }
+      
+      // עדכון הפורמט
       setFormData({
         ...task,
         start_date: task.start_date ? task.start_date.split('T')[0] : '',
         due_date: task.due_date ? task.due_date.split('T')[0] : '',
-        assignees_info: Array.isArray(task.assignees_info) ? task.assignees_info : 
-                        Array.isArray(task.assignees) ? task.assignees : [],
+        assignees_info: assigneesInfoArray,
+        assignees: assigneesInfoArray, // גם assignees לתאימות לאחור
       });
+      
       setIsSubtask(!!task.parent_task_id);
       
       // קביעת רמת המשימה בהתבסס על hierarchical_number או parent_task_id
@@ -173,7 +202,8 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
         project_id: projectId,
         parent_task_id: null,
         responsible: null,
-        assignees_info: [], // שימוש ב-assignees_info במקום assignees
+        assignees_info: [], // איפוס ל-מערך ריק
+        assignees: [], // איפוס ל-מערך ריק
       });
       setIsSubtask(false);
       setSelectedPath([]);
@@ -294,30 +324,46 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   const handleAddAssignee = () => {
     if (!newAssignee.trim()) return;
     
-    const currentAssignees = Array.isArray(formData.assignees_info) ? formData.assignees_info : [];
+    // וידוא שיש לנו מערך תקין
+    const currentAssignees = Array.isArray(formData.assignees_info) ? 
+      [...formData.assignees_info] : // שימוש בעותק עמוק של המערך הקיים
+      [];
     
+    // בדיקה אם המשתתף כבר קיים במערך
     if (currentAssignees.includes(newAssignee)) {
       setNewAssignee('');
       return;
     }
     
-    setFormData(prev => ({
-      ...prev,
-      assignees_info: [...currentAssignees, newAssignee],
-      assignees: [...currentAssignees, newAssignee], // עדכון שדה ה-assignees לתאימות לאחור
-    }));
+    // עדכון מצב הטופס עם המערך המעודכן
+    setFormData(prev => {
+      // יצירת מערך חדש עם המשתתף החדש
+      const updatedAssigneesInfo = [...currentAssignees, newAssignee];
+      
+      return {
+        ...prev,
+        assignees_info: updatedAssigneesInfo,
+        assignees: updatedAssigneesInfo, // גם עדכון שדה assignees לתאימות לאחור
+      };
+    });
     
     setNewAssignee('');
   };
   
   const handleRemoveAssignee = (assigneeToRemove: string) => {
     setFormData(prev => {
-      const currentAssignees = Array.isArray(prev.assignees_info) ? prev.assignees_info : [];
+      // וידוא שעובדים עם מערך תקין
+      const currentAssignees = Array.isArray(prev.assignees_info) ? 
+        [...prev.assignees_info] : // שימוש בעותק עמוק של המערך הקיים
+        [];
+      
+      // הסרת המשתתף מהמערך
       const updatedAssignees = currentAssignees.filter(a => a !== assigneeToRemove);
+      
       return {
         ...prev,
         assignees_info: updatedAssignees,
-        assignees: updatedAssignees, // עדכון שדה ה-assignees לתאימות לאחור
+        assignees: updatedAssignees, // גם עדכון שדה assignees לתאימות לאחור
       };
     });
   };
@@ -586,14 +632,13 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
       if (isSubtask && formData.parent_task_id) {
         console.log(`יוצר/מעדכן תת-משימה ברמה: ${selectedPath.length - 1}, עם משימת אב: ${selectedParentId}`);
         
-        // לא צריך להגדיר את hierarchical_number ידנית - השרת יחשב אותו
-        // אבל אנחנו כן מגדירים את parent_task_id
-        taskData.parent_task_id = formData.parent_task_id;
+        // וידוא שיש parent_task_id תקין
+        taskData.parent_task_id = selectedParentId || formData.parent_task_id;
+        console.log(`משימת אב שנבחרה: ${taskData.parent_task_id}`);
       } else {
         // משימת שורש ללא משימת אב
         taskData.parent_task_id = null;
-        
-        // hierarchical_number יחושב על ידי השרת
+        console.log('יוצר משימת שורש ללא משימת אב');
       }
       
       if (isEditMode && task) {
@@ -628,50 +673,131 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
           return;
         }
         
-        // וידוא שיש לנו את כל השדות הנדרשים
+        // וידוא שיש לנו את כל השדות הנדרשים ובפורמט הנכון
+        const assigneesArray = Array.isArray(formData.assignees_info) ? formData.assignees_info : 
+                              Array.isArray(formData.assignees) ? formData.assignees : [];
+        
+        // יצירת אובייקט נקי לשליחה לשרת
         const newTaskData = {
           title: formData.title || '',
           description: formData.description || null,
           project_id: projectId,
           status: formData.status || 'todo',
           priority: formData.priority || 'medium',
-          parent_task_id: taskData.parent_task_id,
+          parent_task_id: taskData.parent_task_id, // משתמש בערך שהוגדר למעלה
           start_date: formData.start_date || null,
           due_date: formData.due_date || null,
           responsible: formData.responsible || null,
-          assignees: Array.isArray(formData.assignees) ? formData.assignees : 
-                     Array.isArray(formData.assignees_info) ? formData.assignees_info : [],
+          assignees_info: assigneesArray,
+          // לא שולחים את שדה assignees כדי למנוע כפילות וקונפליקטים
         };
         
-        // ביצוע קריאה לשרת ליצירת המשימה
-        result = await taskService.createTask(newTaskData);
+        // לוג של האובייקט שנשלח לצורך דיבוג
+        console.log('שולח נתוני משימה חדשה לשרת:', JSON.stringify(newTaskData, null, 2));
         
-        // שמירת המשימה שנוצרה לשימוש בפופאפ התבנית
-        setCreatedTaskData(result);
-        
-        toast({
-          title: "המשימה נוצרה בהצלחה",
-          status: "success",
-          duration: 3000,
-          isClosable: true,
-        });
-        
-        if (onTaskCreated) {
-          onTaskCreated(result);
+        try {
+          // ביצוע קריאה לשרת ליצירת המשימה
+          result = await taskService.createTask(newTaskData);
+          
+          // שמירת המשימה שנוצרה לשימוש בפופאפ התבנית
+          setCreatedTaskData(result);
+          
+          toast({
+            title: "המשימה נוצרה בהצלחה",
+            status: "success",
+            duration: 3000,
+            isClosable: true,
+          });
+          
+          if (onTaskCreated) {
+            onTaskCreated(result);
+          }
+          
+          // פתיחת פופאפ לשאלה האם לשמור כתבנית
+          setTemplateName(result.title); // הצעה לשם התבנית
+          
+          // חשוב לאפס את מצב הטעינה לפני פתיחת הדיאלוג
+          setLoading(false);
+          setIsTemplateDialogOpen(true);
+        } catch (error) {
+          console.error('שגיאה ספציפית בקריאה ליצירת משימה:', error);
+          
+          // טיפול ספציפי בשגיאת TypeError: Load failed
+          if (error instanceof TypeError && (error as Error).message.includes('Load failed')) {
+            const errorDetail = {
+              data: newTaskData,
+              errorType: 'TypeError: Load failed',
+              possibleCause: 'תקלה בהמרת מבנה נתונים או בעיה בתצורת נתוני המשימה'
+            };
+            
+            console.error('פרטי שגיאה מורחבים - TypeError: Load failed:', errorDetail);
+            
+            toast({
+              title: "שגיאה בפורמט הנתונים",
+              description: "אירעה שגיאה בעיבוד נתוני המשימה. נסה להסיר שדות מיוחדים או לפשט את הנתונים.",
+              status: "error",
+              duration: 7000,
+              isClosable: true,
+            });
+            
+            // ניסיון להסיר שדות בעייתיים ולנסות שוב
+            try {
+              // יצירת גרסה מפושטת של האובייקט
+              const simplifiedData = {
+                title: newTaskData.title,
+                project_id: newTaskData.project_id,
+                status: newTaskData.status,
+                priority: newTaskData.priority,
+                parent_task_id: newTaskData.parent_task_id,
+                // השמטת assignees_info שעלול לגרום לבעיות
+              };
+              
+              console.log('מנסה שוב עם אובייקט מפושט:', simplifiedData);
+              
+              // ניסיון שני עם אובייקט מפושט
+              result = await taskService.createTask(simplifiedData);
+              
+              // אם הגענו לכאן, הניסיון השני הצליח
+              setCreatedTaskData(result);
+              
+              toast({
+                title: "המשימה נוצרה בהצלחה (ללא מידע נוסף)",
+                description: "המשימה נוצרה, אך חלק מהשדות הושמטו כדי למנוע שגיאות.",
+                status: "success",
+                duration: 5000,
+                isClosable: true,
+              });
+              
+              if (onTaskCreated) {
+                onTaskCreated(result);
+              }
+              
+              setLoading(false);
+              onClose();
+              return;
+            } catch (retryError) {
+              console.error('גם הניסיון השני נכשל:', retryError);
+              // נמשיך לזרוק את השגיאה המקורית
+            }
+          }
+          
+          throw error; // מעביר את השגיאה למנגנון הטיפול בשגיאות הכללי
         }
-        
-        // פתיחת פופאפ לשאלה האם לשמור כתבנית
-        setTemplateName(result.title); // הצעה לשם התבנית
-        
-        // חשוב לאפס את מצב הטעינה לפני פתיחת הדיאלוג
-        setLoading(false);
-        setIsTemplateDialogOpen(true);
       }
     } catch (error) {
       console.error('Error saving task:', error);
+      
+      // שיפור הודעת השגיאה עבור שגיאת Load failed
+      let errorMessage = "אירעה שגיאה לא ידועה";
+      if (error instanceof TypeError && (error as Error).message.includes('Load failed')) {
+        errorMessage = "שגיאה בפורמט הנתונים - נסה להסיר שדות או משתתפים ולנסות שוב";
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "שגיאה בשמירת המשימה",
-        description: error instanceof Error ? error.message : "אירעה שגיאה לא ידועה",
+        description: errorMessage,
         status: "error",
         duration: 5000,
         isClosable: true,
@@ -689,24 +815,26 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
     try {
       setTemplateSaveLoading(true);
       
-      // הכנת המידע של התבנית
+      // הכנת המידע של התבנית - נוודא שהנתונים נקיים ותקינים
       const templateData = {
         name: templateName || createdTaskData.title,
         is_default: false, // שינוי להסרת השימוש ב-is_default כי העמודה לא קיימת
         task_data: {
           title: createdTaskData.title,
-          description: createdTaskData.description,
-          status: createdTaskData.status,
-          priority: createdTaskData.priority,
-          parent_task_id: createdTaskData.parent_task_id,
-          hierarchical_number: createdTaskData.hierarchical_number, // שמירת המספר ההיררכי אם קיים
-          category: createdTaskData.category,
-          responsible: null, // שינוי מ-"מערכת" ל-null כדי למנוע שגיאת סינטקס UUID
-          // שדות נוספים שאתה רוצה לשמור בתבנית
+          description: createdTaskData.description || null,
+          status: createdTaskData.status || 'todo',
+          priority: createdTaskData.priority || 'medium',
+          // שינינו להסרת parent_task_id כי תבנית לא צריכה להיות תת-משימה
+          parent_task_id: null, 
+          hierarchical_number: null, // שמירת המספר ההיררכי כnull כי הוא ייחודי לכל משימה
+          category: createdTaskData.category || null,
+          responsible: null, // אפשר להגדיר אחר כך
+          assignees_info: [], // תבנית תתחיל ללא משתתפים
+          // איננו שולחים את שדה assignees כדי למנוע כפילות וקונפליקטים
         }
       };
       
-      console.log('שומר תבנית משימה:', templateData);
+      console.log('שומר תבנית משימה:', JSON.stringify(templateData, null, 2));
       
       // שימוש בשירות האמיתי לשמירת התבנית
       await taskTemplateService.saveTemplate(templateData);
