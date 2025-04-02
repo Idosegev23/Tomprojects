@@ -15,10 +15,12 @@ import { motion } from 'framer-motion';
 import { KanbanColumnProps } from './types';
 import TaskCard from './TaskCard';
 
-// קומפוננטה מונפשת לעמודה
-const MotionBox = motion(Box);
+// קומפוננטה מונפשת
 const MotionFlex = motion(Flex);
 
+/**
+ * עמודת קנבן למשימות
+ */
 const KanbanColumn: React.FC<KanbanColumnProps> = ({
   id,
   title,
@@ -34,24 +36,53 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
   onDeleteTask,
   getProjectName,
 }) => {
+  // קריאות ל-hooks - חייבות להיות באותו סדר בכל רנדור!
+  const bgColor = useColorModeValue(`${color}.100`, `${color}.800`);
+  const borderColor = useColorModeValue('gray.200', 'gray.600');
+  const emptyAreaBg = useColorModeValue('gray.50', 'gray.700');
+  const boxBg = useColorModeValue('gray.50', 'gray.700');
+  const boxBorderColor = useColorModeValue('gray.200', 'gray.600');
+  const parentBoxBg = useColorModeValue('purple.50', 'purple.900');
+  
+  // מיון המשימות: משימות אב בראש, ולאחר מכן לפי מספר היררכי
+  const sortedTasks = [...tasks].sort((a, b) => {
+    // אם יש לשניהם מספר היררכי, מיון לפי הסדר הטבעי
+    if (a.hierarchical_number && b.hierarchical_number) {
+      return String(a.hierarchical_number).localeCompare(String(b.hierarchical_number), undefined, { numeric: true });
+    }
+    
+    // אם רק לאחד יש מספר היררכי, הוא יופיע קודם
+    if (a.hierarchical_number && !b.hierarchical_number) return -1;
+    if (!a.hierarchical_number && b.hierarchical_number) return 1;
+    
+    // אם לאף אחד אין מספר היררכי, מיון לפי כותרת
+    return a.title.localeCompare(b.title);
+  });
+  
+  // קבלת משימות אב למיוחס ויזואלית
+  const parentTasks = sortedTasks.filter(task => task.isParentTask);
+  const childTasks = sortedTasks.filter(task => !task.isParentTask);
+  
   return (
-    <MotionBox 
-      key={id}
+    <Box
       minW={isCollapsed ? "100px" : "300px"}
       w={isCollapsed ? "100px" : "300px"}
       h="100%"
-      bg={useColorModeValue('gray.50', 'gray.700')}
+      bg={boxBg}
       borderRadius="md"
       borderWidth="1px"
-      borderColor={isDragOver 
-        ? `${color}.500` 
-        : useColorModeValue('gray.200', 'gray.600')}
+      borderColor={isDragOver ? `${color}.500` : boxBorderColor}
       boxShadow={isDragOver ? "md" : "none"}
       transition="all 0.2s"
-      onDragOver={onDragOver}
+      onDragOver={(e) => {
+        e.preventDefault(); // חשוב מאוד לאפשר את הdrop
+        e.stopPropagation();
+        onDragOver(e);
+      }}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       position="relative"
+      className={isDragOver ? "drop-highlight" : ""}
       _after={isDragOver ? {
         content: '""',
         position: 'absolute',
@@ -66,17 +97,23 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
         pointerEvents: 'none',
         zIndex: 1
       } : {}}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
-      className={isDragOver ? "drop-highlight" : ""}
     >
       <Box 
         p={3} 
-        bg={useColorModeValue(`${color}.100`, `${color}.800`)}
+        bg={bgColor}
         borderTopRadius="md"
         borderBottomWidth="1px"
-        borderColor={useColorModeValue('gray.200', 'gray.600')}
+        borderColor={borderColor}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onDragOver(e);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onDrop(e);
+        }}
       >
         <Flex justify="space-between" align="center">
           <HStack>
@@ -105,13 +142,39 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
           overflowY="auto"
           className="task-column"
         >
-          {tasks.map((task) => (
+          {/* משימות אב */}
+          {parentTasks.map(task => (
+            <Box 
+              key={task.id}
+              bg={parentBoxBg}
+              borderRadius="md"
+              p={1}
+            >
+              <TaskCard
+                task={task}
+                isDragging={false}
+                onDragStart={(e, t) => {
+                  const customEvent = e as React.DragEvent<HTMLDivElement>;
+                  customEvent.dataTransfer.setData('text/plain', t.id);
+                  customEvent.dataTransfer.effectAllowed = 'move';
+                }}
+                onEditTask={onEditTask}
+                onDeleteTask={onDeleteTask}
+                getProjectName={getProjectName}
+              />
+            </Box>
+          ))}
+
+          {/* משימות רגילות */}
+          {childTasks.map(task => (
             <TaskCard
               key={task.id}
               task={task}
               isDragging={false}
-              onDragStart={(e, task) => {
-                // הפונקציה מועברת מהקומפוננטה האב
+              onDragStart={(e, t) => {
+                const customEvent = e as React.DragEvent<HTMLDivElement>;
+                customEvent.dataTransfer.setData('text/plain', t.id);
+                customEvent.dataTransfer.effectAllowed = 'move';
               }}
               onEditTask={onEditTask}
               onDeleteTask={onDeleteTask}
@@ -130,7 +193,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
               borderColor={isDragOver ? `${color}.500` : "gray.200"}
               borderRadius="md"
               transition="all 0.2s"
-              bg={isDragOver ? `${color}.100` : "transparent"}
+              bg={isDragOver ? `${color}.100` : emptyAreaBg}
               position="relative"
               _after={isDragOver ? {
                 content: '""',
@@ -154,7 +217,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
                   {isDragOver ? "שחרר כאן" : "גרור משימות לכאן"}
                 </Text>
                 {!isDragOver && (
-                  <Text fontSize="xs" color="gray.400">אין משימות בעמודה זו</Text>
+                  <Text fontSize="xs" color="gray.400">אין משימות בסטטוס זה</Text>
                 )}
               </Center>
             </MotionFlex>
@@ -178,7 +241,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
           </Text>
         </Flex>
       )}
-    </MotionBox>
+    </Box>
   );
 };
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { Flex, Box, Checkbox, Icon, Text } from '@chakra-ui/react';
 import { FiChevronUp, FiChevronDown } from 'react-icons/fi';
 
-export type SortField = 'title' | 'hierarchical_number' | 'status' | 'priority' | 'responsible' | 'due_date' | null;
+export type SortField = 'title' | 'hierarchical_number' | 'status' | 'priority' | 'responsible' | 'start_date' | 'due_date' | null;
 export type SortDirection = 'asc' | 'desc';
 
 interface TaskTableHeaderProps {
@@ -46,9 +46,10 @@ const TaskTableHeader: React.FC<TaskTableHeaderProps> = ({
     <Flex
       bg="gray.100"
       p={3}
-      borderTopRadius="md"
       fontWeight="bold"
       display={{ base: "none", md: "flex" }}
+      borderBottom="1px solid"
+      borderColor="gray.200"
     >
       <Checkbox
         isChecked={isAllSelected}
@@ -61,7 +62,6 @@ const TaskTableHeader: React.FC<TaskTableHeaderProps> = ({
       <Box flex="1" display={{ base: "none", md: "block" }}>
         <SortableHeader field="hierarchical_number">מספר</SortableHeader>
       </Box>
-      <Box flex="1" display={{ base: "none", md: "block" }}>משימה ראשית</Box>
       <Box flex="1" display={{ base: "none", md: "block" }}>
         <SortableHeader field="status">סטטוס</SortableHeader>
       </Box>

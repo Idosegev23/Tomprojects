@@ -27,7 +27,7 @@ import {
   FiCreditCard
 } from 'react-icons/fi';
 import TaskList from '@/components/tasks/TaskList';
-import TaskKanban from '@/components/tasks/kanban/TaskKanban';
+import TaskKanban from '@/components/tasks/TaskKanban';
 import TaskGantt from '@/components/tasks/TaskGantt';
 import TaskTree from '@/components/tasks/TaskTree';
 import StageManager from '@/components/stages/StageManager';
@@ -81,7 +81,7 @@ export default function ProjectTabs({
             <Tooltip label="הצג את כל המשימות כרשימה">
               <Tab><HStack><FiList /><Text>רשימה</Text></HStack></Tab>
             </Tooltip>
-            <Tooltip label="הצג משימות לפי שלבים בלוח קנבן">
+            <Tooltip label="הצג משימות לפי סטטוס וקטגוריה בלוח קנבן">
               <Tab><HStack><FiColumns /><Text>קנבן</Text></HStack></Tab>
             </Tooltip>
             <Tooltip label="הצג לוח זמנים של המשימות">
@@ -130,33 +130,17 @@ export default function ProjectTabs({
             {/* תצוגת קנבן */}
             <TabPanel>
               <Box>
-                {stages.length > 0 ? (
-                  <TaskKanban
-                    projectId={projectId}
-                    stages={stages as any}
-                    tasks={tasks as any}
-                    onTaskUpdated={(updatedTask) => onTaskUpdated(updatedTask as KanbanTask)}
-                    onTaskDeleted={onTaskDeleted}
-                    getProjectName={() => projectName}
-                  />
-                ) : (
-                  <Card p={8} textAlign="center" variant="outline">
-                    <CardBody>
-                      <Icon as={FiTrello} w={12} h={12} color="gray.400" mb={4} />
-                      <Heading size="md" mb={2}>אין שלבים מוגדרים בפרויקט</Heading>
-                      <Text mb={6} color="gray.500">
-                        יש להגדיר שלבים בפרויקט כדי להציג את המשימות בתצוגת קנבן
-                      </Text>
-                      <Button
-                        leftIcon={<FiFlag />}
-                        colorScheme="blue"
-                        onClick={() => setTabIndex(4)} // מעבר לטאב של ניהול שלבים
-                      >
-                        ניהול שלבי פרויקט
-                      </Button>
-                    </CardBody>
-                  </Card>
-                )}
+                <TaskKanban
+                  projectId={projectId}
+                  tasks={tasks as any}
+                  onTaskUpdated={(updatedTask) => onTaskUpdated(updatedTask as KanbanTask)}
+                  onTaskDeleted={onTaskDeleted}
+                  getProjectName={() => projectName}
+                  onStatusChange={(taskId, newStatus) => {
+                    console.log(`ProjectTabs: עדכון סטטוס של משימה ${taskId} ל-${newStatus}`);
+                    onTaskStatusChanged(taskId, newStatus);
+                  }}
+                />
               </Box>
             </TabPanel>
             

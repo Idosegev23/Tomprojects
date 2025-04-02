@@ -94,6 +94,11 @@ export const taskService = {
         task.id = crypto.randomUUID();
       }
       
+      // הגדרת תאריך התחלה כברירת מחדל להיום אם לא הוגדר
+      if (!task.start_date) {
+        task.start_date = new Date().toISOString().split('T')[0];
+      }
+      
       // תאימות לאחור: אם יש assignees אבל אין assignees_info, נעתיק את הערך
       if (task.assignees && !task.assignees_info) {
         task.assignees_info = Array.isArray(task.assignees) ? task.assignees : [];
@@ -111,6 +116,11 @@ export const taskService = {
         if (cleanedTask[field as keyof typeof cleanedTask] === '') {
           delete cleanedTask[field as keyof typeof cleanedTask];
         }
+      }
+      
+      // וידוא שהשדה responsible קיים בפורמט הנכון
+      if (cleanedTask.responsible === '') {
+        cleanedTask.responsible = null;
       }
       
       // הסר את כל השדות שאינם קיימים בדאטאבייס
@@ -169,19 +179,23 @@ export const taskService = {
           }
         }
         
+        // תיקון: השתמש ב-maybeSingle במקום single כדי למנוע שגיאות
         const { data, error } = await supabase
           .from('tasks')
           .insert(originalTask)
-          .select()
-          .single();
+          .select();
         
         if (error) {
           console.error('Error creating global task template:', error);
           throw new Error(`שגיאה ביצירת תבנית משימה גלובלית: ${error.message}`);
         }
         
+        if (!data || data.length === 0) {
+          throw new Error('לא נמצאו נתונים אחרי הוספת המשימה');
+        }
+        
         console.log('Global task template created successfully in main tasks table');
-        return data;
+        return data[0]; // החזר את האובייקט הראשון מהמערך
       }
       
       // כאן מדובר במשימה עם project_id - נוסיף אותה רק לטבלה הייחודית של הפרויקט
@@ -223,20 +237,23 @@ export const taskService = {
         }
       }
       
-      // הוספת המשימה לטבלה הייחודית
+      // תיקון: השתמש ב-.select() במקום .select().single() כדי למנוע שגיאות
       const { data, error } = await supabase
         .from(tableName)
         .insert(cleanedTask)
-        .select()
-        .single();
+        .select();
       
       if (error) {
         console.error(`Error adding task to project-specific table ${tableName}:`, error);
         throw new Error(`שגיאה בהוספת משימה לטבלת הפרויקט: ${error.message}`);
       }
       
+      if (!data || data.length === 0) {
+        throw new Error('לא נמצאו נתונים אחרי הוספת המשימה לטבלת הפרויקט');
+      }
+      
       console.log(`Task created successfully in project-specific table ${tableName}`);
-      return data;
+      return data[0]; // החזר את האובייקט הראשון מהמערך
     } catch (err) {
       console.error('Error in createTask:', err);
       throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה ביצירת משימה');
@@ -259,6 +276,11 @@ export const taskService = {
     } else if (cleanTask.assignees_info && !Array.isArray(cleanTask.assignees_info)) {
       // אם assignees_info קיים אבל הוא לא מערך, נהפוך אותו למערך ריק
       cleanTask.assignees_info = [];
+    }
+    
+    // וידוא שהשדה responsible קיים בפורמט הנכון
+    if (cleanTask.responsible === '') {
+      cleanTask.responsible = null;
     }
     
     // הסר את כל השדות שאינם קיימים בדאטאבייס
@@ -319,26 +341,31 @@ export const taskService = {
       .from('tasks')
       .update(cleanedOriginalTask)
       .eq('id', id)
-      .select()
-      .single();
+      .select();
     
     if (error) {
       console.error(`Error updating task with id ${id}:`, error);
       throw new Error(error.message);
     }
     
+    if (!data || data.length === 0) {
+      throw new Error('לא נמצאו נתונים אחרי עדכון המשימה');
+    }
+    
+    const updatedTask = data[0];
+    
     // אם יש project_id, נעדכן את המשימה גם בטבלה הייחודית של הפרויקט
-    if (data.project_id) {
+    if (updatedTask.project_id) {
       try {
         // קריאה לפונקציה SQL לעדכון המשימה בטבלה הספציפית של הפרויקט
         await supabase.rpc('update_task_in_project_table', {
-          task_id: data.id,
-          project_id: data.project_id
+          task_id: updatedTask.id,
+          project_id: updatedTask.project_id
         });
         
         // עדכון ישיר של טבלת הפרויקט הספציפית אם יש צורך
         // אם נתקלים בבעיות עם update_task_in_project_table
-        const projectTable = `project_${data.project_id}_tasks`;
+        const projectTable = `project_${updatedTask.project_id}_tasks`;
         console.log(`Updating task directly in ${projectTable} with data:`, cleanTask);
         
         try {
@@ -356,14 +383,14 @@ export const taskService = {
           console.error(`Exception in direct update of ${projectTable}:`, directUpdateErr);
         }
         
-        console.log(`Task ${data.id} updated in project-specific table for project ${data.project_id}`);
+        console.log(`Task ${updatedTask.id} updated in project-specific table for project ${updatedTask.project_id}`);
       } catch (projectTableError) {
-        console.error(`Error updating task in project-specific table for project ${data.project_id}:`, projectTableError);
+        console.error(`Error updating task in project-specific table for project ${updatedTask.project_id}:`, projectTableError);
         // נמשיך גם אם יש שגיאה בעדכון בטבלה הספציפית
       }
     }
     
-    return data;
+    return updatedTask;
   },
   
   // מחיקת משימה
@@ -1802,12 +1829,12 @@ export const taskService = {
         const lastRootTask = rootTasks[rootTasks.length - 1];
         const lastNumber = parseInt(lastRootTask.hierarchical_number);
         const nextNumber = lastNumber + 1;
-        console.log(`המספר ההיררכי האחרון: ${lastNumber}, המספר החדש: ${nextNumber}`);
+        console.log(`המספר ההיררכי האחרון בטבלה הייעודית: ${lastNumber}, המספר החדש: ${nextNumber}`);
         return nextNumber.toString();
       }
       
       // אם אין משימות עם מספר היררכי, מתחילים מ-1
-      console.log('אין משימות שורשיות עם מספר היררכי, מחזיר מספר היררכי 1');
+      console.log('אין משימות שורשיות עם מספר היררכי בטבלה הייעודית, מחזיר מספר היררכי 1');
       return '1';
     } catch (error) {
       console.error('שגיאה בחישוב מספר היררכי חדש:', error);

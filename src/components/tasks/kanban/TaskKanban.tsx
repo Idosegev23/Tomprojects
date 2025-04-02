@@ -7,35 +7,42 @@ import {
   useToast,
   Portal,
   Text,
+  Kbd,
 } from '@chakra-ui/react';
 import { motion } from 'framer-motion';
-import { Stage, Project } from '@/types/supabase';
+import { Project } from '@/types/supabase';
 import { TaskKanbanProps, statuses, statusLabels, Task } from './types';
-import { getStatusColor, groupTasksByStatus, groupTasksByStage, groupTasksByCategory } from './utils';
-import { TaskKanbanHeader } from './';
+import { 
+  getStatusColor, 
+  groupTasksByStatus, 
+  groupTasksByCategory, 
+  processTasksWithParentInfo 
+} from './utils';
+import TaskKanbanHeader from './TaskKanbanHeader';
 import KanbanColumn from './KanbanColumn';
 
 // קומפוננטה מונפשת
 const MotionBox = motion(Box);
 
+/**
+ * רכיב קנבן למשימות - מציג משימות בצורה ויזואלית לפי סטטוס או קטגוריה
+ * עם תמיכה במשימות אב ותתי-משימות
+ */
 const TaskKanban: React.FC<TaskKanbanProps> = ({
   tasks,
-  stages = [],
   projects = [],
   onEditTask,
   onDeleteTask,
   onStatusChange,
-  onStageChange,
 }) => {
+  const [processedTasks, setProcessedTasks] = useState<Task[]>([]);
   const [groupedTasks, setGroupedTasks] = useState<Record<string, Task[]>>({});
-  const [groupedByStage, setGroupedByStage] = useState<Record<string, Task[]>>({});
   const [groupedByCategory, setGroupedByCategory] = useState<Record<string, Task[]>>({});
   const [loading, setLoading] = useState(true);
   const [draggingTask, setDraggingTask] = useState<Task | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
-  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [collapsedColumns, setCollapsedColumns] = useState<Record<string, boolean>>({});
-  const [viewMode, setViewMode] = useState<'status' | 'stage' | 'category'>('status');
+  const [viewMode, setViewMode] = useState<'status' | 'category'>('status');
   const [ghostCardPosition, setGhostCardPosition] = useState({ x: 0, y: 0 });
   const [showGhostCard, setShowGhostCard] = useState(false);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -49,25 +56,22 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
     return project ? project.name : projectId;
   };
   
-  // קבוצות המשימות לפי סטטוס, שלב וקטגוריה
+  // עיבוד וקיבוץ המשימות לפי סטטוס וקטגוריה
   useEffect(() => {
+    // עיבוד המשימות והוספת סימון משימות אב
+    const processed = processTasksWithParentInfo(tasks);
+    setProcessedTasks(processed);
+    
     // קיבוץ לפי סטטוס
-    const grouped = groupTasksByStatus(tasks, statuses);
+    const grouped = groupTasksByStatus(processed, statuses);
     setGroupedTasks(grouped);
     
-    // קיבוץ לפי שלב
-    if (stages.length > 0) {
-      const stageIds = stages.map(stage => stage.id);
-      const groupedStages = groupTasksByStage(tasks, stageIds);
-      setGroupedByStage(groupedStages);
-    }
-    
     // קיבוץ לפי קטגוריה
-    const groupedCategories = groupTasksByCategory(tasks);
+    const groupedCategories = groupTasksByCategory(processed);
     setGroupedByCategory(groupedCategories);
     
     setLoading(false);
-  }, [tasks, stages]);
+  }, [tasks]);
   
   // פונקציה לטיפול בצמצום/הרחבה של עמודה
   const toggleColumnCollapse = (columnId: string) => {
@@ -79,27 +83,41 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
   
   // פונקציות לטיפול בגרירה ושחרור
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, task: Task) => {
+    console.log('התחלת גרירה עבור משימה:', task.id, task.title);
+    
     // שמירת מזהה המשימה בנתוני הגרירה
-    e.dataTransfer.setData('text/plain', task.id);
-    e.dataTransfer.effectAllowed = 'move';
-    
-    // הגדרת המשימה הנגררת
-    setDraggingTask(task);
-    setDraggedTaskId(task.id);
-    setShowGhostCard(true);
-    
-    // עדכון מיקום כרטיס הרפאים
-    setGhostCardPosition({ x: e.clientX, y: e.clientY });
-    
-    // הוספת אפקט ויזואלי לאלמנט הנגרר
-    if (e.currentTarget) {
-      e.currentTarget.style.opacity = '0.4';
+    try {
+      // הגדרת כמה פורמטים שונים לתמיכה טובה יותר בדפדפנים שונים
+      e.dataTransfer.setData('text/plain', task.id);
+      e.dataTransfer.setData('application/json', JSON.stringify({
+        id: task.id,
+        status: task.status
+      }));
+      e.dataTransfer.effectAllowed = 'move';
+      
+      // הגדרת המשימה הנגררת
+      setDraggingTask(task);
+      setDraggedTaskId(task.id);
+      setShowGhostCard(true);
+      
+      // עדכון מיקום כרטיס הרפאים
+      setGhostCardPosition({ x: e.clientX, y: e.clientY });
+      
+      // הוספת אפקט ויזואלי לאלמנט הנגרר
+      if (e.currentTarget) {
+        e.currentTarget.style.opacity = '0.4';
+        e.currentTarget.classList.add('dragging');
+      }
+      
+      // הגדרת תמונת גרירה שקופה (כדי להסתיר את ברירת המחדל)
+      const img = new Image();
+      img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; // תמונה שקופה
+      e.dataTransfer.setDragImage(img, 0, 0);
+    } catch (error) {
+      console.error('שגיאה בהתחלת גרירה:', error);
+      // איפוס הגרירה במקרה של שגיאה
+      handleDragEnd();
     }
-    
-    // הגדרת תמונת גרירה שקופה (כדי להסתיר את ברירת המחדל)
-    const img = new Image();
-    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; // תמונה שקופה
-    e.dataTransfer.setDragImage(img, 0, 0);
   };
   
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>, columnId: string) => {
@@ -109,23 +127,17 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
     // הוספת אפקט מעבר
     e.dataTransfer.dropEffect = 'move';
     
-    if (viewMode === 'status') {
-      setDragOverColumn(columnId);
-    } else {
-      setDragOverStage(columnId);
-    }
+    setDragOverColumn(columnId);
   };
   
   const handleDragLeave = () => {
     setDragOverColumn(null);
-    setDragOverStage(null);
   };
   
   const handleDragEnd = () => {
     setDraggingTask(null);
     setDraggedTaskId(null);
     setDragOverColumn(null);
-    setDragOverStage(null);
     setShowGhostCard(false);
     
     // החזרת האופסיטי של כל האלמנטים לרגיל
@@ -138,53 +150,74 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
     e.preventDefault();
     
     // קבלת מזהה המשימה מנתוני הגרירה
-    const taskId = e.dataTransfer.getData('text/plain');
-    if (!taskId || !draggingTask) return;
+    let taskId;
+    let taskData;
+    
+    try {
+      // קבלת מידע על המשימה מנתוני הדראג אנד דרופ
+      taskId = e.dataTransfer.getData('text/plain');
+      console.log('נתוני גרירה שהתקבלו:', taskId);
+      
+      // ניסיון לקרוא את המידע המורחב
+      const jsonData = e.dataTransfer.getData('application/json');
+      if (jsonData) {
+        taskData = JSON.parse(jsonData);
+        console.log('נתוני JSON שהתקבלו:', taskData);
+      }
+    } catch (error) {
+      console.error('שגיאה בקריאת נתוני גרירה:', error);
+    }
+    
+    // שמירת המשימה הנגררת לפני איפוס המצב
+    const currentDraggingTask = draggingTask;
     
     // איפוס מצב הגרירה
     setDragOverColumn(null);
-    setDragOverStage(null);
     setShowGhostCard(false);
+    
+    if (!taskId || !currentDraggingTask) {
+      console.log('אין מזהה משימה או משימה נגררת', taskId, currentDraggingTask?.id);
+      handleDragEnd();
+      return;
+    }
     
     try {
       if (viewMode === 'status') {
+        const originalStatus = currentDraggingTask.status;
+        
         // עדכון סטטוס המשימה
-        if (draggingTask.status !== targetId) {
+        if (originalStatus !== targetId) {
+          console.log(`מעדכן סטטוס של משימה ${taskId} מ-${originalStatus} ל-${targetId}`);
+          
           if (onStatusChange) {
             await onStatusChange(taskId, targetId);
+            
+            toast({
+              title: 'סטטוס המשימה עודכן',
+              description: `הסטטוס שונה ל${statusLabels[targetId] || targetId}`,
+              status: 'success',
+              duration: 2000,
+              isClosable: true,
+            });
+          } else {
+            console.log('אין פונקציית onStatusChange');
           }
-          
-          toast({
-            title: 'סטטוס המשימה עודכן',
-            status: 'success',
-            duration: 2000,
-            isClosable: true,
-          });
-        }
-      } else if (viewMode === 'stage') {
-        // עדכון שלב המשימה
-        if (draggingTask.stage_id !== targetId) {
-          if (onStageChange) {
-            await onStageChange(taskId, targetId);
-          }
-          
-          toast({
-            title: 'שלב המשימה עודכן',
-            status: 'success',
-            duration: 2000,
-            isClosable: true,
-          });
+        } else {
+          console.log('הסטטוס לא השתנה');
         }
       }
-      // לא ניתן לשנות קטגוריה בגרירה, לכן אין טיפול למצב 'category'
+      // לא ניתן לשנות קטגוריה בגרירה
     } catch (error) {
-      console.error('Error updating task:', error);
+      console.error('שגיאה בעדכון המשימה:', error);
       toast({
         title: 'שגיאה בעדכון המשימה',
         status: 'error',
         duration: 3000,
         isClosable: true,
       });
+    } finally {
+      // ודא שהמצב תמיד מנוקה בסוף התהליך
+      handleDragEnd();
     }
   };
   
@@ -223,17 +256,6 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
       tasks: groupedTasks[status] || [],
       color: getStatusColor(status),
     }));
-  } else if (viewMode === 'stage') {
-    // תצוגה לפי שלב
-    columns = Object.keys(groupedByStage).map(stageId => {
-      const stage = stages.find(s => s.id === stageId);
-      return {
-        id: stageId,
-        title: stage ? stage.title : 'לא משויך',
-        tasks: groupedByStage[stageId] || [],
-        color: 'blue',
-      };
-    });
   } else if (viewMode === 'category') {
     // תצוגה לפי קטגוריה
     columns = Object.keys(groupedByCategory).map(category => ({
@@ -281,48 +303,43 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
     }
   `;
   
+  // כרטיס רפאים שעוקב אחרי העכבר בזמן גרירה
+  const GhostCard = showGhostCard && draggingTask && (
+    <Portal>
+      <MotionBox
+        position="fixed"
+        top={ghostCardPosition.y + 10}
+        left={ghostCardPosition.x + 10}
+        zIndex={9999}
+        opacity={0.9}
+        pointerEvents="none"
+        bg={useColorModeValue('white', 'gray.800')}
+        p={3}
+        borderRadius="md"
+        boxShadow="lg"
+        borderLeftWidth="4px"
+        borderLeftColor={getStatusColor(draggingTask.status) + '.500'}
+        width="250px"
+        initial={{ scale: 0.8, opacity: 0.5 }}
+        animate={{ scale: 1, opacity: 0.9 }}
+        transition={{ duration: 0.2 }}
+      >
+        <Text fontWeight="bold" fontSize="sm">{draggingTask.title}</Text>
+      </MotionBox>
+    </Portal>
+  );
+  
   return (
     <Box>
       <style>{pulseAnimation}</style>
       
-      <TaskKanbanHeader 
+      <TaskKanbanHeader
         viewMode={viewMode}
         setViewMode={setViewMode}
-        hasStages={stages.length > 0}
       />
       
-      {/* כרטיס רפאים שעוקב אחרי העכבר בזמן גרירה */}
-      {showGhostCard && draggingTask && (
-        <Portal>
-          <MotionBox
-            position="fixed"
-            top={ghostCardPosition.y + 10}
-            left={ghostCardPosition.x + 10}
-            zIndex={9999}
-            opacity={0.9}
-            pointerEvents="none"
-            bg={useColorModeValue('white', 'gray.800')}
-            p={3}
-            borderRadius="md"
-            boxShadow="lg"
-            borderLeftWidth="4px"
-            borderLeftColor={`${getStatusColor(draggingTask.status)}.500`}
-            width="250px"
-            initial={{ scale: 0.8, opacity: 0.5 }}
-            animate={{ scale: 1, opacity: 0.9 }}
-            transition={{ duration: 0.2 }}
-          >
-            <Box>
-              <Box fontWeight="bold" fontSize="sm">{draggingTask.title}</Box>
-              {draggingTask.description && (
-                <Box fontSize="xs" color="gray.500" noOfLines={1} mt={1}>
-                  {draggingTask.description}
-                </Box>
-              )}
-            </Box>
-          </MotionBox>
-        </Portal>
-      )}
+      {/* כרטיס רפאים */}
+      {GhostCard}
       
       <Flex 
         overflowX="auto" 
@@ -331,67 +348,24 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
         h="calc(100vh - 300px)"
         className="kanban-board"
       >
-        {viewMode === 'status' ? (
-          // תצוגה לפי סטטוס
-          statuses.map(status => (
-            <KanbanColumn
-              key={status}
-              id={status}
-              title={statusLabels[status] || status}
-              tasks={groupedTasks[status] || []}
-              color={getStatusColor(status)}
-              isCollapsed={!!collapsedColumns[status]}
-              isDragOver={dragOverColumn === status}
-              onDragOver={(e) => handleDragOver(e, status)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, status)}
-              onToggleCollapse={() => toggleColumnCollapse(status)}
-              onEditTask={onEditTask}
-              onDeleteTask={onDeleteTask}
-              getProjectName={getProjectName}
-            />
-          ))
-        ) : (
-          // תצוגה לפי שלבים
-          <>
-            {stages.map(stage => (
-              <KanbanColumn
-                key={stage.id}
-                id={stage.id}
-                title={stage.title}
-                tasks={groupedByStage[stage.id] || []}
-                color="blue"
-                isCollapsed={!!collapsedColumns[stage.id]}
-                isDragOver={dragOverStage === stage.id}
-                onDragOver={(e) => handleDragOver(e, stage.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, stage.id)}
-                onToggleCollapse={() => toggleColumnCollapse(stage.id)}
-                onEditTask={onEditTask}
-                onDeleteTask={onDeleteTask}
-                getProjectName={getProjectName}
-              />
-            ))}
-            
-            {/* עמודה למשימות ללא שלב */}
-            <KanbanColumn
-              key="unassigned"
-              id="unassigned"
-              title="ללא שלב"
-              tasks={groupedByStage['unassigned'] || []}
-              color="gray"
-              isCollapsed={!!collapsedColumns['unassigned']}
-              isDragOver={dragOverStage === 'unassigned'}
-              onDragOver={(e) => handleDragOver(e, 'unassigned')}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, 'unassigned')}
-              onToggleCollapse={() => toggleColumnCollapse('unassigned')}
-              onEditTask={onEditTask}
-              onDeleteTask={onDeleteTask}
-              getProjectName={getProjectName}
-            />
-          </>
-        )}
+        {columns.map(column => (
+          <KanbanColumn
+            key={column.id}
+            id={column.id}
+            title={column.title}
+            tasks={column.tasks}
+            color={column.color}
+            isCollapsed={!!collapsedColumns[column.id]}
+            isDragOver={dragOverColumn === column.id}
+            onDragOver={(e) => handleDragOver(e, column.id)}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, column.id)}
+            onToggleCollapse={() => toggleColumnCollapse(column.id)}
+            onEditTask={onEditTask}
+            onDeleteTask={onDeleteTask}
+            getProjectName={getProjectName}
+          />
+        ))}
       </Flex>
     </Box>
   );

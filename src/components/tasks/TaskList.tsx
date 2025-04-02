@@ -1,5 +1,16 @@
-// ייבוא הקומפוננטה המפוצלת
+import React from 'react';
 import TaskListNew from './tasklist/TaskListNew';
+import { Task } from '@/types/supabase';
 
-// ייצוא הקומפוננטה
-export default TaskListNew; 
+interface TaskListProps {
+  projectId: string;
+  onTaskCreated?: (task: Task) => void;
+  onTaskUpdated?: (task: Task) => void;
+  onTaskDeleted?: (taskId: string) => void;
+}
+
+const TaskList: React.FC<TaskListProps> = (props) => {
+  return <TaskListNew {...props} />;
+};
+
+export default TaskList; 

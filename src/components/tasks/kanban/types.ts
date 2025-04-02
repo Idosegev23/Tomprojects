@@ -1,4 +1,4 @@
-import { Task as BaseTask, Stage, Project } from '@/types/supabase';
+import { Task as BaseTask, Project } from '@/types/supabase';
 
 // הרחבת הטיפוס של משימה לכלול מידע נוסף
 export interface Task extends Omit<BaseTask, 'assignees' | 'assignees_info'> {
@@ -14,16 +14,14 @@ export interface Task extends Omit<BaseTask, 'assignees' | 'assignees_info'> {
   tags?: string[];
   collaborators?: string[];
   
-  // שדות עזר לתצוגה
-  stageName?: string;
-  stageColor?: string;
+  // שדה עזר לזיהוי משימת אב (מספר היררכי שלם ללא ".")
+  isParentTask?: boolean;
 }
 
 // טיפוסים משותפים לקומפוננטות הקנבן
 export interface TaskKanbanProps {
   projectId: string;
   tasks: Task[];
-  stages: Stage[];
   projects?: Project[];
   isLoading?: boolean;
   onTaskUpdated?: (task: Task) => void;
@@ -33,7 +31,6 @@ export interface TaskKanbanProps {
   onEditTask?: (task: Task) => void;
   onDeleteTask?: (taskId: string) => void;
   onStatusChange?: (taskId: string, newStatus: string) => void;
-  onStageChange?: (taskId: string, stageId: string) => void;
 }
 
 // טיפוס לעמודת קנבן
@@ -65,9 +62,8 @@ export interface TaskCardProps {
 
 // טיפוס לכותרת הקנבן
 export interface TaskKanbanHeaderProps {
-  viewMode: 'status' | 'stage' | 'category';
-  setViewMode: (mode: 'status' | 'stage' | 'category') => void;
-  hasStages: boolean;
+  viewMode: 'status' | 'category';
+  setViewMode: (mode: 'status' | 'category') => void;
 }
 
 // טיפוס למידע על תאריך יעד

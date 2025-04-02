@@ -116,31 +116,6 @@ export const groupTasksByStatus = (tasks: Task[], statuses: string[]): Record<st
   return grouped;
 };
 
-// פונקציה לקיבוץ משימות לפי שלב
-export const groupTasksByStage = (tasks: Task[], stageIds: string[]): Record<string, Task[]> => {
-  const grouped: Record<string, Task[]> = {};
-  
-  // יצירת מערך ריק לכל שלב
-  stageIds.forEach(stageId => {
-    grouped[stageId] = [];
-  });
-  
-  // מיון המשימות לפי שלב
-  tasks.forEach(task => {
-    const stageId = task.stage_id;
-    if (stageId) {
-      if (grouped[stageId]) {
-        grouped[stageId].push(task);
-      } else {
-        // אם השלב לא קיים, נוסיף אותו
-        grouped[stageId] = [task];
-      }
-    }
-  });
-  
-  return grouped;
-};
-
 // פונקציה לקיבוץ משימות לפי קטגוריה
 export const groupTasksByCategory = (tasks: Task[]): Record<string, Task[]> => {
   const grouped: Record<string, Task[]> = {};
@@ -164,4 +139,24 @@ export const groupTasksByCategory = (tasks: Task[]): Record<string, Task[]> => {
   });
   
   return grouped;
+};
+
+// פונקציה לבדיקה אם המשימה היא משימת אב
+export const isParentTask = (task: Task): boolean => {
+  // בדיקה אם יש מספר היררכי
+  if (!task.hierarchical_number) return false;
+  
+  // וידוא שהערך הוא מחרוזת
+  const hierarchicalNumber = String(task.hierarchical_number);
+  
+  // אם המספר ההיררכי הוא מספר שלם (ללא נקודה), זו משימת אב
+  return !hierarchicalNumber.includes('.');
+};
+
+// פונקציה לעיבוד משימות ועדכון שדה isParentTask
+export const processTasksWithParentInfo = (tasks: Task[]): Task[] => {
+  return tasks.map(task => ({
+    ...task,
+    isParentTask: isParentTask(task)
+  }));
 }; 

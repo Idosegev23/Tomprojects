@@ -1,4 +1,4 @@
 import TaskKanban from './kanban/TaskKanban';
 
-// ייצוא הקומפוננטה המפוצלת
+// ייצוא הקומפוננטה
 export default TaskKanban; 

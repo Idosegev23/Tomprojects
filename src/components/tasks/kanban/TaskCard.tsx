@@ -63,6 +63,43 @@ const TaskCard: React.FC<TaskCardProps> = ({
     }
   };
   
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+    console.log('TaskCard: התחלת גרירת משימה', task.id);
+    e.stopPropagation();
+    
+    try {
+      // הגדרת נתוני המשימה בפורמטים שונים לתמיכה בדפדפנים שונים
+      e.dataTransfer.setData('text/plain', task.id);
+      e.dataTransfer.setData('application/json', JSON.stringify({
+        id: task.id,
+        status: task.status,
+        title: task.title
+      }));
+      e.dataTransfer.effectAllowed = 'move';
+      
+      // הוספת מחלקה ויזואלית
+      if (e.currentTarget) {
+        e.currentTarget.style.opacity = '0.4';
+        e.currentTarget.classList.add('dragging');
+      }
+      
+      // העברה לפונקציית הטיפול של הקומפוננטה האב
+      onDragStart(e, task);
+    } catch (error) {
+      console.error('שגיאה בהגדרת נתוני גרירה:', error);
+    }
+  };
+  
+  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+    console.log('TaskCard: סיום גרירת משימה', task.id);
+    
+    // החזרת הסגנון למצב רגיל
+    if (e.currentTarget) {
+      e.currentTarget.style.opacity = '1';
+      e.currentTarget.classList.remove('dragging');
+    }
+  };
+  
   return (
     <MotionBox
       key={task.id}
@@ -83,13 +120,10 @@ const TaskCard: React.FC<TaskCardProps> = ({
       }}
       cursor="grab"
       data-task-id={task.id}
-      draggable="true"
+      draggable={true}
       opacity={isDragging ? 0.4 : 1}
-      onDragStart={(e) => {
-        if (e.type === 'dragstart') {
-          onDragStart(e as React.DragEvent<HTMLDivElement>, task);
-        }
-      }}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       position="relative"
       overflow="hidden"
       _before={task.due_date && dueStatus?.status === 'overdue' ? {

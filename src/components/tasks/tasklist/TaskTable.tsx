@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { VStack, Divider, Card, CardBody, Text, Button, Flex, useColorModeValue } from '@chakra-ui/react';
-import { FiPlus, FiRefreshCw } from 'react-icons/fi';
+import React, { useState, useMemo, useCallback } from 'react';
+import { VStack, Divider, Card, CardBody, Text, Button, Flex, useColorModeValue, ButtonGroup, Tooltip, Box, HStack } from '@chakra-ui/react';
+import { FiPlus, FiRefreshCw, FiChevronUp, FiChevronDown } from 'react-icons/fi';
 import { Task } from '@/types/supabase';
 import { TaskWithStage } from './useTaskList';
 import TaskTableHeader, { SortField, SortDirection } from './TaskTableHeader';
@@ -17,6 +17,11 @@ interface TaskTableProps {
   onRefresh: () => Promise<void>;
   getParentTask: (taskId: string | null) => Task | undefined;
   isLoading: boolean;
+}
+
+// טיפוס חדש עבור משימה עם תת-משימות
+interface TaskWithChildren extends TaskWithStage {
+  childTasks?: TaskWithChildren[];
 }
 
 const TaskTable: React.FC<TaskTableProps> = ({
@@ -38,6 +43,9 @@ const TaskTable: React.FC<TaskTableProps> = ({
   const [sortField, setSortField] = useState<SortField>('hierarchical_number');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   
+  // state חדש לניהול מצב ההרחבה הגלובלי
+  const [expandAll, setExpandAll] = useState<boolean>(false);
+  
   // טיפול בלחיצה על עמודה למיון
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -50,11 +58,50 @@ const TaskTable: React.FC<TaskTableProps> = ({
     }
   };
   
-  // מיון המשימות לפי השדה והכיוון שנבחרו
-  const sortedTasks = useMemo(() => {
-    if (!sortField) return tasks;
+  // פונקציה להרחבת כל המשימות
+  const handleExpandAll = () => {
+    setExpandAll(true);
+  };
+  
+  // פונקציה לצמצום כל המשימות
+  const handleCollapseAll = () => {
+    setExpandAll(false);
+  };
+  
+  // בניית עץ המשימות
+  const buildTaskTree = useCallback((): TaskWithChildren[] => {
+    // מיפוי משימות לפי ID להקלה על חיפוש
+    const taskMap = new Map<string, TaskWithChildren>();
+    tasks.forEach(task => {
+      taskMap.set(task.id, { ...task, childTasks: [] });
+    });
+
+    // בניית מבנה העץ
+    const rootTasks: TaskWithChildren[] = [];
     
-    return [...tasks].sort((a, b) => {
+    taskMap.forEach(task => {
+      if (task.parent_task_id) {
+        // משימה עם הורה - הוספה לרשימת תת-המשימות של ההורה
+        const parent = taskMap.get(task.parent_task_id);
+        if (parent) {
+          parent.childTasks = parent.childTasks || [];
+          parent.childTasks.push(task);
+        } else {
+          // אם ההורה לא קיים, נוסיף כמשימת שורש
+          rootTasks.push(task);
+        }
+      } else {
+        // משימה ראשית ללא הורה
+        rootTasks.push(task);
+      }
+    });
+    
+    return rootTasks;
+  }, [tasks]);
+  
+  // מיון המשימות לפי השדה והכיוון שנבחרו
+  const sortTasks = useCallback((taskList: TaskWithChildren[]): TaskWithChildren[] => {
+    return [...taskList].sort((a, b) => {
       let comparison = 0;
       
       // מיון לפי השדה שנבחר
@@ -117,7 +164,33 @@ const TaskTable: React.FC<TaskTableProps> = ({
       // הפיכת התוצאה אם המיון הוא יורד
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [tasks, sortField, sortDirection]);
+  }, [sortField, sortDirection]);
+  
+  // יצירת עץ המשימות הממוין ברמת השורש
+  const sortedTaskTree = useMemo(() => {
+    const taskTree = buildTaskTree();
+    
+    // מיון משימות ברמת השורש
+    const sortedRootTasks = sortTasks(taskTree);
+    
+    // מיון תת-משימות בכל רמה בעץ
+    const sortTreeRecursively = (tasks: TaskWithChildren[]): TaskWithChildren[] => {
+      return tasks.map(task => {
+        if (task.childTasks && task.childTasks.length > 0) {
+          // מיון תת-המשימות
+          const sortedChildren = sortTasks([...task.childTasks]);
+          // המשך מיון באופן רקורסיבי לרמות הבאות
+          return {
+            ...task,
+            childTasks: sortTreeRecursively(sortedChildren)
+          };
+        }
+        return task;
+      });
+    };
+    
+    return sortTreeRecursively(sortedRootTasks);
+  }, [buildTaskTree, sortTasks]);
   
   if (tasks.length === 0) {
     return (
@@ -157,6 +230,33 @@ const TaskTable: React.FC<TaskTableProps> = ({
   return (
     <Card variant="outline" boxShadow="sm">
       <CardBody p={0}>
+        {/* כפתורי הרחבה וכיווץ מעל הטבלה */}
+        <Flex justify="flex-end" p={2} borderBottom="1px solid" borderColor={borderColor}>
+          <ButtonGroup size="sm" isAttached variant="outline">
+            <Tooltip label="פתח את כל המשימות">
+              <Button 
+                leftIcon={<FiChevronDown />} 
+                onClick={handleExpandAll}
+                colorScheme="blue"
+                variant="outline"
+              >
+                הרחב הכל
+              </Button>
+            </Tooltip>
+            <Tooltip label="סגור את כל המשימות">
+              <Button 
+                leftIcon={<FiChevronUp />} 
+                onClick={handleCollapseAll}
+                colorScheme="blue"
+                variant="outline"
+              >
+                צמצם הכל
+              </Button>
+            </Tooltip>
+          </ButtonGroup>
+        </Flex>
+        
+        {/* כותרות הטבלה */}
         <TaskTableHeader 
           isAllSelected={selectedTasks.length === tasks.length && tasks.length > 0}
           onSelectAll={onSelectAll}
@@ -166,7 +266,7 @@ const TaskTable: React.FC<TaskTableProps> = ({
         />
         
         <VStack spacing={0} align="stretch" divider={<Divider />}>
-          {sortedTasks.map(task => (
+          {sortedTaskTree.map((task, index) => (
             <TaskRow
               key={task.id}
               task={task}
@@ -177,6 +277,11 @@ const TaskTable: React.FC<TaskTableProps> = ({
               onEdit={onEditTask}
               onDelete={onDeleteTask}
               getParentTask={getParentTask}
+              level={0}
+              hasChildren={task.childTasks !== undefined && task.childTasks.length > 0}
+              childTasks={task.childTasks || []}
+              isLastChild={index === sortedTaskTree.length - 1}
+              expandAll={expandAll}
             />
           ))}
         </VStack>
