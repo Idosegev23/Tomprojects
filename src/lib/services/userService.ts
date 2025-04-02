@@ -58,7 +58,7 @@ export const userService = {
     }
     
     try {
-      // קריאה ל-API לקבלת רשימת המשתמשים
+      // קריאה ל-API לקבלת רשימת המשתמשים - עדכון לנתיב החדש
       const response = await fetch('/api/users');
       
       if (!response.ok) {
@@ -108,7 +108,7 @@ export const userService = {
     }
     
     try {
-      // ניסיון לקבל מידע על המשתמש דרך API
+      // ניסיון לקבל מידע על המשתמש דרך API - עדכון לנתיב החדש
       const response = await fetch(`/api/users/${userId}`);
       
       if (!response.ok) {
@@ -149,7 +149,7 @@ export const userService = {
     }
     
     try {
-      // ניסיון לקבל מידע על המשתמש דרך API
+      // ניסיון לקבל מידע על המשתמש דרך API - עדכון לנתיב החדש
       const response = await fetch(`/api/users/by-email?email=${encodeURIComponent(email)}`);
       
       if (!response.ok) {
@@ -196,7 +196,7 @@ export const userService = {
     }
     
     try {
-      // ניסיון לחפש משתמשים דרך API
+      // ניסיון לחפש משתמשים דרך API - עדכון לנתיב החדש
       const response = await fetch(`/api/users/search?q=${encodeURIComponent(searchTerm)}`);
       
       if (!response.ok) {

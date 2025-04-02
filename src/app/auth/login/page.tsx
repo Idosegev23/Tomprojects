@@ -36,7 +36,7 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const toast = useToast();
   
-  const returnUrl = searchParams.get('returnUrl');
+  const returnUrl = searchParams?.get('returnUrl') || null;
   
   const isMobile = useBreakpointValue({ base: true, md: false });
   

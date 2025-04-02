@@ -118,7 +118,7 @@ export default function EditTask() {
   const toast = useToast();
   const { user } = useAuthContext();
   
-  const taskId = params.id as string;
+  const taskId = params?.id as string;
   
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');

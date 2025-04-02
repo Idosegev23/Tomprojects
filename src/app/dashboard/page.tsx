@@ -101,7 +101,7 @@ export default function Dashboard() {
           setEntrepreneurs(entrepreneursData.map(e => ({ id: e.id, name: e.name })));
           
           // בדיקה אם יש פרמטר entrepreneur ב-URL
-          const entrepreneurId = searchParams.get('entrepreneur');
+          const entrepreneurId = searchParams?.get('entrepreneur');
           if (entrepreneurId) {
             // חיפוש היזם לפי המזהה
             const foundEntrepreneur = entrepreneursData.find(e => e.id === entrepreneurId);
@@ -112,7 +112,7 @@ export default function Dashboard() {
           }
           
           // בדיקה אם יש פרמטר status ב-URL
-          const statusParam = searchParams.get('status');
+          const statusParam = searchParams?.get('status');
           if (statusParam) {
             setSelectedStatus(statusParam);
           }

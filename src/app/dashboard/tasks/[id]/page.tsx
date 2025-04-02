@@ -59,7 +59,7 @@ export default function TaskPage() {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const cancelRef = React.useRef<HTMLButtonElement>(null);
   
-  const taskId = params.id as string;
+  const taskId = params?.id as string;
   
   const isMobile = useBreakpointValue({ base: true, md: false });
   

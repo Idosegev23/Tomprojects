@@ -18,7 +18,7 @@ export default function RequireAuth({ children }: RequireAuthProps) {
     // אם סיימנו לטעון ואין משתמש מחובר, הפנה להתחברות
     if (!loading && !isAuthenticated) {
       // שמור את המסלול הנוכחי כדי לחזור אליו אחרי ההתחברות
-      const returnUrl = encodeURIComponent(pathname);
+      const returnUrl = encodeURIComponent(pathname || '');
       router.push(`/auth/login?returnUrl=${returnUrl}`);
     }
   }, [isAuthenticated, loading, router, pathname]);

@@ -77,7 +77,7 @@ export default function Tasks() {
   
   // בדיקה אם יש פרמטר של פרויקט בURL
   useEffect(() => {
-    const projectId = searchParams.get('projectId');
+    const projectId = searchParams?.get('projectId');
     if (projectId) {
       setSelectedProject(projectId);
     }
