@@ -193,7 +193,12 @@ export function useTaskList({
   const handleDeleteTask = async (taskId: string) => {
     if (window.confirm('האם אתה בטוח שברצונך למחוק משימה זו?')) {
       try {
-        await taskService.deleteTask(taskId);
+        // מציאת המשימה כדי לקבל את ה-project_id שלה
+        const taskToDelete = tasks.find(task => task.id === taskId);
+        console.log(`[useTaskList] מנסה למחוק משימה ${taskId} מפרויקט ${taskToDelete?.project_id || projectId}`);
+        
+        // שימוש ב-project_id של המשימה או של הפרויקט הנוכחי
+        await taskService.deleteTask(taskId, taskToDelete?.project_id || projectId);
         
         setTasks(tasks.filter(task => task.id !== taskId));
         
