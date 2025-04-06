@@ -81,7 +81,39 @@ export const projectService = {
     // יצירת תיקייה בדרופבוקס עבור הפרויקט החדש
     try {
       await updateBuildTracking(`יוצר תיקייה בדרופבוקס עבור פרויקט חדש: ${data.name} (${data.id})`);
-      const folderPath = await dropboxService.createProjectFolder(data.id, data.name);
+      
+      // בדיקה אם יש מידע על היזם
+      let entrepreneurId = null;
+      let entrepreneurName = null;
+      
+      if (data.entrepreneur_id) {
+        entrepreneurId = data.entrepreneur_id;
+        
+        // ניסיון לקבל את שם היזם מהמסד
+        try {
+          const { data: entrepreneurData, error: entrepreneurError } = await supabase
+            .from('entrepreneurs')
+            .select('name')
+            .eq('id', entrepreneurId)
+            .single();
+            
+          if (!entrepreneurError && entrepreneurData) {
+            entrepreneurName = entrepreneurData.name;
+            console.log(`Found entrepreneur: ${entrepreneurName} (${entrepreneurId})`);
+          }
+        } catch (entrepreneurError) {
+          console.warn(`Could not fetch entrepreneur details: ${entrepreneurError}`);
+        }
+      }
+      
+      // יצירת התיקייה עם או בלי מידע היזם
+      const folderPath = await dropboxService.createProjectFolder(
+        data.id, 
+        data.name,
+        entrepreneurId,
+        entrepreneurName
+      );
+      
       console.log(`Created Dropbox folder for project ${data.name}: ${folderPath}`);
     } catch (dropboxError) {
       console.error(`Error creating Dropbox folder for project ${data.id}:`, dropboxError);

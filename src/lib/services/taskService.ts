@@ -272,7 +272,7 @@ export const taskService = {
             // קריאת פרטי הפרויקט לצורך יצירת תיקייה
             const { data: projectData, error: projectError } = await supabase
               .from('projects')
-              .select('name')
+              .select('name, entrepreneur_id')
               .eq('id', createdTask.project_id)
               .single();
               
@@ -280,6 +280,30 @@ export const taskService = {
               console.error(`Error fetching project details for task ${createdTask.id}:`, projectError);
             } else if (projectData) {
               await updateBuildTracking(`יוצר תיקייה בדרופבוקס עבור משימה חדשה: ${createdTask.title} (${createdTask.id})`);
+              
+              // קריאת פרטי היזם אם קיים
+              let entrepreneurId = null;
+              let entrepreneurName = null;
+              
+              if (projectData.entrepreneur_id) {
+                entrepreneurId = projectData.entrepreneur_id;
+                
+                // ניסיון לקבל את שם היזם מהמסד
+                try {
+                  const { data: entrepreneurData, error: entrepreneurError } = await supabase
+                    .from('entrepreneurs')
+                    .select('name')
+                    .eq('id', entrepreneurId)
+                    .single();
+                    
+                  if (!entrepreneurError && entrepreneurData) {
+                    entrepreneurName = entrepreneurData.name;
+                    console.log(`Found entrepreneur for task: ${entrepreneurName} (${entrepreneurId})`);
+                  }
+                } catch (entrepreneurError) {
+                  console.warn(`Could not fetch entrepreneur details for task: ${entrepreneurError}`);
+                }
+              }
               
               if (createdTask.parent_task_id) {
                 // זו תת-משימה, נצטרך לקבל את פרטי משימת האב
@@ -292,7 +316,9 @@ export const taskService = {
                     parentTask.id,
                     parentTask.title,
                     createdTask.id,
-                    createdTask.title
+                    createdTask.title,
+                    entrepreneurId,
+                    entrepreneurName
                   );
                   console.log(`Created Dropbox folder for subtask ${createdTask.title}: ${folderPath}`);
                 }
@@ -302,7 +328,9 @@ export const taskService = {
                   createdTask.project_id,
                   projectData.name,
                   createdTask.id,
-                  createdTask.title
+                  createdTask.title,
+                  entrepreneurId,
+                  entrepreneurName
                 );
                 console.log(`Created Dropbox folder for task ${createdTask.title}: ${folderPath}`);
               }
