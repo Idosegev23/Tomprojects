@@ -434,7 +434,7 @@ export const taskService = {
         console.log(`Task ${id} deleted from project-specific table for project ${project_id}`);
       } catch (projectTableError) {
         console.error(`Error deleting task from project-specific table:`, projectTableError);
-        throw new Error(`שגיאה במחיקת המשימה מטבלת הפרויקט: ${projectTableError.message}`);
+        throw new Error(`שגיאה במחיקת המשימה מטבלת הפרויקט: ${projectTableError instanceof Error ? projectTableError.message : 'שגיאה לא ידועה'}`);
       }
     } else {
       // אם אין project_id, נבדוק בטבלה הראשית
