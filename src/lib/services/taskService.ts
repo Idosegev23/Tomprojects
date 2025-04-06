@@ -179,11 +179,12 @@ export const taskService = {
           }
         }
         
-        // תיקון: השתמש ב-maybeSingle במקום single כדי למנוע שגיאות
+        // תיקון: השתמש ב-.select() במקום .select().single() כדי למנוע שגיאות
         const { data, error } = await supabase
           .from('tasks')
           .insert(originalTask)
-          .select();
+          .select('*')
+          .single();
         
         if (error) {
           console.error('Error creating global task template:', error);
@@ -195,7 +196,7 @@ export const taskService = {
         }
         
         console.log('Global task template created successfully in main tasks table');
-        return data[0]; // החזר את האובייקט הראשון מהמערך
+        return data; // החזר את האובייקט הראשון מהמערך
       }
       
       // כאן מדובר במשימה עם project_id - נוסיף אותה רק לטבלה הייחודית של הפרויקט
@@ -241,7 +242,8 @@ export const taskService = {
       const { data, error } = await supabase
         .from(tableName)
         .insert(cleanedTask)
-        .select();
+        .select('*')
+        .single();
       
       if (error) {
         console.error(`Error adding task to project-specific table ${tableName}:`, error);
@@ -253,7 +255,7 @@ export const taskService = {
       }
       
       console.log(`Task created successfully in project-specific table ${tableName}`);
-      return data[0]; // החזר את האובייקט הראשון מהמערך
+      return data; // החזר את האובייקט הראשון מהמערך
     } catch (err) {
       console.error('Error in createTask:', err);
       throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה ביצירת משימה');
