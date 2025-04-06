@@ -191,38 +191,69 @@ export function useTaskList({
   
   // פונקציה לטיפול במחיקת משימה
   const handleDeleteTask = async (taskId: string) => {
-    if (window.confirm('האם אתה בטוח שברצונך למחוק משימה זו?')) {
-      try {
-        // מציאת המשימה כדי לקבל את ה-project_id שלה
-        const taskToDelete = tasks.find(task => task.id === taskId);
+    try {
+      // מציאת המשימה כדי לקבל את ה-project_id שלה
+      const taskToDelete = tasks.find(task => task.id === taskId);
+      
+      // בדיקה אם יש תת-משימות
+      const childTasks = tasks.filter(task => task.parent_task_id === taskId);
+      
+      let shouldDelete = true;
+      if (childTasks.length > 0) {
+        shouldDelete = window.confirm(`האם אתה בטוח שברצונך למחוק משימה זו? המשימה כוללת ${childTasks.length} תתי-משימות שיימחקו גם הן.`);
+      } else {
+        shouldDelete = window.confirm('האם אתה בטוח שברצונך למחוק משימה זו?');
+      }
+      
+      if (shouldDelete) {
         console.log(`[useTaskList] מנסה למחוק משימה ${taskId} מפרויקט ${taskToDelete?.project_id || projectId}`);
         
         // שימוש ב-project_id של המשימה או של הפרויקט הנוכחי
-        await taskService.deleteTask(taskId, taskToDelete?.project_id || projectId);
+        const result = await taskService.deleteTask(taskId, taskToDelete?.project_id || projectId);
         
-        setTasks(tasks.filter(task => task.id !== taskId));
+        setTasks(tasks.filter(task => task.id !== taskId && task.parent_task_id !== taskId));
         
         if (onTaskDeleted) {
           onTaskDeleted(taskId);
         }
         
-        toast({
-          title: 'משימה נמחקה בהצלחה',
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-        });
-      } catch (err) {
-        console.error('Error deleting task:', err);
+        // הצגת הודעה על מחיקת המשימה ותתי-המשימות
+        if (result.deletedSubtasks && result.deletedSubtasks.length > 0) {
+          toast({
+            title: 'המשימה נמחקה בהצלחה',
+            description: `נמחקו גם ${result.deletedSubtasks.length} תתי-משימות`,
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          });
+        } else {
+          toast({
+            title: 'משימה נמחקה בהצלחה',
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          });
+        }
         
-        toast({
-          title: 'שגיאה במחיקת המשימה',
-          description: err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה',
-          status: 'error',
-          duration: 5000,
-          isClosable: true,
-        });
+        // עדכון ההיררכיה אחרי המחיקה
+        if (taskToDelete && taskToDelete.parent_task_id) {
+          // אם נמחקה תת-משימה, עדכון ההיררכיה של האחיות
+          await updateHierarchyAfterDelete(taskToDelete.parent_task_id);
+        } else {
+          // אם נמחקה משימת-אב, עדכון ההיררכיה של משימות אב אחרות
+          await updateHierarchyAfterDelete(null);
+        }
       }
+    } catch (err) {
+      console.error('Error deleting task:', err);
+      
+      toast({
+        title: 'שגיאה במחיקת המשימה',
+        description: err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
     }
   };
   
@@ -254,16 +285,31 @@ export function useTaskList({
   const handleDeleteSelected = async () => {
     if (selectedTasks.length === 0) return;
     
-    if (window.confirm(`האם אתה בטוח שברצונך למחוק ${selectedTasks.length} משימות?`)) {
+    // בדיקה אם יש תתי-משימות שיימחקו
+    const childTaskIds = selectedTasks.flatMap(selectedId => 
+      tasks.filter(task => task.parent_task_id === selectedId).map(t => t.id)
+    );
+    
+    // הסרת כפילויות - ייתכן שתת-משימה כבר מסומנת למחיקה
+    const additionalChildTasks = childTaskIds.filter(id => !selectedTasks.includes(id));
+    
+    let shouldDelete = true;
+    if (additionalChildTasks.length > 0) {
+      shouldDelete = window.confirm(`האם אתה בטוח שברצונך למחוק ${selectedTasks.length} משימות? פעולה זו תמחק גם ${additionalChildTasks.length} תתי-משימות נוספות.`);
+    } else {
+      shouldDelete = window.confirm(`האם אתה בטוח שברצונך למחוק ${selectedTasks.length} משימות?`);
+    }
+    
+    if (shouldDelete) {
       try {
         // מחיקת כל המשימות הנבחרות
-        await Promise.all(selectedTasks.map(taskId => {
+        const results = await Promise.all(selectedTasks.map(taskId => {
           const task = tasks.find(t => t.id === taskId);
-          return taskService.deleteTask(taskId, task?.project_id);
+          return taskService.deleteTask(taskId, task?.project_id || projectId);
         }));
         
         // עדכון הרשימה המקומית
-        setTasks(tasks.filter(task => !selectedTasks.includes(task.id)));
+        setTasks(tasks.filter(task => !selectedTasks.includes(task.id) && !additionalChildTasks.includes(task.id)));
         
         // עדכון ההורה
         if (onTaskDeleted) {
@@ -273,12 +319,32 @@ export function useTaskList({
         // איפוס הבחירה
         setSelectedTasks([]);
         
-        toast({
-          title: 'המשימות נמחקו בהצלחה',
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-        });
+        // חישוב כמה תתי-משימות נמחקו בסך הכל
+        const totalDeletedSubtasks = results.reduce((total, result) => 
+          total + (result.deletedSubtasks?.length || 0), 0
+        );
+        
+        // הצגת הודעה על מחיקת המשימות ותתי-המשימות
+        if (totalDeletedSubtasks > 0 || additionalChildTasks.length > 0) {
+          toast({
+            title: 'המשימות נמחקו בהצלחה',
+            description: `נמחקו ${selectedTasks.length} משימות ו-${totalDeletedSubtasks} תתי-משימות`,
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          });
+        } else {
+          toast({
+            title: 'המשימות נמחקו בהצלחה',
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          });
+        }
+        
+        // עדכון ההיררכיה אחרי המחיקה - מעדכנים את כל התרשים
+        await updateHierarchyAfterDelete(null);
+        
       } catch (err) {
         console.error('Error deleting tasks:', err);
         
@@ -323,6 +389,32 @@ export function useTaskList({
   const getParentTask = (taskId: string | null): Task | undefined => {
     if (!taskId) return undefined;
     return tasks.find(t => t.id === taskId);
+  };
+  
+  // פונקציה לעדכון ההיררכיה לאחר מחיקת משימה
+  const updateHierarchyAfterDelete = async (parentTaskId: string | null) => {
+    try {
+      setLoading(true);
+      
+      // ביצוע בקשה לשרת לעדכון ההיררכיה
+      await taskService.reorderTasks(projectId, parentTaskId);
+      
+      // טעינת המשימות מחדש עם ההיררכיה המעודכנת
+      await loadData();
+      
+      console.log(`היררכיית המשימות עודכנה לאחר מחיקה של משימה ${parentTaskId ? `תחת הורה ${parentTaskId}` : 'ראשית'}`);
+    } catch (err) {
+      console.error('שגיאה בעדכון ההיררכיה לאחר מחיקה:', err);
+      toast({
+        title: 'שגיאה בעדכון ההיררכיה',
+        description: 'המשימה נמחקה, אך היררכיית המשימות לא עודכנה. יש לרענן ידנית.',
+        status: 'warning',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
   
   return {

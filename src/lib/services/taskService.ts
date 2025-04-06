@@ -2016,6 +2016,29 @@ export const taskService = {
     await fetchSubtasks(taskId);
     return result;
   },
+
+  // סידור מחדש של המספרים ההיררכיים
+  async reorderTasks(projectId: string, parentTaskId: string | null): Promise<void> {
+    try {
+      console.log(`התחלת סידור מחדש של משימות בפרויקט ${projectId} ${parentTaskId ? `תחת הורה ${parentTaskId}` : 'ברמה ראשית'}`);
+      
+      // קריאה לפונקציה בשרת שמסדרת מחדש את המספרים ההיררכיים
+      const { error } = await supabase.rpc('reorder_tasks_after_delete', {
+        project_id_param: projectId,
+        parent_task_id_param: parentTaskId
+      });
+      
+      if (error) {
+        console.error('שגיאה בסידור מחדש של משימות:', error);
+        throw new Error(`שגיאה בסידור מחדש של משימות: ${error.message}`);
+      }
+      
+      console.log('המשימות סודרו מחדש בהצלחה');
+    } catch (err) {
+      console.error('שגיאה בסידור מחדש של משימות:', err);
+      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה בסידור מחדש של משימות');
+    }
+  },
 };
 
 export default taskService; 
