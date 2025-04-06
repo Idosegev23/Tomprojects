@@ -238,14 +238,26 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   const handleDeleteTask = async (taskId: string) => {
     if (window.confirm('האם אתה בטוח שברצונך למחוק משימה זו?')) {
       try {
-        await taskService.deleteTask(taskId);
+        const result = await taskService.deleteTask(taskId);
         setTasks(tasks.filter(task => task.id !== taskId));
-        toast({
-          title: 'המשימה נמחקה בהצלחה',
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-        });
+        
+        // אם יש משימות משנה, נציג הודעה מתאימה
+        if (result.deletedSubtasks.length > 0) {
+          toast({
+            title: 'המשימה נמחקה בהצלחה',
+            description: `נמחקו גם ${result.deletedSubtasks.length} תתי-משימות`,
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          });
+        } else {
+          toast({
+            title: 'המשימה נמחקה בהצלחה',
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          });
+        }
       } catch (error) {
         console.error('Error deleting task:', error);
         toast({

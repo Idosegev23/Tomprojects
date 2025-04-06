@@ -402,7 +402,7 @@ export const taskService = {
   },
   
   // מחיקת משימה
-  async deleteTask(id: string): Promise<void> {
+  async deleteTask(id: string): Promise<{ deletedTask: Task | null, deletedSubtasks: Task[] }> {
     // קבלת המשימה לפני המחיקה כדי לדעת לאיזה פרויקט היא שייכת
     const { data: taskToDelete, error: fetchError } = await supabase
       .from('tasks')
@@ -412,11 +412,18 @@ export const taskService = {
     
     if (fetchError) {
       console.error(`Error fetching task with id ${id} before deletion:`, fetchError);
-      // נמשיך למחיקה גם אם לא הצלחנו לקבל את המשימה
+      throw new Error(`שגיאה בשליפת המשימה: ${fetchError.message}`);
     }
-    
+
+    if (!taskToDelete) {
+      throw new Error(`לא נמצאה משימה עם מזהה ${id}`);
+    }
+
+    // בדיקת משימות משנה שיימחקו
+    const subtasks = await this.getSubTasksRecursive(id);
+
     // אם המשימה שייכת לפרויקט, נמחק אותה גם מהטבלה הייחודית של הפרויקט
-    if (taskToDelete && taskToDelete.project_id) {
+    if (taskToDelete.project_id) {
       try {
         // קריאה לפונקציה SQL למחיקת המשימה מהטבלה הספציפית של הפרויקט
         await supabase.rpc('delete_task_from_project_table', {
@@ -440,6 +447,11 @@ export const taskService = {
       console.error(`Error deleting task with id ${id}:`, error);
       throw new Error(error.message);
     }
+
+    return {
+      deletedTask: taskToDelete,
+      deletedSubtasks: subtasks
+    };
   },
   
   // קריאת משימות לפי שלב
@@ -1914,6 +1926,34 @@ export const taskService = {
       // במקרה של שגיאה כלשהי, נחזיר ערך ברירת מחדל
       return '1.1';
     }
+  },
+
+  // בדיקת משימות משנה
+  async getSubTasksRecursive(taskId: string): Promise<Task[]> {
+    const result: Task[] = [];
+    
+    const fetchSubtasks = async (parentId: string) => {
+      const { data: subtasks, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('parent_task_id', parentId)
+        .order('hierarchical_number', { ascending: true });
+      
+      if (error) {
+        console.error(`Error fetching subtasks for task ${parentId}:`, error);
+        throw new Error(error.message);
+      }
+      
+      if (subtasks && subtasks.length > 0) {
+        for (const subtask of subtasks) {
+          result.push(subtask);
+          await fetchSubtasks(subtask.id); // רקורסיה לתת-משימות נוספות
+        }
+      }
+    };
+    
+    await fetchSubtasks(taskId);
+    return result;
   },
 };
 

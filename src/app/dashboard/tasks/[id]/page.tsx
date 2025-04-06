@@ -139,15 +139,27 @@ export default function TaskPage() {
   // מחיקת משימה
   const handleDeleteTask = async () => {
     try {
-      await taskService.deleteTask(taskId);
+      const result = await taskService.deleteTask(taskId);
       
-      toast({
-        title: 'המשימה נמחקה בהצלחה',
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-        position: 'top-right',
-      });
+      // אם יש משימות משנה, נציג הודעה מתאימה
+      if (result.deletedSubtasks.length > 0) {
+        toast({
+          title: 'המשימה נמחקה בהצלחה',
+          description: `נמחקו גם ${result.deletedSubtasks.length} תתי-משימות`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+          position: 'top-right',
+        });
+      } else {
+        toast({
+          title: 'המשימה נמחקה בהצלחה',
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+          position: 'top-right',
+        });
+      }
       
       // חזרה לדף המשימות או לדף הפרויקט
       if (project) {
@@ -507,9 +519,15 @@ export default function TaskPage() {
             </AlertDialogHeader>
             
             <AlertDialogBody>
-              האם אתה בטוח שברצונך למחוק את המשימה "{task.title}"?
-              <br />
-              פעולה זו אינה ניתנת לביטול.
+              האם אתה בטוח שברצונך למחוק את המשימה "{task?.title}"?
+              {task?.parent_task_id && (
+                <Text mt={2} color="orange.500">
+                  שים לב: זוהי תת-משימה של משימה אחרת.
+                </Text>
+              )}
+              <Text mt={2} color="red.500">
+                פעולה זו אינה ניתנת לביטול.
+              </Text>
             </AlertDialogBody>
             
             <AlertDialogFooter>

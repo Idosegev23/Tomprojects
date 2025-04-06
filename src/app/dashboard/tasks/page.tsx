@@ -175,23 +175,32 @@ export default function Tasks() {
   
   // מחיקת משימה
   const handleDeleteTask = async (taskId: string) => {
-    if (!confirm('האם אתה בטוח שברצונך למחוק משימה זו? פעולה זו אינה הפיכה.')) {
-      return;
-    }
-    
     try {
-      await taskService.deleteTask(taskId);
+      // בדיקת משימות משנה לפני המחיקה
+      const result = await taskService.deleteTask(taskId);
       
       // עדכון רשימת המשימות המקומית
       setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
       
-      toast({
-        title: 'המשימה נמחקה בהצלחה',
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-        position: 'top-right',
-      });
+      // אם יש משימות משנה, נציג הודעה מתאימה
+      if (result.deletedSubtasks.length > 0) {
+        toast({
+          title: 'המשימה נמחקה בהצלחה',
+          description: `נמחקו גם ${result.deletedSubtasks.length} תתי-משימות`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+          position: 'top-right',
+        });
+      } else {
+        toast({
+          title: 'המשימה נמחקה בהצלחה',
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+          position: 'top-right',
+        });
+      }
     } catch (err) {
       console.error('שגיאה במחיקת משימה:', err);
       
