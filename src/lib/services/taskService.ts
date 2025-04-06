@@ -40,18 +40,24 @@ export const taskService = {
   
   // קריאת משימה אחת לפי מזהה
   async getTaskById(id: string): Promise<Task | null> {
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('id', id)
-      .single();
-    
-    if (error) {
-      console.error(`Error fetching task with id ${id}:`, error);
-      throw new Error(error.message);
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle(); // שימוש ב-maybeSingle במקום single למניעת שגיאות
+      
+      if (error) {
+        console.error(`Error fetching task with id ${id}:`, error);
+        throw new Error(error.message);
+      }
+      
+      return data;
+    } catch (err) {
+      console.error(`Error in getTaskById for task ${id}:`, err);
+      // להחזיר null במקום לזרוק שגיאה, כדי לאפשר לקוד הקורא לטפל במקרה שמשימה לא נמצאה
+      return null;
     }
-    
-    return data;
   },
   
   // פונקציה להסרת שדות שאינם חלק מהטבלה
@@ -718,7 +724,7 @@ export const taskService = {
         .from(tableName)
         .select('hierarchical_number')
         .eq('id', parentTaskId)
-        .single();
+        .maybeSingle();  // שימוש ב-maybeSingle במקום single למניעת שגיאות
       
       if (parentError || !parentTask || !parentTask.hierarchical_number) {
         console.error(`שגיאה בקבלת משימת אב ${parentTaskId} מטבלה ${tableName}:`, parentError);
@@ -1846,59 +1852,68 @@ export const taskService = {
   
   // קבלת המספר ההיררכי הבא לתת-משימה
   async getNextSubHierarchicalNumber(parentTaskId: string): Promise<string> {
-    // קבלת המשימה האב
-    const parentTask = await this.getTaskById(parentTaskId);
-    if (!parentTask || !parentTask.hierarchical_number) {
-      throw new Error(`Parent task ${parentTaskId} not found or has no hierarchical number`);
-    }
-    
-    // בדיקה שה-hierarchical_number הוא מחרוזת תקינה
-    const isValidString = (value: any): boolean => {
-      return typeof value === 'string' && value !== null && value.length > 0;
-    };
-    
-    if (!isValidString(parentTask.hierarchical_number)) {
-      console.warn(`Parent task ${parentTaskId} has invalid hierarchical number: ${parentTask.hierarchical_number}`);
-      // במקרה של ערך לא תקין, נחזיר ערך ברירת מחדל
-      return '1.1';
-    }
-    
-    // קבלת תתי-המשימות הקיימות
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('hierarchical_number')
-      .eq('parent_task_id', parentTaskId)
-      .order('hierarchical_number', { ascending: false })
-      .limit(1);
-    
-    if (error) {
-      console.error(`Error getting next sub-hierarchical number for parent task ${parentTaskId}:`, error);
-      throw new Error(error.message);
-    }
-    
-    if (data && data.length > 0 && data[0].hierarchical_number) {
-      // וידוא שה-hierarchical_number של תת-המשימה הוא מחרוזת תקינה
-      if (!isValidString(data[0].hierarchical_number)) {
-        console.warn(`Subtask of parent ${parentTaskId} has invalid hierarchical number: ${data[0].hierarchical_number}`);
-        // במקרה של ערך לא תקין, נשתמש במספר של האב ונוסיף ".1"
-        return `${parentTask.hierarchical_number}.1`;
+    try {
+      // קבלת המשימה האב
+      const parentTask = await this.getTaskById(parentTaskId);
+      if (!parentTask || !parentTask.hierarchical_number) {
+        console.warn(`Parent task ${parentTaskId} not found or has no hierarchical number`);
+        // במקרה של משימת אב שלא נמצאה, נחזיר ערך ברירת מחדל
+        return '1.1';
       }
       
-      try {
-        // מצאנו את המספר האחרון, נגדיל את המספר האחרון ב-1
-        const parts = (data[0].hierarchical_number as string).split('.');
-        const lastPart = parseInt(parts[parts.length - 1]);
-        parts[parts.length - 1] = (lastPart + 1).toString();
-        return parts.join('.');
-      } catch (error) {
-        console.error(`Error parsing hierarchical number for subtasks of parent ${parentTaskId}:`, error);
+      // בדיקה שה-hierarchical_number הוא מחרוזת תקינה
+      const isValidString = (value: any): boolean => {
+        return typeof value === 'string' && value !== null && value.length > 0;
+      };
+      
+      if (!isValidString(parentTask.hierarchical_number)) {
+        console.warn(`Parent task ${parentTaskId} has invalid hierarchical number: ${parentTask.hierarchical_number}`);
+        // במקרה של ערך לא תקין, נחזיר ערך ברירת מחדל
+        return '1.1';
+      }
+      
+      // קבלת תתי-המשימות הקיימות
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('hierarchical_number')
+        .eq('parent_task_id', parentTaskId)
+        .order('hierarchical_number', { ascending: false })
+        .limit(1);
+      
+      if (error) {
+        console.error(`Error getting next sub-hierarchical number for parent task ${parentTaskId}:`, error);
         // במקרה של שגיאה, נחזיר ".1" למספר של האב
         return `${parentTask.hierarchical_number}.1`;
       }
+      
+      if (data && data.length > 0 && data[0].hierarchical_number) {
+        // וידוא שה-hierarchical_number של תת-המשימה הוא מחרוזת תקינה
+        if (!isValidString(data[0].hierarchical_number)) {
+          console.warn(`Subtask of parent ${parentTaskId} has invalid hierarchical number: ${data[0].hierarchical_number}`);
+          // במקרה של ערך לא תקין, נשתמש במספר של האב ונוסיף ".1"
+          return `${parentTask.hierarchical_number}.1`;
+        }
+        
+        try {
+          // מצאנו את המספר האחרון, נגדיל את המספר האחרון ב-1
+          const parts = (data[0].hierarchical_number as string).split('.');
+          const lastPart = parseInt(parts[parts.length - 1]);
+          parts[parts.length - 1] = (lastPart + 1).toString();
+          return parts.join('.');
+        } catch (error) {
+          console.error(`Error parsing hierarchical number for subtasks of parent ${parentTaskId}:`, error);
+          // במקרה של שגיאה, נחזיר ".1" למספר של האב
+          return `${parentTask.hierarchical_number}.1`;
+        }
+      }
+      
+      // אם אין תתי-משימות קיימות, נוסיף ".1" למספר ההיררכי של האב
+      return `${parentTask.hierarchical_number}.1`;
+    } catch (error) {
+      console.error(`Error in getNextSubHierarchicalNumber for parent task ${parentTaskId}:`, error);
+      // במקרה של שגיאה כלשהי, נחזיר ערך ברירת מחדל
+      return '1.1';
     }
-    
-    // אם אין תתי-משימות קיימות, נוסיף ".1" למספר ההיררכי של האב
-    return `${parentTask.hierarchical_number}.1`;
   },
 };
 
