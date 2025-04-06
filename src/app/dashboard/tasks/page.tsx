@@ -176,8 +176,11 @@ export default function Tasks() {
   // מחיקת משימה
   const handleDeleteTask = async (taskId: string) => {
     try {
+      // מציאת המשימה כדי לקבל את ה-project_id שלה
+      const taskToDelete = tasks.find(task => task.id === taskId);
+      
       // בדיקת משימות משנה לפני המחיקה
-      const result = await taskService.deleteTask(taskId);
+      const result = await taskService.deleteTask(taskId, taskToDelete?.project_id);
       
       // עדכון רשימת המשימות המקומית
       setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
@@ -202,11 +205,11 @@ export default function Tasks() {
         });
       }
     } catch (err) {
-      console.error('שגיאה במחיקת משימה:', err);
+      console.error('שגיאה במחיקת המשימה:', err);
       
       toast({
         title: 'שגיאה במחיקת המשימה',
-        description: err instanceof Error ? err.message : 'אירעה שגיאה במחיקת המשימה',
+        description: err instanceof Error ? err.message : 'אירעה שגיאה בלתי צפויה',
         status: 'error',
         duration: 5000,
         isClosable: true,

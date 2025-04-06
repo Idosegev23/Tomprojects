@@ -139,7 +139,7 @@ export default function TaskPage() {
   // מחיקת משימה
   const handleDeleteTask = async () => {
     try {
-      const result = await taskService.deleteTask(taskId);
+      const result = await taskService.deleteTask(taskId, task?.project_id || undefined);
       
       // אם יש משימות משנה, נציג הודעה מתאימה
       if (result.deletedSubtasks.length > 0) {

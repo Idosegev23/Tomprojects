@@ -252,7 +252,10 @@ export function useTaskList({
     if (window.confirm(`האם אתה בטוח שברצונך למחוק ${selectedTasks.length} משימות?`)) {
       try {
         // מחיקת כל המשימות הנבחרות
-        await Promise.all(selectedTasks.map(taskId => taskService.deleteTask(taskId)));
+        await Promise.all(selectedTasks.map(taskId => {
+          const task = tasks.find(t => t.id === taskId);
+          return taskService.deleteTask(taskId, task?.project_id);
+        }));
         
         // עדכון הרשימה המקומית
         setTasks(tasks.filter(task => !selectedTasks.includes(task.id)));
