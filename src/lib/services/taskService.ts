@@ -408,7 +408,7 @@ export const taskService = {
       .from('tasks')
       .select('*')
       .eq('id', id)
-      .single();
+      .maybeSingle();
     
     if (fetchError) {
       console.error(`Error fetching task with id ${id} before deletion:`, fetchError);
