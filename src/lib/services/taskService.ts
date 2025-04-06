@@ -1,5 +1,16 @@
 import supabase from '../supabase';
 import { Task, NewTask, UpdateTask, TaskWithChildren } from '@/types/supabase';
+import dropboxService from './dropboxService';
+
+// תיעוד פעולות בקובץ build_tracking
+async function updateBuildTracking(message: string) {
+  try {
+    console.log(`Build tracking: ${message}`);
+    // ניתן להוסיף כאן קוד לתיעוד פעולות בקובץ או בבסיס נתונים
+  } catch (error) {
+    console.error('Error updating build tracking:', error);
+  }
+}
 
 export const taskService = {
   // קריאת כל המשימות
@@ -197,74 +208,116 @@ export const taskService = {
           throw new Error(`שגיאה ביצירת תבנית משימה גלובלית: ${error.message}`);
         }
         
-        if (!data || data.length === 0) {
-          throw new Error('לא נמצאו נתונים אחרי הוספת המשימה');
-        }
-        
         console.log('Global task template created successfully in main tasks table');
         return data; // החזר את האובייקט הראשון מהמערך
-      }
-      
-      // כאן מדובר במשימה עם project_id - נוסיף אותה רק לטבלה הייחודית של הפרויקט
-      const tableName = `project_${cleanedTask.project_id}_tasks`;
-      
-      // מדפיס את המידע שנשלח לשרת לצורך דיבוג
-      console.log('Clean task object to send:', cleanedTask);
-      
-      // בדיקה אם הטבלה הייחודית קיימת
-      let tableExists = false;
-      try {
-        const { data: checkResult, error: tableCheckError } = await supabase
-          .rpc('check_table_exists', {
-            table_name_param: tableName
-          });
+      } else {
+        // אם המשימה שייכת לפרויקט, נבדוק אם יש טבלה ייעודית
+        const projectTableName = `project_${cleanedTask.project_id}_tasks`;
+        let useProjectTable = false;
         
-        if (tableCheckError) {
-          console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
-          throw new Error(`שגיאה בבדיקת קיום טבלת משימות ייעודית: ${tableCheckError.message}`);
-        }
-        
-        tableExists = !!checkResult;
-      } catch (err) {
-        console.error(`Error checking project table ${tableName}:`, err);
-        throw new Error(`שגיאה בבדיקת קיום טבלת משימות ייעודית: ${err instanceof Error ? err.message : 'שגיאה לא ידועה'}`);
-      }
-      
-      // אם הטבלה לא קיימת, ניצור אותה
-      if (!tableExists) {
         try {
-          await supabase.rpc('create_project_table', {
-            project_id: cleanedTask.project_id
-          });
-          console.log(`Created project-specific table ${tableName} for project ${cleanedTask.project_id}`);
-          tableExists = true;
-        } catch (createTableError) {
-          console.error(`Error creating project-specific table ${tableName}:`, createTableError);
-          throw new Error(`שגיאה ביצירת טבלת משימות ייעודית: ${createTableError instanceof Error ? createTableError.message : 'שגיאה לא ידועה'}`);
+          // בדיקה אם הטבלה קיימת
+          const { data: tableExists, error: tableCheckError } = await supabase
+            .rpc('check_table_exists', {
+              table_name_param: projectTableName
+            });
+            
+          if (tableCheckError) {
+            console.error(`Error checking if project table ${projectTableName} exists:`, tableCheckError);
+          } else {
+            useProjectTable = !!tableExists;
+          }
+        } catch (checkError) {
+          console.error(`Error in check_table_exists for ${projectTableName}:`, checkError);
         }
+        
+        let createdTask: Task;
+        
+        if (useProjectTable) {
+          // שימוש בטבלה הייעודית של הפרויקט
+          const { data, error } = await supabase
+            .from(projectTableName)
+            .insert(cleanedTask)
+            .select('*')
+            .single();
+            
+          if (error) {
+            console.error(`Error inserting task into project-specific table ${projectTableName}:`, error);
+            throw new Error(`שגיאה בהוספת משימה לטבלה הייעודית: ${error.message}`);
+          }
+          
+          createdTask = data as Task;
+        } else {
+          // שימוש בטבלה הראשית
+          // ניצור עותק מלא של המשימה עם כל השדות הנתמכים בטבלה הראשית
+          const fullTask = await this.removeNonExistingFields(task, false);
+          
+          const { data, error } = await supabase
+            .from('tasks')
+            .insert(fullTask)
+            .select('*')
+            .single();
+            
+          if (error) {
+            console.error('Error inserting task into main tasks table:', error);
+            throw new Error(`שגיאה בהוספת משימה לטבלה הראשית: ${error.message}`);
+          }
+          
+          createdTask = data;
+        }
+        
+        // יצירת תיקייה בדרופבוקס עבור המשימה החדשה
+        try {
+          if (createdTask.project_id) {
+            // קריאת פרטי הפרויקט לצורך יצירת תיקייה
+            const { data: projectData, error: projectError } = await supabase
+              .from('projects')
+              .select('name')
+              .eq('id', createdTask.project_id)
+              .single();
+              
+            if (projectError) {
+              console.error(`Error fetching project details for task ${createdTask.id}:`, projectError);
+            } else if (projectData) {
+              await updateBuildTracking(`יוצר תיקייה בדרופבוקס עבור משימה חדשה: ${createdTask.title} (${createdTask.id})`);
+              
+              if (createdTask.parent_task_id) {
+                // זו תת-משימה, נצטרך לקבל את פרטי משימת האב
+                const parentTask = await this.getTaskById(createdTask.parent_task_id);
+                
+                if (parentTask) {
+                  const folderPath = await dropboxService.createSubtaskFolder(
+                    createdTask.project_id,
+                    projectData.name,
+                    parentTask.id,
+                    parentTask.title,
+                    createdTask.id,
+                    createdTask.title
+                  );
+                  console.log(`Created Dropbox folder for subtask ${createdTask.title}: ${folderPath}`);
+                }
+              } else {
+                // זו משימת שורש
+                const folderPath = await dropboxService.createTaskFolder(
+                  createdTask.project_id,
+                  projectData.name,
+                  createdTask.id,
+                  createdTask.title
+                );
+                console.log(`Created Dropbox folder for task ${createdTask.title}: ${folderPath}`);
+              }
+            }
+          }
+        } catch (dropboxError) {
+          console.error(`Error creating Dropbox folder for task ${createdTask.id}:`, dropboxError);
+          // לא נזרוק שגיאה במקרה זה, נאפשר להמשיך בתהליך יצירת המשימה
+        }
+        
+        return createdTask;
       }
-      
-      // תיקון: השתמש ב-.select() במקום .select().single() כדי למנוע שגיאות
-      const { data, error } = await supabase
-        .from(tableName)
-        .insert(cleanedTask)
-        .select('*')
-        .single();
-      
-      if (error) {
-        console.error(`Error adding task to project-specific table ${tableName}:`, error);
-        throw new Error(`שגיאה בהוספת משימה לטבלת הפרויקט: ${error.message}`);
-      }
-      
-      if (!data || data.length === 0) {
-        throw new Error('לא נמצאו נתונים אחרי הוספת המשימה לטבלת הפרויקט');
-      }
-      
-      console.log(`Task created successfully in project-specific table ${tableName}`);
-      return data; // החזר את האובייקט הראשון מהמערך
     } catch (err) {
       console.error('Error in createTask:', err);
-      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה ביצירת משימה');
+      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה ביצירת משימה');
     }
   },
   

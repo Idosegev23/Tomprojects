@@ -1,6 +1,17 @@
 import supabase from '../supabase';
 import { Project, NewProject, UpdateProject } from '@/types/supabase';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import dropboxService from './dropboxService';
+
+// תיעוד פעולות בקובץ build_tracking
+async function updateBuildTracking(message: string) {
+  try {
+    console.log(`Build tracking: ${message}`);
+    // ניתן להוסיף כאן קוד לתיעוד פעולות בקובץ או בבסיס נתונים
+  } catch (error) {
+    console.error('Error updating build tracking:', error);
+  }
+}
 
 export const projectService = {
   // קריאת כל הפרויקטים
@@ -66,6 +77,16 @@ export const projectService = {
     // הפונקציה init_project_tables_and_data נקראת מדף היצירה של הפרויקט
     // עם מזהי המשימות שנבחרו
     console.log(`Project ${data.id} created successfully. Tables will be initialized from the UI.`);
+    
+    // יצירת תיקייה בדרופבוקס עבור הפרויקט החדש
+    try {
+      await updateBuildTracking(`יוצר תיקייה בדרופבוקס עבור פרויקט חדש: ${data.name} (${data.id})`);
+      const folderPath = await dropboxService.createProjectFolder(data.id, data.name);
+      console.log(`Created Dropbox folder for project ${data.name}: ${folderPath}`);
+    } catch (dropboxError) {
+      console.error(`Error creating Dropbox folder for project ${data.id}:`, dropboxError);
+      // לא נזרוק שגיאה במקרה זה, נאפשר להמשיך בתהליך יצירת הפרויקט
+    }
     
     return data;
   },
