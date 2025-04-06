@@ -403,41 +403,66 @@ export const taskService = {
   
   // מחיקת משימה
   async deleteTask(id: string, project_id?: string): Promise<{ deletedTask: Task | null, deletedSubtasks: Task[] }> {
+    console.log(`התחלת מחיקת משימה - taskId: ${id}, פרויקט: ${project_id || 'ללא פרויקט'}`);
     let taskToDelete: Task | null = null;
     
     // אם יש project_id, קודם כל נבדוק בטבלה הספציפית של הפרויקט
     if (project_id) {
       const tableName = `project_${project_id}_tasks`;
-      const { data: projectTask, error: projectFetchError } = await supabase
-        .from(tableName)
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
+      console.log(`בדיקה בטבלה הספציפית: ${tableName}`);
       
-      if (projectFetchError) {
-        console.error(`Error fetching task with id ${id} from project table:`, projectFetchError);
-        throw new Error(`שגיאה בשליפת המשימה מטבלת הפרויקט: ${projectFetchError.message}`);
-      }
-
-      if (!projectTask) {
-        throw new Error(`לא נמצאה משימה עם מזהה ${id} בפרויקט ${project_id}`);
-      }
-
-      taskToDelete = projectTask;
-
-      // מחיקה מהטבלה הספציפית של הפרויקט
       try {
-        await supabase.rpc('delete_task_from_project_table', {
-          task_id: id,
-          project_id: project_id
-        });
-        console.log(`Task ${id} deleted from project-specific table for project ${project_id}`);
-      } catch (projectTableError) {
-        console.error(`Error deleting task from project-specific table:`, projectTableError);
-        throw new Error(`שגיאה במחיקת המשימה מטבלת הפרויקט: ${projectTableError instanceof Error ? projectTableError.message : 'שגיאה לא ידועה'}`);
+        // בדיקה אם הטבלה קיימת
+        const { data: tableExists, error: tableCheckError } = await supabase
+          .rpc('check_table_exists', { table_name_param: tableName });
+        
+        if (tableCheckError) {
+          console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
+        } else {
+          console.log(`האם הטבלה ${tableName} קיימת? ${tableExists ? 'כן' : 'לא'}`);
+        }
+        
+        // אם הטבלה קיימת, נבדוק אם המשימה קיימת בה
+        if (tableExists) {
+          const { data: projectTask, error: projectFetchError } = await supabase
+            .from(tableName)
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+          
+          if (projectFetchError) {
+            console.error(`Error fetching task with id ${id} from project table:`, projectFetchError);
+            throw new Error(`שגיאה בשליפת המשימה מטבלת הפרויקט: ${projectFetchError.message}`);
+          }
+          
+          if (projectTask) {
+            taskToDelete = projectTask;
+            console.log(`נמצאה משימה ${id} בטבלת הפרויקט ${project_id}`);
+            
+            // מחיקה מהטבלה הספציפית של הפרויקט
+            try {
+              await supabase.rpc('delete_task_from_project_table', {
+                task_id: id,
+                project_id: project_id
+              });
+              console.log(`משימה ${id} נמחקה מטבלת הפרויקט ${project_id}`);
+            } catch (projectTableError) {
+              console.error(`Error deleting task from project-specific table:`, projectTableError);
+              throw new Error(`שגיאה במחיקת המשימה מטבלת הפרויקט: ${projectTableError instanceof Error ? projectTableError.message : 'שגיאה לא ידועה'}`);
+            }
+          } else {
+            console.log(`לא נמצאה משימה ${id} בטבלת הפרויקט ${project_id}`);
+          }
+        }
+      } catch (err) {
+        console.error(`Error handling project-specific table operations:`, err);
       }
     } else {
-      // אם אין project_id, נבדוק בטבלה הראשית
+      console.log('לא הועבר project_id, בודק רק בטבלה הראשית');
+    }
+    
+    // אם לא מצאנו את המשימה בטבלה הספציפית, נבדוק בטבלה הראשית
+    if (!taskToDelete) {
       const { data: mainTask, error: fetchError } = await supabase
         .from('tasks')
         .select('*')
@@ -448,14 +473,28 @@ export const taskService = {
         console.error(`Error fetching task with id ${id} from main table:`, fetchError);
         throw new Error(`שגיאה בשליפת המשימה: ${fetchError.message}`);
       }
-
+      
       if (!mainTask) {
         throw new Error(`לא נמצאה משימה עם מזהה ${id}`);
       }
-
+      
       taskToDelete = mainTask;
+      
+      // אם המשימה שייכת לפרויקט, נמחק אותה גם מהטבלה הייחודית של הפרויקט
+      if (taskToDelete && taskToDelete.project_id) {
+        try {
+          await supabase.rpc('delete_task_from_project_table', {
+            task_id: id,
+            project_id: taskToDelete.project_id
+          });
+          console.log(`Task ${id} deleted from project-specific table for project ${taskToDelete.project_id}`);
+        } catch (projectTableError) {
+          console.error(`Error deleting task from project-specific table:`, projectTableError);
+          // נמשיך גם אם יש שגיאה במחיקה מהטבלה הספציפית
+        }
+      }
     }
-
+    
     // בדיקת משימות משנה שיימחקו
     const subtasks = await this.getSubTasksRecursive(id);
     
@@ -469,7 +508,7 @@ export const taskService = {
       console.error(`Error deleting task with id ${id} from main table:`, deleteError);
       throw new Error(`שגיאה במחיקת המשימה מהטבלה הראשית: ${deleteError.message}`);
     }
-
+    
     return {
       deletedTask: taskToDelete,
       deletedSubtasks: subtasks
@@ -1847,7 +1886,7 @@ export const taskService = {
       
       // אם אין משימות, מתחילים מ-1
       if (!data?.length) {
-        console.log('אין משימות שורשיות קיימות, מחזיר מספר היררכי 1');
+        console.log('אין משימות שורשיות קיימות בטבלה הייעודית, מחזיר מספר היררכי 1');
         return '1';
       }
       

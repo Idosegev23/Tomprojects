@@ -238,6 +238,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   const handleDeleteTask = async (taskId: string) => {
     if (window.confirm('האם אתה בטוח שברצונך למחוק משימה זו?')) {
       try {
+        console.log(`מנסה למחוק משימה ${taskId} מפרויקט ${id}`);
         const result = await taskService.deleteTask(taskId, id);
         setTasks(tasks.filter(task => task.id !== taskId));
         
