@@ -62,7 +62,9 @@ import projectService from '@/lib/services/projectService';
 import stageService from '@/lib/services/stageService';
 import taskService from '@/lib/services/taskService';
 import entrepreneurService from '@/lib/services/entrepreneurService';
-import type { NewProject, Task, NewTask, Entrepreneur, Stage, TaskWithChildren } from '@/types/supabase';
+import dropboxService from '@/lib/services/dropboxService';
+import type { Task, NewTask, Entrepreneur, Stage, TaskWithChildren } from '@/types/supabase';
+import { ExtendedNewProject } from '@/types/extendedTypes';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 import { supabase } from '@/lib/supabase';
 
@@ -73,12 +75,14 @@ export default function NewProject() {
     status: string;
     due_date?: string;
     entrepreneur_id?: string;
+    dropbox_folder_path?: string;
   }>({
     name: '',
     description: '',
     status: 'active', // סטטוס ברירת מחדל
     due_date: '',
     entrepreneur_id: '',
+    dropbox_folder_path: '',
   });
   
   const [errors, setErrors] = useState<{
@@ -126,6 +130,11 @@ export default function NewProject() {
   const [loadingEntrepreneurs, setLoadingEntrepreneurs] = useState(false);
   const [newEntrepreneurName, setNewEntrepreneurName] = useState('');
   const { isOpen: isEntrepreneurModalOpen, onOpen: openEntrepreneurModal, onClose: closeEntrepreneurModal } = useDisclosure();
+  
+  // משתנים חדשים לטיפול בתיקיות דרופבוקס
+  const [dropboxFolders, setDropboxFolders] = useState<{ id: string; name: string; path: string }[]>([]);
+  const [loadingDropboxFolders, setLoadingDropboxFolders] = useState(false);
+  const [dropboxFolderError, setDropboxFolderError] = useState<string | null>(null);
   
   // טעינת כל המשימות הזמינות כתבניות
   useEffect(() => {
@@ -196,6 +205,42 @@ export default function NewProject() {
     };
     
     fetchEntrepreneurs();
+  }, [toast]);
+  
+  // טעינת תיקיות יזמים מדרופבוקס
+  useEffect(() => {
+    const fetchDropboxFolders = async () => {
+      try {
+        setLoadingDropboxFolders(true);
+        setDropboxFolderError(null);
+        
+        // בדיקה האם הדרופבוקס מוגדר
+        const isConfigured = dropboxService.isConfigured();
+        
+        if (!isConfigured) {
+          setDropboxFolderError('דרופבוקס לא מוגדר. אנא הגדר טוקן גישה בהגדרות המערכת.');
+          return;
+        }
+        
+        // קבלת כל תיקיות היזמים מדרופבוקס
+        const folders = await dropboxService.getEntrepreneurFolders();
+        setDropboxFolders(folders);
+      } catch (error) {
+        console.error('שגיאה בטעינת תיקיות דרופבוקס:', error);
+        setDropboxFolderError('לא ניתן לטעון תיקיות מדרופבוקס, יתכן שאין חיבור תקין');
+        toast({
+          title: 'שגיאה בטעינת תיקיות דרופבוקס',
+          description: error instanceof Error ? error.message : 'שגיאת התחברות לדרופבוקס',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } finally {
+        setLoadingDropboxFolders(false);
+      }
+    };
+    
+    fetchDropboxFolders();
   }, [toast]);
   
   // סינון משימות לפי חיפוש וסינונים פעילים
@@ -440,7 +485,7 @@ export default function NewProject() {
       setIsSubmitting(true);
       
       // הוספת מזהה בעלים ותאריכים
-      const newProject: NewProject = {
+      const newProject: ExtendedNewProject = {
         id: crypto.randomUUID(),
         name: project.name,
         owner: user?.email || null,
@@ -448,6 +493,7 @@ export default function NewProject() {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         entrepreneur_id: project.entrepreneur_id || null,
+        dropbox_folder_path: project.dropbox_folder_path || null,
       };
       
       // אם יש תאריך יעד, נוסיף אותו
@@ -584,14 +630,13 @@ export default function NewProject() {
             
             <FormControl>
               <FormLabel htmlFor="entrepreneur_id">יזם</FormLabel>
-              <Flex>
+              <Flex direction="column" gap={2}>
                 <Select
                   id="entrepreneur_id"
                   name="entrepreneur_id"
                   value={project.entrepreneur_id || ''}
                   onChange={handleChange}
                   placeholder="בחר יזם"
-                  mr={2}
                 >
                   {entrepreneurs.map((entrepreneur) => (
                     <option key={entrepreneur.id} value={entrepreneur.id}>
@@ -603,8 +648,56 @@ export default function NewProject() {
                   leftIcon={<FiPlus />}
                   onClick={openEntrepreneurModal}
                   isLoading={loadingEntrepreneurs}
+                  alignSelf="flex-start"
+                  size="sm"
+                  mt={1}
                 >
                   יזם חדש
+                </Button>
+              </Flex>
+            </FormControl>
+            
+            <FormControl>
+              <FormLabel>תיקיית יזם בדרופבוקס</FormLabel>
+              <Flex direction="column" gap={2}>
+                {dropboxFolderError ? (
+                  <>
+                    <Text color="orange.500" fontSize="sm" mb={2}>
+                      {dropboxFolderError}
+                    </Text>
+                    <Text fontSize="sm">
+                      המערכת תפעל במצב ללא דרופבוקס. תיקיות לא ייווצרו בפועל.
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Select
+                      value={project.dropbox_folder_path || ''}
+                      onChange={(e) => setProject({...project, dropbox_folder_path: e.target.value})}
+                      placeholder={loadingDropboxFolders ? "טוען תיקיות..." : "בחר תיקיית יזם"}
+                      isDisabled={loadingDropboxFolders || dropboxFolders.length === 0}
+                    >
+                      {dropboxFolders.map((folder) => (
+                        <option key={folder.id} value={folder.path}>
+                          {folder.name}
+                        </option>
+                      ))}
+                    </Select>
+                    {!loadingDropboxFolders && dropboxFolders.length === 0 && !dropboxFolderError && (
+                      <Text color="orange.500" fontSize="sm">
+                        לא נמצאו תיקיות יזמים בדרופבוקס. הפרויקט ייווצר בתיקייה חדשה.
+                      </Text>
+                    )}
+                  </>
+                )}
+                <Button
+                  leftIcon={<FiSearch />}
+                  onClick={() => router.push('/dashboard/dropbox-explorer')}
+                  size="sm"
+                  alignSelf="flex-start"
+                  mt={1}
+                >
+                  דפדפן תיקיות דרופבוקס
                 </Button>
               </Flex>
             </FormControl>

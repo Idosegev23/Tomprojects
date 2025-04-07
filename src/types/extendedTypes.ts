@@ -1,4 +1,4 @@
-import { Stage, Task, Project } from './supabase';
+import { Stage, Task, Project, NewProject, UpdateProject } from './supabase';
 
 // טיפוס שמרחיב את Stage כדי לכלול שדות נוספים שנדרשים בממשק
 export interface ExtendedStage extends Stage {
@@ -32,4 +32,18 @@ export interface StageWithTasks extends ExtendedStage {
   completed_tasks?: number;
   total_tasks?: number;
   progress?: number;
+}
+
+// טיפוס מורחב של פרויקט שכולל שדות נוספים שאינם בסכמה המקורית
+export interface ExtendedProject extends Project {
+  dropbox_folder_path?: string | null;
+}
+
+// טיפוסים להוספה ועדכון פרויקטים עם שדות מורחבים
+export interface ExtendedNewProject extends NewProject {
+  dropbox_folder_path?: string | null;
+}
+
+export interface ExtendedUpdateProject extends UpdateProject {
+  dropbox_folder_path?: string | null;
 } 

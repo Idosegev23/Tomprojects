@@ -1,5 +1,6 @@
 import supabase from '../supabase';
 import { Project, NewProject, UpdateProject } from '@/types/supabase';
+import { ExtendedNewProject, ExtendedProject } from '@/types/extendedTypes';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import dropboxService from './dropboxService';
 
@@ -61,7 +62,7 @@ export const projectService = {
   },
   
   // יצירת פרויקט חדש
-  async createProject(project: NewProject): Promise<Project> {
+  async createProject(project: ExtendedNewProject): Promise<Project> {
     const { data, error } = await supabase
       .from('projects')
       .insert(project)
@@ -106,13 +107,71 @@ export const projectService = {
         }
       }
       
-      // יצירת התיקייה עם או בלי מידע היזם
-      const folderPath = await dropboxService.createProjectFolder(
-        data.id, 
-        data.name,
-        entrepreneurId,
-        entrepreneurName
-      );
+      let folderPath;
+      
+      // בדיקה אם יש נתיב תיקייה מוגדר שנבחר על ידי המשתמש
+      if (project.dropbox_folder_path) {
+        console.log(`Using selected Dropbox folder path: ${project.dropbox_folder_path}`);
+        
+        // יצירת תיקיית הפרויקט בדרופבוקס בתוך התיקייה שנבחרה
+        try {
+          // וידוא שהתיקייה קיימת
+          const folderExists = await dropboxService.folderExists(project.dropbox_folder_path);
+          
+          if (folderExists) {
+            // יצירת תיקיית הפרויקט בתוך התיקייה שנבחרה
+            const projectFolderName = data.name ? `${data.name}_${data.id}` : `project_${data.id}`;
+            const cleanProjectName = projectFolderName.replace(/[\\/:\*\?"<>\|]/g, '_');
+            folderPath = `${project.dropbox_folder_path}/${cleanProjectName}`;
+            
+            const folder = await dropboxService.createFolder(folderPath);
+            folderPath = folder.path;
+            console.log(`Created project folder in selected path: ${folderPath}`);
+          } else {
+            console.warn(`Selected Dropbox folder does not exist: ${project.dropbox_folder_path}`);
+            // אם התיקייה שנבחרה לא קיימת, ניצור תיקייה בדרך הרגילה
+            folderPath = await dropboxService.createProjectFolder(
+              data.id, 
+              data.name,
+              entrepreneurId,
+              entrepreneurName
+            );
+          }
+        } catch (error) {
+          console.error(`Error creating project folder in selected path: ${error}`);
+          // אם יש שגיאה, ניצור את התיקייה בדרך הרגילה
+          folderPath = await dropboxService.createProjectFolder(
+            data.id, 
+            data.name,
+            entrepreneurId,
+            entrepreneurName
+          );
+        }
+      } else {
+        // אם אין נתיב נבחר, ניצור תיקייה בדרך הרגילה
+        folderPath = await dropboxService.createProjectFolder(
+          data.id, 
+          data.name,
+          entrepreneurId,
+          entrepreneurName
+        );
+      }
+      
+      // שמירת נתיב התיקייה בפרויקט
+      if (folderPath) {
+        const { data: updateData, error: updateError } = await supabase
+          .from('projects')
+          .update({ dropbox_folder_path: folderPath })
+          .eq('id', data.id)
+          .select()
+          .single();
+          
+        if (!updateError) {
+          console.log(`Updated project with Dropbox folder path: ${folderPath}`);
+        } else {
+          console.error(`Error updating project with Dropbox folder path: ${updateError}`);
+        }
+      }
       
       console.log(`Created Dropbox folder for project ${data.name}: ${folderPath}`);
     } catch (dropboxError) {
