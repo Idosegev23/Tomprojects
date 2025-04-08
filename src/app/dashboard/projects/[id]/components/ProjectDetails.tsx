@@ -36,6 +36,10 @@ interface ProjectDetailsProps {
 export default function ProjectDetails({ project, tasks, progress, formatDate }: ProjectDetailsProps) {
   const [entrepreneurName, setEntrepreneurName] = useState<string | null>(null);
   
+  // קריאה לכל ה-hooks מחוץ ל-render להבטחת סדר קבוע
+  const descriptionBg = useColorModeValue('gray.50', 'gray.700');
+  const cardBg = useColorModeValue('white', 'gray.700');
+  
   // קבלת שם היזם על פי המזהה
   useEffect(() => {
     const fetchEntrepreneurName = async () => {
@@ -57,7 +61,7 @@ export default function ProjectDetails({ project, tasks, progress, formatDate }:
   return (
     <>
       {project.description && (
-        <Card mb={4} variant="outline" bg={useColorModeValue('gray.50', 'gray.700')}>
+        <Card mb={4} variant="outline" bg={descriptionBg}>
           <CardBody>
             <HStack mb={2}>
               <Icon as={InfoIcon} color="blue.500" />
@@ -73,7 +77,7 @@ export default function ProjectDetails({ project, tasks, progress, formatDate }:
         spacing={4} 
         mb={4}
       >
-        <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
+        <Card variant="elevated" shadow="md" bg={cardBg}>
           <CardBody>
             <Stat>
               <StatLabel>
@@ -87,7 +91,7 @@ export default function ProjectDetails({ project, tasks, progress, formatDate }:
           </CardBody>
         </Card>
         
-        <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
+        <Card variant="elevated" shadow="md" bg={cardBg}>
           <CardBody>
             <Stat>
               <StatLabel>
@@ -101,7 +105,7 @@ export default function ProjectDetails({ project, tasks, progress, formatDate }:
           </CardBody>
         </Card>
         
-        <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
+        <Card variant="elevated" shadow="md" bg={cardBg}>
           <CardBody>
             <Stat>
               <StatLabel>
@@ -122,7 +126,7 @@ export default function ProjectDetails({ project, tasks, progress, formatDate }:
           </CardBody>
         </Card>
         
-        <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
+        <Card variant="elevated" shadow="md" bg={cardBg}>
           <CardBody>
             <Stat>
               <StatLabel>
@@ -138,7 +142,7 @@ export default function ProjectDetails({ project, tasks, progress, formatDate }:
         </Card>
 
         {project.entrepreneur_id && entrepreneurName && (
-          <Card variant="elevated" shadow="md" bg={useColorModeValue('white', 'gray.700')}>
+          <Card variant="elevated" shadow="md" bg={cardBg}>
             <CardBody>
               <Stat>
                 <StatLabel>

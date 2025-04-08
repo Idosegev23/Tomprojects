@@ -67,6 +67,7 @@ import type { Task, NewTask, Entrepreneur, Stage, TaskWithChildren } from '@/typ
 import { ExtendedNewProject } from '@/types/extendedTypes';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 import { supabase } from '@/lib/supabase';
+import BuildTrackingModal from '@/components/ui/BuildTrackingModal';
 
 export default function NewProject() {
   const [project, setProject] = useState<{
@@ -135,6 +136,10 @@ export default function NewProject() {
   const [dropboxFolders, setDropboxFolders] = useState<{ id: string; name: string; path: string }[]>([]);
   const [loadingDropboxFolders, setLoadingDropboxFolders] = useState(false);
   const [dropboxFolderError, setDropboxFolderError] = useState<string | null>(null);
+  
+  // מודל מעקב אחר תהליך היצירה
+  const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
+  const [newProjectId, setNewProjectId] = useState<string | null>(null);
   
   // טעינת כל המשימות הזמינות כתבניות
   useEffect(() => {
@@ -504,8 +509,35 @@ export default function NewProject() {
       // שליחה לשרת
       const createdProject = await projectService.createProject(newProject);
       
+      // שמירת מזהה הפרויקט החדש לשימוש במודל המעקב
+      setNewProjectId(createdProject.id);
+      
+      // עדכון הבנייה - אתחול
+      await projectService.updateBuildTracking(createdProject.id, {
+        logs: [
+          {
+            message: "התחלת יצירת פרויקט",
+            timestamp: new Date().toISOString()
+          }
+        ],
+        status: "בתהליך"
+      });
+      
+      // פתיחת מודל המעקב
+      setIsTrackingModalOpen(true);
+      
       // אתחול טבלאות ונתונים של הפרויקט בהתאם לבחירות המשתמש
       try {
+        // עדכון המעקב - יצירת טבלאות
+        await projectService.updateBuildTracking(createdProject.id, {
+          logs: [
+            {
+              message: "יוצר טבלאות פרויקט חדשות",
+              timestamp: new Date().toISOString()
+            }
+          ]
+        });
+        
         // קריאה לפונקציה החדשה שמאתחלת טבלאות ונתונים
         const { data, error } = await supabase.rpc('init_project_tables_and_data', {
           project_id: createdProject.id,
@@ -515,8 +547,85 @@ export default function NewProject() {
         });
         
         if (error) {
+          // עדכון המעקב - שגיאה ביצירת טבלאות
+          await projectService.updateBuildTracking(createdProject.id, {
+            logs: [
+              {
+                message: `שגיאה ביצירת טבלאות: ${error.message}`,
+                timestamp: new Date().toISOString()
+              }
+            ]
+          });
           throw new Error(error.message);
         }
+        
+        // עדכון המעקב - הצלחה ביצירת טבלאות
+        await projectService.updateBuildTracking(createdProject.id, {
+          logs: [
+            {
+              message: "טבלאות הפרויקט נוצרו בהצלחה",
+              timestamp: new Date().toISOString()
+            }
+          ]
+        });
+        
+        // יצירת מבנה תיקיות בדרופבוקס עבור המשימות שנבחרו
+        try {
+          // עדכון המעקב - יצירת תיקיות
+          await projectService.updateBuildTracking(createdProject.id, {
+            logs: [
+              {
+                message: "יוצר מבנה תיקיות בדרופבוקס",
+                timestamp: new Date().toISOString()
+              }
+            ]
+          });
+          
+          console.log(`יצירת מבנה תיקיות עבור משימות הפרויקט בדרופבוקס`);
+          
+          // קריאה לפונקציה שיוצרת את מבנה התיקיות ההיררכי
+          await taskService.createFullHierarchicalFolderStructureForProject({
+            id: createdProject.id,
+            name: createdProject.name,
+            entrepreneur_id: createdProject.entrepreneur_id
+          }, project.dropbox_folder_path || null);
+          
+          console.log(`מבנה תיקיות נוצר בהצלחה`);
+          
+          // עדכון המעקב - הצלחה ביצירת תיקיות
+          await projectService.updateBuildTracking(createdProject.id, {
+            logs: [
+              {
+                message: "מבנה התיקיות נוצר בהצלחה",
+                timestamp: new Date().toISOString()
+              }
+            ]
+          });
+        } catch (folderError) {
+          console.error('שגיאה ביצירת מבנה תיקיות בדרופבוקס:', folderError);
+          
+          // עדכון המעקב - שגיאה ביצירת תיקיות
+          await projectService.updateBuildTracking(createdProject.id, {
+            logs: [
+              {
+                message: `שגיאה ביצירת תיקיות: ${folderError instanceof Error ? folderError.message : 'שגיאה לא ידועה'}`,
+                timestamp: new Date().toISOString()
+              }
+            ]
+          });
+          // לא נזרוק שגיאה כאן כדי לא לעצור את התהליך
+        }
+        
+        // עדכון המעקב - סיום התהליך
+        await projectService.updateBuildTracking(createdProject.id, {
+          logs: [
+            {
+              message: "תהליך יצירת הפרויקט הסתיים בהצלחה",
+              timestamp: new Date().toISOString()
+            }
+          ],
+          status: "הושלם"
+        });
         
         toast({
           title: 'הפרויקט נוצר בהצלחה',
@@ -526,8 +635,26 @@ export default function NewProject() {
           isClosable: true,
           position: 'top-right',
         });
+        
+        // ניווט לדף הפרויקט החדש אחרי 3 שניות
+        setTimeout(() => {
+          // סגירת מודל המעקב וניווט לדף הפרויקט
+          setIsTrackingModalOpen(false);
+          router.push(`/dashboard/projects/${createdProject.id}`);
+        }, 3000);
       } catch (initError) {
         console.error('שגיאה באתחול טבלאות ונתונים:', initError);
+        
+        // עדכון המעקב - שגיאה כללית
+        await projectService.updateBuildTracking(createdProject.id, {
+          logs: [
+            {
+              message: `שגיאה באתחול: ${initError instanceof Error ? initError.message : 'שגיאה לא ידועה'}`,
+              timestamp: new Date().toISOString()
+            }
+          ],
+          status: "נכשל"
+        });
         
         toast({
           title: 'שגיאה באתחול טבלאות הפרויקט',
@@ -537,12 +664,28 @@ export default function NewProject() {
           isClosable: true,
           position: 'top-right',
         });
+        
+        // ניווט לדף הפרויקט החדש בכל מקרה
+        setTimeout(() => {
+          setIsTrackingModalOpen(false);
+          router.push(`/dashboard/projects/${createdProject.id}`);
+        }, 5000);
       }
-      
-      // ניווט לדף הפרויקט החדש
-      router.push(`/dashboard/projects/${createdProject.id}`);
     } catch (error) {
       console.error('שגיאה ביצירת פרויקט:', error);
+      
+      if (newProjectId) {
+        // עדכון המעקב - שגיאה ביצירה
+        await projectService.updateBuildTracking(newProjectId, {
+          logs: [
+            {
+              message: `שגיאה ביצירת הפרויקט: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`,
+              timestamp: new Date().toISOString()
+            }
+          ],
+          status: "נכשל"
+        });
+      }
       
       toast({
         title: 'שגיאה ביצירת הפרויקט',
@@ -748,7 +891,7 @@ export default function NewProject() {
             
             <Tabs variant="enclosed" colorScheme="primary">
               <TabList>
-                <Tab>בחירת משימות</Tab>
+                <Tab>בחר תבניות משימות לשיוך לפרויקט החדש</Tab>
               </TabList>
               
               <TabPanels>
@@ -1048,6 +1191,16 @@ export default function NewProject() {
           </ModalFooter>
         </ModalContent>
       </Modal>
+      
+      {/* מודל מעקב אחר תהליך היצירה */}
+      {newProjectId && (
+        <BuildTrackingModal
+          isOpen={isTrackingModalOpen}
+          onClose={() => setIsTrackingModalOpen(false)}
+          projectId={newProjectId}
+          title="מעקב אחר יצירת פרויקט"
+        />
+      )}
     </Container>
   );
 } 

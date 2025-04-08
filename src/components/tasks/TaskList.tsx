@@ -4,6 +4,7 @@ import { Task } from '@/types/supabase';
 
 interface TaskListProps {
   projectId: string;
+  tasks?: Task[];
   onTaskCreated?: (task: Task) => void;
   onTaskUpdated?: (task: Task) => void;
   onTaskDeleted?: (taskId: string) => void;

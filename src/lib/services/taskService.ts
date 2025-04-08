@@ -116,24 +116,101 @@ export const taskService = {
 
   // קריאת משימות ספציפיות לפרויקט
   async getProjectSpecificTasks(projectId: string): Promise<Task[]> {
-    console.warn(`Placeholder: getProjectSpecificTasks called for project ${projectId}`);
-    // TODO: Implement logic to fetch from project-specific table or main table with filter
     try {
-      // נניח שנקרא מהטבלה הראשית כרגע
+      // ננסה להשתמש בפונקציות RPC אם הן קיימות
+      try {
+        const { data: projectTasks, error: projectTasksError } = await supabase.rpc('get_tasks_tree', {
+          project_id: projectId
+        });
+        
+        if (!projectTasksError && projectTasks) {
+          console.log(`Retrieved ${projectTasks.length} tasks from get_tasks_tree for project ${projectId}`);
+          return projectTasks;
+        }
+      } catch (treeError) {
+        console.error(`Error calling get_tasks_tree for project ${projectId}:`, treeError);
+      }
+      
+      try {
+        const { data: projectTasks, error: projectTasksError } = await supabase.rpc('get_project_tasks', {
+          project_id: projectId
+        });
+        
+        if (!projectTasksError && projectTasks) {
+          console.log(`Retrieved ${projectTasks.length} tasks from project-specific table for project ${projectId}`);
+          return projectTasks;
+        }
+      } catch (projectTableError) {
+        console.error(`Error fetching tasks from project-specific table for project ${projectId}:`, projectTableError);
+      }
+      
+      // אם יש שגיאה בפונקציות RPC, ננסה לבנות את ההיררכיה בצד הלקוח
+      console.log(`Building hierarchical task tree for project ${projectId} on client side`);
+      
+      // קריאה לטבלה הראשית
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
         .eq('project_id', projectId)
         .order('hierarchical_number', { ascending: true });
-
+      
       if (error) {
-        console.error(`Error fetching project-specific tasks for project ${projectId}:`, error);
+        console.error(`Error fetching tasks from main table for project ${projectId}:`, error);
         throw new Error(error.message);
       }
-      return data || [];
+      
+      if (!data || data.length === 0) {
+        return [];
+      }
+      
+      // ארגון המשימות בצורה היררכית
+      const allTasks = data || [];
+      
+      // מציאת כל משימות האב (ללא parent_task_id)
+      const rootTasks = allTasks.filter(task => !task.parent_task_id);
+      
+      // בניית עץ המשימות ההיררכי על ידי סידור תתי-המשימות תחת משימות האב שלהן
+      const buildHierarchy = () => {
+        // מיון המשימות בהתבסס על מספר היררכי
+        return [...allTasks].sort((a, b) => {
+          if (!a.hierarchical_number || !b.hierarchical_number) {
+            return a.hierarchical_number ? -1 : (b.hierarchical_number ? 1 : 0);
+          }
+          
+          try {
+            // פונקציית עזר לבדיקה האם ערך הוא מחרוזת תקינה
+            const isValidString = (value: any): boolean => {
+              return typeof value === 'string' && value !== null && value.length > 0;
+            };
+            
+            if (!isValidString(a.hierarchical_number) || !isValidString(b.hierarchical_number)) {
+              return a.hierarchical_number ? -1 : (b.hierarchical_number ? 1 : 0);
+            }
+            
+            const aParts = (a.hierarchical_number as string).split('.').map(Number);
+            const bParts = (b.hierarchical_number as string).split('.').map(Number);
+            
+            for (let i = 0; i < Math.min(aParts.length, bParts.length); i++) {
+              if (aParts[i] !== bParts[i]) {
+                return aParts[i] - bParts[i];
+              }
+            }
+            
+            return aParts.length - bParts.length;
+          } catch (error) {
+            console.error('שגיאה במיון לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
+            return 0;
+          }
+        });
+      };
+      
+      // החזרת המשימות בסדר היררכי
+      const hierarchicalTasks = buildHierarchy();
+      console.log(`Returning ${hierarchicalTasks.length} hierarchical tasks for project ${projectId}`);
+      return hierarchicalTasks;
     } catch (err) {
       console.error(`Error in getProjectSpecificTasks for project ${projectId}:`, err);
-      throw err;
+      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה');
     }
   },
 
@@ -384,21 +461,62 @@ export const taskService = {
   },
 
   // מחיקת משימה
-  async deleteTask(taskId: string, projectId: string): Promise<{ success: boolean; message?: string; deletedSubtasks?: string[] }> {
-    console.warn(`Placeholder: deleteTask called for task ${taskId} in project ${projectId}`);
-    // TODO: Implement actual deletion logic, including subtasks and table detection
+  async deleteTask(taskId: string, projectId: string): Promise<{ success: boolean; message?: string; deletedSubtasks: Task[] }> {
     try {
-      // Assuming main table for now
-      const { error } = await supabase
+      console.log(`התחלת מחיקת משימה - taskId: ${taskId}, פרויקט: ${projectId || 'ללא פרויקט'}`);
+      
+      // בדיקת משימות משנה שיימחקו
+      const subtasks = await this.getSubTasksRecursive(taskId);
+      
+      // אם יש project_id, קודם כל נבדוק בטבלה הספציפית של הפרויקט
+      if (projectId) {
+        const tableName = `project_${projectId}_tasks`;
+        console.log(`בדיקה בטבלה הספציפית: ${tableName}`);
+        
+        try {
+          // בדיקה אם הטבלה קיימת
+          const { data: tableExists, error: tableCheckError } = await supabase
+            .rpc('check_table_exists', { table_name_param: tableName });
+          
+          if (tableCheckError) {
+            console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
+          } else {
+            console.log(`האם הטבלה ${tableName} קיימת? ${tableExists ? 'כן' : 'לא'}`);
+          }
+          
+          // אם הטבלה קיימת, ננסה למחוק את המשימה ממנה
+          if (tableExists) {
+            try {
+              await supabase.rpc('delete_task_from_project_table', {
+                task_id: taskId,
+                project_id: projectId
+              });
+              console.log(`משימה ${taskId} נמחקה מטבלת הפרויקט ${projectId}`);
+            } catch (projectTableError) {
+              console.error(`Error deleting task from project-specific table:`, projectTableError);
+            }
+          }
+        } catch (err) {
+          console.error(`Error handling project-specific table operations:`, err);
+        }
+      }
+      
+      // מחיקה מהטבלה הראשית
+      const { error: deleteError } = await supabase
         .from('tasks')
         .delete()
         .eq('id', taskId);
 
-      if (error) {
-        console.error(`Error deleting task ${taskId}:`, error);
-        throw new Error(error.message);
+      if (deleteError) {
+        console.error(`Error deleting task with id ${taskId} from main table:`, deleteError);
+        throw new Error(deleteError.message);
       }
-      return { success: true, deletedSubtasks: [] }; // Assuming no subtasks handled yet
+      
+      return { 
+        success: true, 
+        message: `משימה ${taskId} נמחקה בהצלחה עם ${subtasks.length} תתי-משימות`, 
+        deletedSubtasks: subtasks 
+      };
     } catch (err) {
       console.error(`Error in deleteTask for ${taskId}:`, err);
       throw err;
@@ -481,6 +599,34 @@ export const taskService = {
     return; // Placeholder does nothing
   },
 
+  // בדיקת משימות משנה
+  async getSubTasksRecursive(taskId: string): Promise<Task[]> {
+    const result: Task[] = [];
+    
+    const fetchSubtasks = async (parentId: string) => {
+      const { data: subtasks, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('parent_task_id', parentId)
+        .order('hierarchical_number', { ascending: true });
+      
+      if (error) {
+        console.error(`Error fetching subtasks for task ${parentId}:`, error);
+        throw new Error(error.message);
+      }
+      
+      if (subtasks && subtasks.length > 0) {
+        for (const subtask of subtasks) {
+          result.push(subtask);
+          await fetchSubtasks(subtask.id); // רקורסיה לתת-משימות נוספות
+        }
+      }
+    };
+    
+    await fetchSubtasks(taskId);
+    return result;
+  },
+
   // --- Dropbox Folder Logic ---
 
   async createDropboxFolderForTask(task: Task, useProjectTable: boolean, projectTableName: string): Promise<void> {
@@ -548,10 +694,14 @@ export const taskService = {
 
   async createHierarchicalTaskFolderInternal(task: Task, parentPath: string, useProjectTable: boolean, projectTableName: string): Promise<void> {
     try {
+      // שימוש רק בשם המשימה ללא המספר ההיררכי
       const taskFolderNameBase = task.title ? sanitizePath(task.title) : `task_${task.id}`;
-      const taskFolderName = task.hierarchical_number ? `${task.hierarchical_number} ${taskFolderNameBase}` : taskFolderNameBase;
+      const taskFolderName = taskFolderNameBase; // הסרת המספר ההיררכי מהשם
       const fullTaskPath = `${parentPath}/${taskFolderName}`;
+      
       console.log(`Attempting create/verify folder: ${fullTaskPath}`);
+      await updateBuildTracking(`יוצר תיקייה: ${taskFolderName}`);
+      
       const folderResult = await dropboxService.createFolder(fullTaskPath);
       const createdFolderPath = folderResult?.path;
       if (createdFolderPath) {
@@ -566,6 +716,8 @@ export const taskService = {
   async createFullHierarchicalFolderStructureForProject(project: { id: string; name: string; entrepreneur_id?: string | null }, selectedEntrepreneurPath: string | null = null): Promise<{ success: boolean; message: string; project?: { id: string, path: string } }> {
     const { id: projectId, name: projectName, entrepreneur_id: entrepreneurId } = project;
     console.log(`Starting full folder structure creation for project ${projectId} (${projectName})`);
+    await updateBuildTracking(`מתחיל יצירת מבנה תיקיות לפרויקט ${projectName}`);
+    
     let entrepreneurName: string | undefined;
     let finalProjectFolderPath: string | null = null;
     try {
@@ -573,6 +725,7 @@ export const taskService = {
         try {
           const { data: entreData } = await supabase.from('entrepreneurs').select('name').eq('id', entrepreneurId).single();
           entrepreneurName = entreData?.name;
+          await updateBuildTracking(`משתמש ביזם: ${entrepreneurName}`);
         } catch (e) { console.warn(`Could not fetch entrepreneur name for ${entrepreneurId}`, e); }
       }
       const projectTableName = `project_${projectId}_tasks`;
@@ -588,6 +741,7 @@ export const taskService = {
       const cleanProjectName = sanitizePath(projectName);
       let projectBasePath = PROJECTS_PATH;
       if (selectedEntrepreneurPath) {
+        await updateBuildTracking(`בודק אם התיקייה קיימת: ${selectedEntrepreneurPath}`);
         const exists = await dropboxService.folderExists(selectedEntrepreneurPath);
         if (exists) projectBasePath = selectedEntrepreneurPath;
         else console.warn(`Selected entrepreneur path ${selectedEntrepreneurPath} does not exist! Fallback.`);
@@ -596,15 +750,25 @@ export const taskService = {
       if (!finalProjectFolderPath && entrepreneurId && entrepreneurName) {
         const cleanEntrepreneurName = sanitizePath(entrepreneurName);
         const entrepreneurPath = `${PROJECTS_PATH}/${cleanEntrepreneurName}_${entrepreneurId}`;
-        try { await dropboxService.createFolder(entrepreneurPath); projectBasePath = entrepreneurPath; finalProjectFolderPath = `${projectBasePath}/${cleanProjectName}`; } catch (entError) { console.error(`Failed ensure entrepreneur folder ${entrepreneurPath}`, entError); finalProjectFolderPath = `${PROJECTS_PATH}/${cleanProjectName}`; }
+        try { 
+          await updateBuildTracking(`יוצר תיקיית יזם: ${cleanEntrepreneurName}`);
+          await dropboxService.createFolder(entrepreneurPath); 
+          projectBasePath = entrepreneurPath; 
+          finalProjectFolderPath = `${projectBasePath}/${cleanProjectName}`; 
+        } catch (entError) { 
+          console.error(`Failed ensure entrepreneur folder ${entrepreneurPath}`, entError); 
+          finalProjectFolderPath = `${PROJECTS_PATH}/${cleanProjectName}`; 
+        }
       } else if (!finalProjectFolderPath) finalProjectFolderPath = `${PROJECTS_PATH}/${cleanProjectName}`;
 
+      await updateBuildTracking(`יוצר תיקיית פרויקט: ${cleanProjectName}`);
       const projectFolderResult = await dropboxService.createFolder(finalProjectFolderPath);
       finalProjectFolderPath = projectFolderResult.path;
       console.log(`Project folder ensured: ${finalProjectFolderPath}`);
 
       if (!tasks || tasks.length === 0) {
         console.log(`No tasks in ${tableName}. Base folders ensured.`);
+        await updateBuildTracking(`לא נמצאו משימות, הסתיים בהצלחה.`);
         return { success: true, message: 'לא נמצאו משימות, תיקיות בסיס נוצרו.', project: { id: projectId, path: finalProjectFolderPath } };
       }
 
@@ -612,16 +776,21 @@ export const taskService = {
       const rootTasks = tasks.filter((task: Task) => !task.parent_task_id);
       const processedTaskIds = new Set<string>();
       const maxDepth = 10;
+      
+      await updateBuildTracking(`מתחיל עיבוד ${rootTasks.length} משימות שורש...`);
       console.log(`Processing ${rootTasks.length} root tasks...`);
       for (const rootTask of rootTasks) {
         if (!processedTaskIds.has(rootTask.id)) {
           await this.processTaskHierarchyFolders(rootTask, tasksMap, tasks as Task[], finalProjectFolderPath, projectTableName, useProjectTable, processedTaskIds, 0, maxDepth);
         }
       }
+      
+      await updateBuildTracking(`מבנה התיקיות נוצר בהצלחה`);
       console.log(`Finished structure creation for project ${projectId}.`);
       return { success: true, message: 'מבנה התיקיות נוצר/עודכן בהצלחה.', project: { id: projectId, path: finalProjectFolderPath } };
     } catch (error) {
       console.error(`Critical error during structure creation for ${projectId}:`, error);
+      await updateBuildTracking(`שגיאה ביצירת מבנה תיקיות: ${error instanceof Error ? error.message : 'Unknown'}`);
       return { success: false, message: `שגיאה קריטית: ${error instanceof Error ? error.message : 'Unknown'}`, project: { id: projectId, path: finalProjectFolderPath || 'unknown' } };
     }
   },
@@ -654,7 +823,9 @@ export const taskService = {
       await this.createHierarchicalTaskFolderInternal(task, basePathForCurrentTask, useProjectTable, projectTableName);
     } catch (folderError) { console.error(`Error creating folder for task ${task.id}:`, folderError); }
 
-    await new Promise(resolve => setTimeout(resolve, 250));
+    // הגדלת ההשהיה בין יצירת תיקיות לפתרון בעיית הקונפליקטים
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
     const childTasks = allTasks.filter((t: Task) => t.parent_task_id === task.id);
     if (childTasks.length > 0) {
       console.log(`Processing ${childTasks.length} children for task ${task.id}...`);

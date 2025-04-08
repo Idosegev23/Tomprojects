@@ -109,17 +109,17 @@
   resolved "https://registry.npmjs.org/@chakra-ui/icons/-/icons-2.2.4.tgz"
   integrity sha512-l5QdBgwrAg3Sc2BRqtNkJpfuLw/pWRDwwT58J6c4PqQT6wzXxyNa8Q0PForu1ltB5qEiFb1kxr/F/HO1EwNa6g==
 
-"@chakra-ui/next-js@^2.2.0":
+"@chakra-ui/next-js@^2.4.2":
   version "2.4.2"
   resolved "https://registry.npmjs.org/@chakra-ui/next-js/-/next-js-2.4.2.tgz"
   integrity sha512-loo82RyPbMyvJwRhhZVZovut9v2hFBSkqd1vQoNXgMrCRApLwrrttu5Iuodns15gLE3mqI+it5oEhxTtO5DrxA==
   dependencies:
     "@emotion/cache" "^11.11.0"
 
-"@chakra-ui/react@^2.8.2", "@chakra-ui/react@>=2.0.0", "@chakra-ui/react@>=2.4.0":
-  version "2.10.6"
-  resolved "https://registry.npmjs.org/@chakra-ui/react/-/react-2.10.6.tgz"
-  integrity sha512-9cdzcUR3LV3E2as0QhZhHAH5qjbyspV12kU1E1Ibcv6/uKUi6bIfPfMSC6R/Tw8Beqhn2ClJFPqjtXzL+C0knQ==
+"@chakra-ui/react@^2.10.7", "@chakra-ui/react@>=2.0.0", "@chakra-ui/react@>=2.4.0":
+  version "2.10.7"
+  resolved "https://registry.npmjs.org/@chakra-ui/react/-/react-2.10.7.tgz"
+  integrity sha512-GX1dCmnvrxxyZEofDX9GMAtRakZJKnUqFM9k8qhaycPaeyfkiTNNTjhPNX917hgVx1yhC3kcJOs5IeC7yW56/g==
   dependencies:
     "@chakra-ui/hooks" "2.4.4"
     "@chakra-ui/styled-system" "2.12.2"
@@ -223,7 +223,7 @@
   resolved "https://registry.npmjs.org/@emotion/memoize/-/memoize-0.7.4.tgz"
   integrity sha512-Ja/Vfqe3HpuzRsG1oBtWTHk2PGZ7GR+2Vz5iYGelAw8dx32K0y7PjVuxK6z1nMpZOqAFsRUPCkK1YjJ56qJlgw==
 
-"@emotion/react@^11.0.0-rc.0", "@emotion/react@^11.11.3", "@emotion/react@>=11":
+"@emotion/react@^11.0.0-rc.0", "@emotion/react@^11.14.0", "@emotion/react@>=11":
   version "11.14.0"
   resolved "https://registry.npmjs.org/@emotion/react/-/react-11.14.0.tgz"
   integrity sha512-O000MLDBDdk/EohJPFUqvnp4qnHeYkVP5B0xEG0D/L7cOKP9kefu2DXn8dj74cQfsEzUqh+sr1RzFqiL1o+PpA==
@@ -253,7 +253,7 @@
   resolved "https://registry.npmjs.org/@emotion/sheet/-/sheet-1.4.0.tgz"
   integrity sha512-fTBW9/8r2w3dXWYM4HCB1Rdp8NLibOw2+XELH5m5+AkWiL/KqYX6dc0kKYlaYyKjrQ6ds33MCdMPEwgs2z1rqg==
 
-"@emotion/styled@^11.11.0", "@emotion/styled@>=11":
+"@emotion/styled@^11.14.0", "@emotion/styled@>=11":
   version "11.14.0"
   resolved "https://registry.npmjs.org/@emotion/styled/-/styled-11.14.0.tgz"
   integrity sha512-XxfOnXFffatap2IyCeJyNov3kiDQWoR08gPUQxvbL7fxKryGBKUZUkG6Hz48DZwVrJSVh9sJboyV1Ds4OW6SgA==

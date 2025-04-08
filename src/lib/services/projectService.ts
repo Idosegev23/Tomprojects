@@ -3,6 +3,7 @@ import { Project, NewProject, UpdateProject } from '@/types/supabase';
 import { ExtendedNewProject, ExtendedProject } from '@/types/extendedTypes';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import dropboxService from './dropboxService';
+import { sanitizePath } from '@/utils/sanitizePath';
 
 // תיעוד פעולות בקובץ build_tracking
 async function updateBuildTracking(message: string) {
@@ -120,8 +121,8 @@ export const projectService = {
           
           if (folderExists) {
             // יצירת תיקיית הפרויקט בתוך התיקייה שנבחרה
-            const projectFolderName = data.name ? `${data.name}_${data.id}` : `project_${data.id}`;
-            const cleanProjectName = projectFolderName.replace(/[\\/:\*\?"<>\|]/g, '_');
+            const projectFolderName = data.name ? data.name : `project_${data.id}`;
+            const cleanProjectName = sanitizePath(projectFolderName);
             folderPath = `${project.dropbox_folder_path}/${cleanProjectName}`;
             
             const folder = await dropboxService.createFolder(folderPath);
