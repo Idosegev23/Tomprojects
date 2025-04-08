@@ -773,7 +773,202 @@ export const dropboxService = {
   // האם דרופבוקס מוגדר
   isConfigured(): boolean {
     return isDropboxConfigured;
-  }
+  },
+
+  // פונקציה להצגת קבצים בתוך תיקייה
+  async listFiles(path: string): Promise<any[]> {
+    // אם הדרופבוקס לא מוגדר, נחזיר רשימה ריקה
+    if (!checkDropboxConfig()) {
+      return [];
+    }
+    
+    try {
+      const formattedPath = formatDropboxPath(path);
+      
+      console.log(`Getting files from folder: ${formattedPath || '/'}`);
+      
+      // שליפת תוכן התיקייה
+      const response = await withRetry(
+        () => dropbox!.filesListFolder({
+          path: formattedPath,
+          recursive: false,
+          include_deleted: false,
+          include_has_explicit_shared_members: false,
+          include_mounted_folders: true,
+          include_non_downloadable_files: true
+        }),
+        3,
+        1000,
+        `List files in folder ${formattedPath}`
+      );
+      
+      const entries = response.result.entries;
+      
+      // סינון רק קבצים (לא תיקיות)
+      const files = entries.filter(entry => entry['.tag'] === 'file');
+      
+      // מחזיר רשימת קבצים עם מידע רלוונטי
+      return files.map(file => ({
+        id: file.id,
+        name: file.name,
+        path: file.path_display,
+        size: (file as any).size,
+        client_modified: (file as any).client_modified,
+        server_modified: (file as any).server_modified,
+        content_hash: (file as any).content_hash
+      }));
+    } catch (error: any) {
+      console.error(`Error listing files in ${path}:`, error);
+      throw new Error(`Failed to list files: ${error?.message || 'Unknown error'}`);
+    }
+  },
+  
+  // העלאת קובץ לדרופבוקס
+  async uploadFile(path: string, file: File): Promise<any> {
+    // אם הדרופבוקס לא מוגדר, נזרוק שגיאה
+    if (!checkDropboxConfig()) {
+      throw new Error('Dropbox is not configured');
+    }
+    
+    try {
+      const formattedPath = formatDropboxPath(path);
+      const filePath = `${formattedPath}/${file.name}`;
+      
+      console.log(`Uploading file to: ${filePath}`);
+      
+      // קריאת הקובץ כמערך בינארי
+      const arrayBuffer = await file.arrayBuffer();
+      const fileBlob = new Blob([arrayBuffer]);
+      
+      // העלאת הקובץ
+      const response = await withRetry(
+        () => dropbox!.filesUpload({
+          path: filePath,
+          contents: fileBlob,
+          mode: { '.tag': 'overwrite' }, // אפשרויות: add, overwrite
+          autorename: true,
+          mute: false
+        }),
+        3,
+        1000,
+        `Upload file ${filePath}`
+      );
+      
+      console.log(`File uploaded successfully: ${filePath}`);
+      return response.result;
+      
+    } catch (error: any) {
+      console.error(`Error uploading file to ${path}:`, error);
+      throw new Error(`Failed to upload file: ${error?.message || 'Unknown error'}`);
+    }
+  },
+  
+  // הורדת קובץ מדרופבוקס
+  async downloadFile(path: string): Promise<{ blob: Blob; name: string }> {
+    // אם הדרופבוקס לא מוגדר, נזרוק שגיאה
+    if (!checkDropboxConfig()) {
+      throw new Error('Dropbox is not configured');
+    }
+    
+    try {
+      const formattedPath = formatDropboxPath(path);
+      
+      console.log(`Downloading file: ${formattedPath}`);
+      
+      // הורדת הקובץ
+      const response = await withRetry(
+        () => dropbox!.filesDownload({ path: formattedPath }),
+        3,
+        1000,
+        `Download file ${formattedPath}`
+      );
+      
+      // מיצוי הקובץ והשם
+      const result = response.result as any;
+      const fileBlob = result.fileBlob;
+      const name = result.name;
+      
+      console.log(`File downloaded successfully: ${name}`);
+      return { blob: fileBlob, name };
+      
+    } catch (error: any) {
+      console.error(`Error downloading file ${path}:`, error);
+      throw new Error(`Failed to download file: ${error?.message || 'Unknown error'}`);
+    }
+  },
+  
+  // מחיקת קובץ מדרופבוקס
+  async deleteFile(path: string): Promise<any> {
+    // אם הדרופבוקס לא מוגדר, נזרוק שגיאה
+    if (!checkDropboxConfig()) {
+      throw new Error('Dropbox is not configured');
+    }
+    
+    try {
+      const formattedPath = formatDropboxPath(path);
+      
+      console.log(`Deleting file: ${formattedPath}`);
+      
+      // מחיקת הקובץ
+      const response = await withRetry(
+        () => dropbox!.filesDelete({ path: formattedPath }),
+        3,
+        1000,
+        `Delete file ${formattedPath}`
+      );
+      
+      console.log(`File deleted successfully: ${formattedPath}`);
+      return response.result;
+      
+    } catch (error: any) {
+      console.error(`Error deleting file ${path}:`, error);
+      throw new Error(`Failed to delete file: ${error?.message || 'Unknown error'}`);
+    }
+  },
+  
+  // קבלת גרסאות של קובץ
+  async getFileVersions(path: string): Promise<any[]> {
+    // אם הדרופבוקס לא מוגדר, נחזיר רשימה ריקה
+    if (!checkDropboxConfig()) {
+      return [];
+    }
+    
+    try {
+      const formattedPath = formatDropboxPath(path);
+      
+      console.log(`Getting versions for file: ${formattedPath}`);
+      
+      // קבלת רשימת גרסאות
+      const response = await withRetry(
+        () => dropbox!.filesListRevisions({
+          path: formattedPath,
+          limit: 100
+        }),
+        3,
+        1000,
+        `List file versions ${formattedPath}`
+      );
+      
+      const entries = response.result.entries;
+      
+      // מיון הגרסאות לפי תאריך עדכון (הגרסה החדשה ביותר ראשונה)
+      return entries.sort((a, b) => {
+        const dateA = new Date(a.server_modified as string).getTime();
+        const dateB = new Date(b.server_modified as string).getTime();
+        return dateB - dateA;
+      }).map(entry => ({
+        id: entry.id,
+        rev: entry.rev,
+        size: entry.size,
+        modified: entry.server_modified,
+        path: entry.path_display,
+        name: entry.name
+      }));
+    } catch (error: any) {
+      console.error(`Error getting versions for file ${path}:`, error);
+      throw new Error(`Failed to get file versions: ${error?.message || 'Unknown error'}`);
+    }
+  },
 };
 
 export default dropboxService; 

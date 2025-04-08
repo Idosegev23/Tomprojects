@@ -24,6 +24,11 @@ import {
   AlertDialogBody,
   AlertDialogFooter,
   useBreakpointValue,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
 } from '@chakra-ui/react';
 import { 
   FiEdit, 
@@ -43,6 +48,7 @@ import projectService from '@/lib/services/projectService';
 import stageService from '@/lib/services/stageService';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 import { Task, Project, Stage } from '@/types/supabase';
+import DropboxFilesTab from '@/components/dropbox/DropboxFilesTab';
 
 export default function TaskPage() {
   const [task, setTask] = useState<Task | null>(null);
@@ -422,103 +428,120 @@ export default function TaskPage() {
         
         <Divider my={4} />
         
-        <VStack align="stretch" spacing={{ base: 4, md: 6 }}>
-          {/* תיאור המשימה */}
-          <Box>
-            <Text fontWeight="bold" mb={2}>תיאור:</Text>
-            <Box 
-              p={3} 
-              borderWidth="1px" 
-              borderRadius="md" 
-              minH="100px"
-              bg="gray.50"
-            >
-              {task.description ? (
-                <Text whiteSpace="pre-wrap">{task.description}</Text>
-              ) : (
-                <Text color="gray.500" fontStyle="italic">אין תיאור למשימה זו</Text>
-              )}
-            </Box>
-          </Box>
+        <Tabs variant="enclosed" colorScheme="primary" mt={6}>
+          <TabList>
+            <Tab>פרטי משימה</Tab>
+            <Tab>קבצים</Tab>
+          </TabList>
           
-          {/* פרטי משימה */}
-          <Box>
-            <Text fontWeight="bold" mb={2}>פרטי משימה:</Text>
-            <Box p={{ base: 3, md: 4 }} borderWidth="1px" borderRadius="md">
-              <Flex 
-                direction={{ base: 'column', md: 'row' }} 
-                gap={{ base: 4, md: 6 }} 
-                flexWrap="wrap"
-              >
-                <VStack align="start" minW={{ base: '100%', md: '150px' }}>
-                  <Text color="gray.600" fontSize="sm">
-                    <FiFlag style={{ display: 'inline', marginLeft: '5px' }} />
-                    עדיפות:
-                  </Text>
-                  <Badge colorScheme={getPriorityColor(task.priority)}>
-                    {task.priority}
-                  </Badge>
-                </VStack>
-                
-                <VStack align="start" minW={{ base: '100%', md: '150px' }}>
-                  <Text color="gray.600" fontSize="sm">
-                    <FiCheckSquare style={{ display: 'inline', marginLeft: '5px' }} />
-                    סטטוס:
-                  </Text>
-                  <HStack>
-                    <Badge colorScheme={getStatusColor(task.status)}>
-                      {task.status}
-                    </Badge>
-                    {isOwner && (
-                      <Button size="xs" onClick={() => handleStatusChange(
-                        task.status === 'done' ? 'todo' : 'done'
-                      )}>
-                        {task.status === 'done' ? 'סמן כלא הושלם' : 'סמן כהושלם'}
-                      </Button>
-                    )}
-                  </HStack>
-                </VStack>
-                
-                <VStack align="start" minW={{ base: '100%', md: '150px' }}>
-                  <Text color="gray.600" fontSize="sm">
-                    <FiCalendar style={{ display: 'inline', marginLeft: '5px' }} />
-                    תאריך יעד:
-                  </Text>
-                  <Text 
-                    fontWeight="medium"
-                    color={isOverdue(task.due_date) ? "red.500" : "inherit"}
+          <TabPanels>
+            {/* טאב פרטי משימה */}
+            <TabPanel p={4}>
+              <VStack align="stretch" spacing={{ base: 4, md: 6 }}>
+                {/* תיאור המשימה */}
+                <Box>
+                  <Text fontWeight="bold" mb={2}>תיאור:</Text>
+                  <Box 
+                    p={3} 
+                    borderWidth="1px" 
+                    borderRadius="md" 
+                    minH="100px"
+                    bg="gray.50"
                   >
-                    {formatDate(task.due_date)}
-                    {isOverdue(task.due_date) && ' (באיחור)'}
-                  </Text>
-                </VStack>
+                    {task.description ? (
+                      <Text whiteSpace="pre-wrap">{task.description}</Text>
+                    ) : (
+                      <Text color="gray.500" fontStyle="italic">אין תיאור למשימה זו</Text>
+                    )}
+                  </Box>
+                </Box>
                 
-                <VStack align="start" minW={{ base: '100%', md: '150px' }}>
-                  <Text color="gray.600" fontSize="sm">
-                    <FiClock style={{ display: 'inline', marginLeft: '5px' }} />
-                    נוצר בתאריך:
-                  </Text>
-                  <Text fontWeight="medium">
-                    {formatDate(task.created_at)}
-                  </Text>
-                </VStack>
-              </Flex>
-            </Box>
-          </Box>
-          
-          {isOwner && (
-            <Flex justifyContent="flex-end" mt={4}>
-              <Button
-                colorScheme="primary"
-                onClick={() => router.push(`/dashboard/tasks/${taskId}/edit`)}
-                leftIcon={<FiEdit />}
-                size={{ base: 'sm', md: 'md' }}
-              >
-                ערוך משימה
-              </Button>
-            </Flex>
-          )}
-        </VStack>
+                {/* פרטי משימה */}
+                <Box>
+                  <Text fontWeight="bold" mb={2}>פרטי משימה:</Text>
+                  <Box p={{ base: 3, md: 4 }} borderWidth="1px" borderRadius="md">
+                    <Flex 
+                      direction={{ base: 'column', md: 'row' }} 
+                      gap={{ base: 4, md: 6 }} 
+                      flexWrap="wrap"
+                    >
+                      <VStack align="start" minW={{ base: '100%', md: '150px' }}>
+                        <Text color="gray.600" fontSize="sm">
+                          <FiFlag style={{ display: 'inline', marginLeft: '5px' }} />
+                          עדיפות:
+                        </Text>
+                        <Badge colorScheme={getPriorityColor(task.priority)}>
+                          {task.priority}
+                        </Badge>
+                      </VStack>
+                      
+                      <VStack align="start" minW={{ base: '100%', md: '150px' }}>
+                        <Text color="gray.600" fontSize="sm">
+                          <FiCheckSquare style={{ display: 'inline', marginLeft: '5px' }} />
+                          סטטוס:
+                        </Text>
+                        <HStack>
+                          <Badge colorScheme={getStatusColor(task.status)}>
+                            {task.status}
+                          </Badge>
+                          {isOwner && (
+                            <Button size="xs" onClick={() => handleStatusChange(
+                              task.status === 'done' ? 'todo' : 'done'
+                            )}>
+                              {task.status === 'done' ? 'סמן כלא הושלם' : 'סמן כהושלם'}
+                            </Button>
+                          )}
+                        </HStack>
+                      </VStack>
+                      
+                      <VStack align="start" minW={{ base: '100%', md: '150px' }}>
+                        <Text color="gray.600" fontSize="sm">
+                          <FiCalendar style={{ display: 'inline', marginLeft: '5px' }} />
+                          תאריך יעד:
+                        </Text>
+                        <Text 
+                          fontWeight="medium"
+                          color={isOverdue(task.due_date) ? "red.500" : "inherit"}
+                        >
+                          {formatDate(task.due_date)}
+                          {isOverdue(task.due_date) && ' (באיחור)'}
+                        </Text>
+                      </VStack>
+                      
+                      <VStack align="start" minW={{ base: '100%', md: '150px' }}>
+                        <Text color="gray.600" fontSize="sm">
+                          <FiClock style={{ display: 'inline', marginLeft: '5px' }} />
+                          נוצר בתאריך:
+                        </Text>
+                        <Text fontWeight="medium">
+                          {formatDate(task.created_at)}
+                        </Text>
+                      </VStack>
+                    </Flex>
+                  </Box>
+                </Box>
+              </VStack>
+            </TabPanel>
+            
+            {/* טאב קבצים */}
+            <TabPanel p={4}>
+              <DropboxFilesTab folderPath={task.dropbox_folder} />
+            </TabPanel>
+          </TabPanels>
+        </Tabs>
+        
+        {isOwner && (
+          <Flex justifyContent="flex-end" mt={4}>
+            <Button
+              colorScheme="primary"
+              onClick={() => router.push(`/dashboard/tasks/${taskId}/edit`)}
+              leftIcon={<FiEdit />}
+              size={{ base: 'sm', md: 'md' }}
+            >
+              ערוך משימה
+            </Button>
+          </Flex>
+        )}
       </Box>
       
       {/* דיאלוג אישור מחיקה */}
