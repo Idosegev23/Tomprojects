@@ -125,8 +125,10 @@ export function useTaskList({
   
   // פונקציה לפתיחת מודל יצירת משימה חדשה
   const handleCreateTask = () => {
+    console.log('handleCreateTask נקרא - פתיחת מודל יצירת משימה');
     setSelectedTask(null);
     setIsTaskModalOpen(true);
+    console.log('isTaskModalOpen שונה ל-true:', isTaskModalOpen);
   };
   
   // פונקציה לטיפול ביצירת משימה חדשה

@@ -267,15 +267,67 @@ export const taskService = {
   // קבלת תתי-משימות של משימה מסוימת
   async getSubTasks(parentTaskId: string): Promise<Task[]> {
     try {
+      if (!parentTaskId) {
+        console.error('getSubTasks: Missing parent task ID');
+        return [];
+      }
+
+      // בדיקה אם יש צורך להשתמש בטבלה ספציפית לפרויקט
+      let tableName = 'tasks';
+      let useProjectTable = false;
+      
+      // קבלת המשימה עצמה כדי לדעת לאיזה פרויקט היא שייכת
+      const parentTask = await this.getTaskById(parentTaskId);
+      if (!parentTask) {
+        console.warn(`getSubTasks: Parent task ${parentTaskId} not found`);
+        return [];
+      }
+      
+      // אם יש פרויקט, בדוק אם הטבלה הספציפית קיימת
+      if (parentTask.project_id) {
+        const projectTableName = `project_${parentTask.project_id}_tasks`;
+        try {
+          const { data: tableExists, error: checkError } = await supabase
+            .rpc('check_table_exists', { table_name_param: projectTableName });
+            
+          if (!checkError && tableExists) {
+            tableName = projectTableName;
+            useProjectTable = true;
+            console.log(`Using project-specific table ${projectTableName} for subtasks of ${parentTaskId}`);
+          }
+        } catch (checkError) {
+          console.warn(`Error checking if table ${projectTableName} exists:`, checkError);
+          // נמשיך עם הטבלה הראשית אם יש שגיאה בבדיקת הטבלה הספציפית
+        }
+      }
+      
       // פונקציה לקבלת כל תתי-המשימות של משימה ספציפית
       const { data, error } = await supabase
-        .from('tasks')
+        .from(tableName)
         .select('*')
         .eq('parent_task_id', parentTaskId)
         .order('hierarchical_number', { ascending: true });
         
       if (error) {
-        console.error(`Error fetching subtasks for parent ${parentTaskId}:`, error);
+        console.error(`Error fetching subtasks for parent ${parentTaskId} from ${tableName}:`, error);
+        
+        // אם ניסינו להשתמש בטבלה ספציפית ונכשלנו, ננסה את הטבלה הראשית כמוצא אחרון
+        if (useProjectTable) {
+          console.log(`Falling back to main tasks table for subtasks of ${parentTaskId}`);
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('tasks')
+            .select('*')
+            .eq('parent_task_id', parentTaskId)
+            .order('hierarchical_number', { ascending: true });
+            
+          if (fallbackError) {
+            console.error(`Error fetching subtasks for parent ${parentTaskId} from fallback table:`, fallbackError);
+            throw new Error(fallbackError.message);
+          }
+          
+          return fallbackData || [];
+        }
+        
         throw new Error(error.message);
       }
       
@@ -289,25 +341,36 @@ export const taskService = {
   // קבלת היררכיית משימות ספציפית
   async getTaskHierarchy(rootTaskId: string): Promise<Task[]> {
     try {
+      if (!rootTaskId) {
+        console.error('getTaskHierarchy: Missing root task ID');
+        return [];
+      }
+      
       // מציאת כל המשימות שקשורות להיררכיה זו
       const allTasks: Task[] = [];
       
       // קבלת משימת השורש
       const rootTask = await this.getTaskById(rootTaskId);
       if (!rootTask) {
-        throw new Error(`Root task ${rootTaskId} not found`);
+        console.warn(`Root task ${rootTaskId} not found`);
+        return [];
       }
       
       allTasks.push(rootTask);
       
       // פונקציה רקורסיבית לקבלת כל תתי המשימות
       const fetchSubtasks = async (parentId: string) => {
-        const subtasks = await this.getSubTasks(parentId);
-        
-        for (const subtask of subtasks) {
-          allTasks.push(subtask);
-          // קריאה רקורסיבית לקבלת תתי-משימות של תת-המשימה
-          await fetchSubtasks(subtask.id);
+        try {
+          const subtasks = await this.getSubTasks(parentId);
+          
+          for (const subtask of subtasks) {
+            allTasks.push(subtask);
+            // קריאה רקורסיבית לקבלת תתי-משימות של תת-המשימה
+            await fetchSubtasks(subtask.id);
+          }
+        } catch (subError) {
+          // לוג השגיאה אבל לא להפסיק את התהליך הרקורסיבי
+          console.error(`Error fetching subtasks for parent ${parentId} (continuing with other subtasks):`, subError);
         }
       };
       
@@ -328,89 +391,298 @@ export const taskService = {
 
   // Placeholder functions for hierarchical numbering
   async getProjectSpecificNextSubHierarchicalNumber(parentId: string, projectId: string): Promise<string> {
-    console.warn('Placeholder: getProjectSpecificNextSubHierarchicalNumber called');
-    return 'PLACEHOLDER_SUB';
+    try {
+      // נסה לקבל את המשימה ההורה
+      const parentTask = await this.getTaskById(parentId);
+      if (!parentTask || !parentTask.hierarchical_number) {
+        return "1.1"; // ברירת מחדל אם אין מספר היררכי להורה
+      }
+      
+      // השג את כל המשימות המשויכות להורה
+      const { data: subTasks, error } = await supabase
+        .from(`project_${projectId}_tasks`)
+        .select('hierarchical_number')
+        .eq('parent_task_id', parentId)
+        .order('hierarchical_number', { ascending: false });
+      
+      if (error) {
+        console.error(`שגיאה בקבלת תת-משימות של ${parentId}:`, error);
+        return `${parentTask.hierarchical_number}.1`; // ברירת מחדל
+      }
+      
+      if (!subTasks || subTasks.length === 0) {
+        return `${parentTask.hierarchical_number}.1`;
+      }
+      
+      // מצא את המספר הגבוה ביותר
+      let maxNumber = 0;
+      subTasks.forEach(task => {
+        if (task.hierarchical_number) {
+          const parts = task.hierarchical_number.split('.');
+          if (parts.length > 0) {
+            const lastPart = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(lastPart) && lastPart > maxNumber) {
+              maxNumber = lastPart;
+            }
+          }
+        }
+      });
+      
+      return `${parentTask.hierarchical_number}.${maxNumber + 1}`;
+    } catch (error) {
+      console.error('שגיאה בחישוב מספר היררכי:', error);
+      return "1.1"; // ברירת מחדל במקרה של שגיאה
+    }
   },
+  
   async getNextSubHierarchicalNumber(parentId: string): Promise<string> {
-    console.warn('Placeholder: getNextSubHierarchicalNumber called');
-    return 'PLACEHOLDER_SUB_OLD';
+    try {
+      // נסה לקבל את המשימה ההורה
+      const parentTask = await this.getTaskById(parentId);
+      if (!parentTask || !parentTask.hierarchical_number) {
+        return "1.1"; // ברירת מחדל אם אין מספר היררכי להורה
+      }
+      
+      // השג את כל המשימות המשויכות להורה
+      const { data: subTasks, error } = await supabase
+        .from('tasks')
+        .select('hierarchical_number')
+        .eq('parent_task_id', parentId)
+        .order('hierarchical_number', { ascending: false });
+      
+      if (error) {
+        console.error(`שגיאה בקבלת תת-משימות של ${parentId}:`, error);
+        return `${parentTask.hierarchical_number}.1`; // ברירת מחדל
+      }
+      
+      if (!subTasks || subTasks.length === 0) {
+        return `${parentTask.hierarchical_number}.1`;
+      }
+      
+      // מצא את המספר הגבוה ביותר
+      let maxNumber = 0;
+      subTasks.forEach(task => {
+        if (task.hierarchical_number) {
+          const parts = task.hierarchical_number.split('.');
+          if (parts.length > 0) {
+            const lastPart = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(lastPart) && lastPart > maxNumber) {
+              maxNumber = lastPart;
+            }
+          }
+        }
+      });
+      
+      return `${parentTask.hierarchical_number}.${maxNumber + 1}`;
+    } catch (error) {
+      console.error('שגיאה בחישוב מספר היררכי:', error);
+      return "1.1"; // ברירת מחדל במקרה של שגיאה
+    }
   },
+  
   async getProjectSpecificNextRootHierarchicalNumber(projectId: string): Promise<string> {
-    console.warn('Placeholder: getProjectSpecificNextRootHierarchicalNumber called');
-    return 'PLACEHOLDER_ROOT';
+    try {
+      // השג את כל משימות השורש של הפרויקט
+      const { data: rootTasks, error } = await supabase
+        .from(`project_${projectId}_tasks`)
+        .select('hierarchical_number')
+        .is('parent_task_id', null)
+        .order('hierarchical_number', { ascending: false });
+      
+      if (error) {
+        console.error(`שגיאה בקבלת משימות שורש של פרויקט ${projectId}:`, error);
+        return "1"; // ברירת מחדל
+      }
+      
+      if (!rootTasks || rootTasks.length === 0) {
+        return "1";
+      }
+      
+      // מצא את המספר הגבוה ביותר
+      let maxNumber = 0;
+      rootTasks.forEach(task => {
+        if (task.hierarchical_number) {
+          const rootNumber = parseInt(task.hierarchical_number.split('.')[0], 10);
+          if (!isNaN(rootNumber) && rootNumber > maxNumber) {
+            maxNumber = rootNumber;
+          }
+        }
+      });
+      
+      return `${maxNumber + 1}`;
+    } catch (error) {
+      console.error('שגיאה בחישוב מספר היררכי:', error);
+      return "1"; // ברירת מחדל במקרה של שגיאה
+    }
   },
+  
   async getNextRootHierarchicalNumber(projectId: string): Promise<string> {
-    console.warn('Placeholder: getNextRootHierarchicalNumber called');
-    return 'PLACEHOLDER_ROOT_OLD';
+    try {
+      // השג את כל משימות השורש של הפרויקט
+      const { data: rootTasks, error } = await supabase
+        .from('tasks')
+        .select('hierarchical_number')
+        .eq('project_id', projectId)
+        .is('parent_task_id', null)
+        .order('hierarchical_number', { ascending: false });
+      
+      if (error) {
+        console.error(`שגיאה בקבלת משימות שורש של פרויקט ${projectId}:`, error);
+        return "1"; // ברירת מחדל
+      }
+      
+      if (!rootTasks || rootTasks.length === 0) {
+        return "1";
+      }
+      
+      // מצא את המספר הגבוה ביותר
+      let maxNumber = 0;
+      rootTasks.forEach(task => {
+        if (task.hierarchical_number) {
+          const rootNumber = parseInt(task.hierarchical_number.split('.')[0], 10);
+          if (!isNaN(rootNumber) && rootNumber > maxNumber) {
+            maxNumber = rootNumber;
+          }
+        }
+      });
+      
+      return `${maxNumber + 1}`;
+    } catch (error) {
+      console.error('שגיאה בחישוב מספר היררכי:', error);
+      return "1"; // ברירת מחדל במקרה של שגיאה
+    }
   },
 
   // יצירת משימה
-  async createTask(task: NewTask): Promise<Task> {
+  async createTask(taskData: Partial<ExtendedTask>): Promise<ExtendedTask> {
     try {
-      if (!task.id) task.id = crypto.randomUUID();
-      if (!task.start_date) task.start_date = new Date().toISOString().split('T')[0];
-
-      if (task.assignees && !task.assignees_info) task.assignees_info = Array.isArray(task.assignees) ? task.assignees : [];
-      else if (task.assignees_info && !Array.isArray(task.assignees_info)) task.assignees_info = [];
-
-      let cleanedTaskData = { ...task };
-      const dateFields = ['due_date'];
-      for (const field of dateFields) {
-        if (cleanedTaskData[field as keyof typeof cleanedTaskData] === '') delete cleanedTaskData[field as keyof typeof cleanedTaskData];
+      console.log('taskService.createTask נקרא עם:', taskData);
+      
+      if (!taskData) {
+        throw new Error('Missing task data');
       }
-      if (cleanedTaskData.responsible === '') cleanedTaskData.responsible = null;
-
-      // Determine if using project-specific table
-      const projectTableName = task.project_id ? `project_${task.project_id}_tasks` : null;
-      let useProjectTable = false;
-      if (projectTableName) {
-        try {
-          const { data: tableExists } = await supabase.rpc('check_table_exists', { table_name_param: projectTableName });
-          useProjectTable = !!tableExists;
-        } catch (checkError) { console.error(`Error checking table ${projectTableName}:`, checkError); }
-      }
-
-      // Clean fields based on target table
-      cleanedTaskData = await this.removeNonExistingFields(cleanedTaskData, useProjectTable);
-
-      if (cleanedTaskData.assignees_info && Array.isArray(cleanedTaskData.assignees_info)) {
-        (cleanedTaskData as any).assignees_info = JSON.stringify(cleanedTaskData.assignees_info);
-      }
-
+      
+      // Save original data for possible project-specific table insertion
+      const originalData = { ...taskData };
+      const cleanedTaskData = await this.removeNonExistingFields(taskData, false);
+      
+      // Add timestamps
+      cleanedTaskData.created_at = new Date().toISOString();
+      cleanedTaskData.updated_at = new Date().toISOString();
+      
       // Calculate hierarchical number if needed
       if (cleanedTaskData.project_id && !cleanedTaskData.hierarchical_number) {
         if (cleanedTaskData.parent_task_id) {
           try {
-            cleanedTaskData.hierarchical_number = await this.getProjectSpecificNextSubHierarchicalNumber(cleanedTaskData.parent_task_id, cleanedTaskData.project_id);
-          } catch { cleanedTaskData.hierarchical_number = await this.getNextSubHierarchicalNumber(cleanedTaskData.parent_task_id); }
+            // ניסיון להשיג מספר היררכי מהטבלה הספציפית לפרויקט
+            cleanedTaskData.hierarchical_number = await this.getProjectSpecificNextSubHierarchicalNumber(
+              cleanedTaskData.parent_task_id, 
+              cleanedTaskData.project_id
+            );
+          } catch (hierError) { 
+            console.warn(`Error getting project-specific hierarchical number: ${hierError}`);
+            // ניסיון לקבל מהטבלה הכללית אם נכשל מהטבלה הספציפית
+            try {
+              cleanedTaskData.hierarchical_number = await this.getNextSubHierarchicalNumber(cleanedTaskData.parent_task_id);
+            } catch (fallbackError) {
+              console.error(`Error getting hierarchical number, using default: ${fallbackError}`);
+              // ניסיון לקבל את המשימה ההורה ולבנות ברירת מחדל
+              const parentTask = await this.getTaskById(cleanedTaskData.parent_task_id);
+              cleanedTaskData.hierarchical_number = parentTask?.hierarchical_number 
+                ? `${parentTask.hierarchical_number}.1` 
+                : "1.1";
+            }
+          }
         } else {
+          // משימת שורש (ללא הורה)
           try {
             cleanedTaskData.hierarchical_number = await this.getProjectSpecificNextRootHierarchicalNumber(cleanedTaskData.project_id);
-          } catch { cleanedTaskData.hierarchical_number = await this.getNextRootHierarchicalNumber(cleanedTaskData.project_id); }
+          } catch (hierError) { 
+            console.warn(`Error getting project-specific root hierarchical number: ${hierError}`);
+            try {
+              cleanedTaskData.hierarchical_number = await this.getNextRootHierarchicalNumber(cleanedTaskData.project_id); 
+            } catch (fallbackError) {
+              console.error(`Error getting root hierarchical number, using default: ${fallbackError}`);
+              cleanedTaskData.hierarchical_number = "1";
+            }
+          }
         }
       }
-
-      let createdTask: Task;
-      const targetTable = useProjectTable ? projectTableName : 'tasks';
-      const taskToInsert = useProjectTable ? cleanedTaskData : await this.removeNonExistingFields(task, false); // Use fuller object for main table
-
+      
+      // עדכון האם להשתמש בטבלה ספציפית לפרויקט
+      let useProjectTable = false;
+      let projectTableName = 'tasks';
+      
+      if (cleanedTaskData.project_id) {
+        const tableName = `project_${cleanedTaskData.project_id}_tasks`;
+        try {
+          const { data: tableExists, error: checkError } = await supabase
+            .rpc('check_table_exists', { table_name_param: tableName });
+            
+          if (!checkError && tableExists) {
+            projectTableName = tableName;
+            useProjectTable = true;
+            console.log(`Using project-specific table ${projectTableName} for new task`);
+          }
+        } catch (checkError) {
+          console.warn(`Error checking if table ${tableName} exists:`, checkError);
+        }
+      }
+      
+      // הוספת המשימה לטבלה המתאימה
       const { data, error } = await supabase
-        .from(targetTable!)
-        .insert(taskToInsert)
-        .select('*')
+        .from(useProjectTable ? projectTableName : 'tasks')
+        .insert(cleanedTaskData)
+        .select()
         .single();
-
+      
       if (error) {
-        console.error(`Error inserting task into ${targetTable}:`, error);
-        throw new Error(`שגיאה בהוספת משימה: ${error.message}`);
+        console.error(`Error creating task in ${useProjectTable ? projectTableName : 'tasks'}:`, error);
+        
+        // אם ניסינו להשתמש בטבלה ספציפית ונכשלנו, ננסה את הטבלה הראשית
+        if (useProjectTable) {
+          console.log('Falling back to main tasks table for task creation');
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('tasks')
+            .insert(cleanedTaskData)
+            .select()
+            .single();
+            
+          if (fallbackError) {
+            console.error('Error creating task in fallback table:', fallbackError);
+            throw new Error(fallbackError.message);
+          }
+          
+          const createdTask = fallbackData as ExtendedTask;
+          
+          // עדכון היררכיית המשימות אם זו תת-משימה
+          if (createdTask.parent_task_id) {
+            try {
+              await this.updateSubtaskHierarchicalNumbers(createdTask.parent_task_id);
+            } catch (hierarchyError) {
+              console.error(`Error updating hierarchical numbers for parent ${createdTask.parent_task_id}:`, hierarchyError);
+            }
+          }
+          
+          return createdTask;
+        }
+        
+        throw new Error(error.message);
       }
-      createdTask = data as Task;
-
-      // Create Dropbox folder (no need to await if background creation is acceptable)
-      if (createdTask.project_id) {
-        this.createDropboxFolderForTask(createdTask, useProjectTable, targetTable!).catch(err => console.error('Error creating Dropbox folder:', err));
+      
+      const createdTask = data as ExtendedTask;
+      
+      // אם יש לנו parent_task_id, עלינו לעדכן את המספרים ההיררכיים של כל תתי-המשימות של אותו הורה
+      // זה יבטיח שכל תתי-המשימות יקבלו מספרים היררכיים נכונים
+      if (createdTask.parent_task_id) {
+        try {
+          await this.updateSubtaskHierarchicalNumbers(createdTask.parent_task_id);
+        } catch (hierarchyError) {
+          console.error(`Error updating hierarchical numbers for parent ${createdTask.parent_task_id}:`, hierarchyError);
+          // אנחנו לא זורקים את השגיאה כאן כי אנחנו עדיין רוצים להחזיר את המשימה שנוצרה
+        }
       }
-
+      
       return createdTask;
     } catch (err) {
       console.error('Error in createTask:', err);
@@ -420,27 +692,85 @@ export const taskService = {
 
   // עדכון משימה
   async updateTask(taskId: string, updates: Partial<ExtendedTask>): Promise<ExtendedTask> {
-    console.warn(`Placeholder: updateTask called for task ${taskId} with updates:`, updates);
-    // TODO: Implement actual update logic
     try {
-      // Determine table (assuming main table for now)
-      const tableName = 'tasks'; 
-      const taskToUpdate = await this.removeNonExistingFields(updates, false);
-      taskToUpdate.updated_at = new Date().toISOString(); // Ensure updated_at is set
-
+      if (!taskId) {
+        throw new Error('Missing task ID');
+      }
+      
+      // קבלת המשימה הנוכחית כדי לקבל מזהה פרויקט ומידע נוסף
+      const currentTask = await this.getTaskById(taskId);
+      if (!currentTask) {
+        throw new Error(`Task ${taskId} not found`);
+      }
+      
+      // בדיקה אם יש צורך להשתמש בטבלה ספציפית לפרויקט
+      let tableName = 'tasks';
+      let useProjectTable = false;
+      
+      if (currentTask.project_id) {
+        const projectTableName = `project_${currentTask.project_id}_tasks`;
+        try {
+          const { data: tableExists, error: checkError } = await supabase
+            .rpc('check_table_exists', { table_name_param: projectTableName });
+            
+          if (!checkError && tableExists) {
+            tableName = projectTableName;
+            useProjectTable = true;
+            console.log(`Using project-specific table ${projectTableName} for updating task ${taskId}`);
+          }
+        } catch (checkError) {
+          console.warn(`Error checking if table ${projectTableName} exists:`, checkError);
+          // נמשיך עם הטבלה הראשית אם יש שגיאה בבדיקת הטבלה הספציפית
+        }
+      }
+      
+      // הכנת הנתונים לעדכון
+      const taskToUpdate = await this.removeNonExistingFields(updates, useProjectTable);
+      taskToUpdate.updated_at = new Date().toISOString(); // וידוא שזמן העדכון מוגדר
+      
+      // הוספת לוג מפורט כדי להבין בדיוק מה מעודכן
+      console.log(`Updating task ${taskId} in table ${tableName}:`, taskToUpdate);
+      
+      // ביצוע העדכון בבסיס הנתונים
       const { data, error } = await supabase
         .from(tableName)
         .update(taskToUpdate)
         .eq('id', taskId)
         .select('*')
         .single();
-
+      
       if (error) {
-        console.error(`Error updating task ${taskId}:`, error);
+        console.error(`Error updating task ${taskId} in ${tableName}:`, error);
+        
+        // אם ניסינו להשתמש בטבלה ספציפית ונכשלנו, ננסה את הטבלה הראשית
+        if (useProjectTable) {
+          console.log(`Falling back to main tasks table for update of task ${taskId}`);
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('tasks')
+            .update(taskToUpdate)
+            .eq('id', taskId)
+            .select('*')
+            .single();
+            
+          if (fallbackError) {
+            console.error(`Error updating task ${taskId} in fallback table:`, fallbackError);
+            throw new Error(fallbackError.message);
+          }
+          
+          // עדכון מוצלח בטבלה הראשית
+          console.log(`Successfully updated task ${taskId} in fallback table`);
+          return fallbackData as ExtendedTask;
+        }
+        
         throw new Error(error.message);
       }
-      if (!data) throw new Error('Task not found after update');
-
+      
+      if (!data) {
+        throw new Error(`Task ${taskId} not found after update`);
+      }
+      
+      // עדכון מוצלח
+      console.log(`Successfully updated task ${taskId}`);
       return data as ExtendedTask;
     } catch (err) {
       console.error(`Error in updateTask for ${taskId}:`, err);
@@ -450,13 +780,139 @@ export const taskService = {
 
   // עדכון סטטוס משימה
   async updateTaskStatus(taskId: string, status: string): Promise<ExtendedTask> {
-    console.warn(`Placeholder: updateTaskStatus called for task ${taskId} with status ${status}`);
-    // TODO: Implement actual status update logic
     try {
+      if (!taskId) {
+        throw new Error('Missing task ID');
+      }
+      
+      if (!status) {
+        throw new Error('Missing status value');
+      }
+      
+      console.log(`Updating status for task ${taskId} to ${status}`);
       return await this.updateTask(taskId, { status });
     } catch (err) {
       console.error(`Error in updateTaskStatus for ${taskId}:`, err);
       throw err;
+    }
+  },
+
+  // פונקציה לעדכון היררכיה של משימה (שינוי משימת האב)
+  async updateTaskHierarchy(taskId: string, newParentId: string | null): Promise<ExtendedTask> {
+    try {
+      const task = await this.getTaskById(taskId);
+      if (!task) {
+        throw new Error(`Task ${taskId} not found`);
+      }
+      
+      // אם מנסים לשנות משימה להיות תת-משימה של עצמה או של אחת מתתי המשימות שלה
+      if (newParentId) {
+        // בדיקה שלא יוצרים מעגל בהיררכיה
+        const checkForCycle = async (currentId: string, targetId: string): Promise<boolean> => {
+          if (currentId === targetId) return true;
+          
+          const subtasks = await this.getSubTasks(currentId);
+          for (const subtask of subtasks) {
+            if (await checkForCycle(subtask.id, targetId)) {
+              return true;
+            }
+          }
+          
+          return false;
+        };
+        
+        if (await checkForCycle(taskId, newParentId)) {
+          throw new Error('לא ניתן להפוך משימה לתת-משימה של עצמה או של אחת מתתי המשימות שלה');
+        }
+      }
+      
+      // עדכון משימת האב
+      const updateData: Partial<ExtendedTask> = { parent_task_id: newParentId };
+      
+      // עדכון המספר ההיררכי
+      if (newParentId === null) {
+        // אם הופכים למשימת אב, מקבלים מספר היררכי חדש
+        updateData.hierarchical_number = await this.getNextRootHierarchicalNumber(task.project_id);
+      } else {
+        // אם הופכים לתת-משימה, מקבלים מספר היררכי חדש בהתאם למשימת האב החדשה
+        updateData.hierarchical_number = await this.getNextSubHierarchicalNumber(newParentId);
+      }
+      
+      // עדכון המשימה
+      const updatedTask = await this.updateTask(taskId, updateData);
+      
+      // עדכון כל תתי המשימות של המשימה הזו
+      await this.updateSubtaskHierarchicalNumbers(taskId);
+      
+      return updatedTask;
+    } catch (err) {
+      console.error(`Error in updateTaskHierarchy for ${taskId}:`, err);
+      throw err;
+    }
+  },
+  
+  // פונקציה לעדכון מספרים היררכיים של כל תתי המשימות
+  async updateSubtaskHierarchicalNumbers(parentTaskId: string): Promise<void> {
+    try {
+      if (!parentTaskId) {
+        console.error('updateSubtaskHierarchicalNumbers: Missing parent task ID');
+        return;
+      }
+      
+      const parent = await this.getTaskById(parentTaskId);
+      if (!parent || !parent.hierarchical_number) {
+        console.warn(`updateSubtaskHierarchicalNumbers: Parent task ${parentTaskId} not found or missing hierarchical number`);
+        return;
+      }
+      
+      const subtasks = await this.getSubTasks(parentTaskId);
+      if (subtasks.length === 0) {
+        // אין תתי-משימות לעדכן
+        return;
+      }
+      
+      console.log(`Updating hierarchical numbers for ${subtasks.length} subtasks of ${parentTaskId}`);
+      
+      // זיהוי אם צריך לעבוד עם טבלה ספציפית לפרויקט
+      let useProjectTable = false;
+      let projectTableName = 'tasks';
+      
+      if (parent.project_id) {
+        projectTableName = `project_${parent.project_id}_tasks`;
+        try {
+          const { data: tableExists, error: checkError } = await supabase
+            .rpc('check_table_exists', { table_name_param: projectTableName });
+            
+          if (!checkError && tableExists) {
+            useProjectTable = true;
+            console.log(`Using project-specific table ${projectTableName} for updating subtasks of ${parentTaskId}`);
+          }
+        } catch (checkError) {
+          console.warn(`Error checking if table ${projectTableName} exists:`, checkError);
+          // נמשיך עם הטבלה הראשית אם יש שגיאה בבדיקת הטבלה הספציפית
+        }
+      }
+      
+      // עדכון כל תת-משימה
+      for (let i = 0; i < subtasks.length; i++) {
+        try {
+          const subtask = subtasks[i];
+          const newHierarchicalNumber = `${parent.hierarchical_number}.${i + 1}`;
+          
+          // עדכון המספר ההיררכי של תת-המשימה
+          await this.updateTask(subtask.id, { hierarchical_number: newHierarchicalNumber });
+          
+          // עדכון רקורסיבי של תתי-המשימות של תת-המשימה
+          await this.updateSubtaskHierarchicalNumbers(subtask.id);
+          
+        } catch (subtaskError) {
+          console.error(`Error updating hierarchical number for subtask ${subtasks[i].id}:`, subtaskError);
+          // נמשיך לתת-המשימה הבאה גם אם יש שגיאה בעדכון תת-משימה נוכחית
+        }
+      }
+    } catch (err) {
+      console.error(`Error in updateSubtaskHierarchicalNumbers for ${parentTaskId}:`, err);
+      // לא נזרוק שגיאה כדי לא לעצור את תהליך עדכון המספרים ההיררכיים
     }
   },
 

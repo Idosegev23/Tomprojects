@@ -96,7 +96,10 @@ export const useTaskFormActions = ({
         const sortedSubTasks = [...subTasks].sort((a, b) => {
           // מיון לפי hierarchical_number אם קיים
           if (a.hierarchical_number && b.hierarchical_number) {
-            return a.hierarchical_number.localeCompare(b.hierarchical_number);
+            // בדיקה שהערכים הם מחרוזות תקינות
+            if (typeof a.hierarchical_number === 'string' && typeof b.hierarchical_number === 'string') {
+              return a.hierarchical_number.localeCompare(b.hierarchical_number);
+            }
           }
           // אחרת מיון לפי כותרת
           return (a.title || '').localeCompare(b.title || '');
@@ -162,7 +165,10 @@ export const useTaskFormActions = ({
       const sortedNextLevelTasks = [...nextLevelTasks].sort((a, b) => {
         // מיון לפי hierarchical_number אם קיים
         if (a.hierarchical_number && b.hierarchical_number) {
-          return a.hierarchical_number.localeCompare(b.hierarchical_number);
+          // בדיקה שהערכים הם מחרוזות תקינות
+          if (typeof a.hierarchical_number === 'string' && typeof b.hierarchical_number === 'string') {
+            return a.hierarchical_number.localeCompare(b.hierarchical_number);
+          }
         }
         // אחרת מיון לפי כותרת
         return (a.title || '').localeCompare(b.title || '');
@@ -179,14 +185,20 @@ export const useTaskFormActions = ({
   
   // שמירת המשימה
   const handleSubmit = async (event: React.FormEvent) => {
+    console.log('handleSubmit נקרא!', { isEditMode, formData });
     event.preventDefault();
-    if (loading) return;
+    if (loading) {
+      console.log('המערכת במצב טעינה, דילוג על שליחת טופס');
+      return;
+    }
     
     if (!validateForm()) {
+      console.log('הטופס לא תקין, דילוג על שליחה');
       return;
     }
     
     setLoading(true);
+    console.log('מגדיר loading=true');
     
     try {
       let result;
@@ -205,6 +217,8 @@ export const useTaskFormActions = ({
         // משימת שורש ללא משימת אב
         taskData.parent_task_id = null;
       }
+      
+      console.log('מידע המשימה לשליחה:', taskData);
       
       if (isEditMode && task) {
         // עדכון משימה קיימת
@@ -227,6 +241,7 @@ export const useTaskFormActions = ({
       } else {
         // יצירת משימה חדשה
         if (!formData.title) {
+          console.log('אין כותרת למשימה, מציג הודעת שגיאה');
           toast({
             title: "שגיאה",
             description: "כותרת המשימה היא שדה חובה",
@@ -256,9 +271,13 @@ export const useTaskFormActions = ({
           assignees_info: assigneesArray,
         };
         
+        console.log('מנסה ליצור משימה חדשה:', newTaskData);
+        
         try {
           // ביצוע קריאה לשרת ליצירת המשימה
+          console.log('קורא לשירות taskService.createTask');
           result = await taskService.createTask(newTaskData);
+          console.log('משימה נוצרה בהצלחה:', result);
           
           // שמירת המשימה שנוצרה לשימוש בפופאפ התבנית
           setCreatedTaskData(result);

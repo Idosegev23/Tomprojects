@@ -21,6 +21,8 @@ const TaskList: React.FC<TaskListProps> = ({
   onTaskUpdated,
   onTaskDeleted
 }) => {
+  console.log('TaskListNew נטען. projectId:', projectId);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [priorityFilter, setPriorityFilter] = useState<string>('');
@@ -53,6 +55,8 @@ const TaskList: React.FC<TaskListProps> = ({
     onTaskUpdated,
     onTaskDeleted
   });
+  
+  console.log('TaskListNew: isTaskModalOpen =', isTaskModalOpen);
   
   // סינון משימות לפי קריטריונים
   const filteredTasks = tasks.filter(task => {
@@ -105,7 +109,10 @@ const TaskList: React.FC<TaskListProps> = ({
           <Button
             leftIcon={<FiPlus />}
             colorScheme="blue"
-            onClick={handleCreateTask}
+            onClick={(e) => {
+              console.log('לחיצה על כפתור משימה חדשה');
+              handleCreateTask();
+            }}
             size={{ base: 'sm', md: 'md' }}
             boxShadow="sm"
           >

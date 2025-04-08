@@ -23,11 +23,13 @@ import {
 } from '@chakra-ui/react';
 import { AddIcon, EditIcon } from '@chakra-ui/icons';
 import { FaTasks } from 'react-icons/fa';
+import { FiFolder } from 'react-icons/fi';
 
 // הייבוא של הקומפוננטות שיצרנו
 import BasicInfoTab from './BasicInfoTab';
 import ScheduleTab from './ScheduleTab';
 import RelationshipsTab from './RelationshipsTab';
+import DropboxTab from './DropboxTab';
 import TemplateDialog from './TemplateDialog';
 
 // הייבוא של ההוקים שיצרנו
@@ -45,6 +47,8 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   onTaskCreated,
   onTaskUpdated,
 }) => {
+  console.log('TaskEditModal רונדר:', { isOpen, task, projectId });
+  
   // שימוש בהוק המותאם לניהול הפורם
   const formHook = useTaskForm({
     task,
@@ -162,6 +166,13 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                 >
                   קשרים
                 </Tab>
+                <Tab 
+                  _selected={{ fontWeight: "bold", borderBottomWidth: "3px" }}
+                  fontSize={tabFontSize}
+                >
+                  <Icon as={FiFolder} mr={1} />
+                  קבצים
+                </Tab>
               </TabList>
               
               <TabPanels>
@@ -202,6 +213,16 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                       potentialParentTasks={formHook.potentialParentTasks}
                       handleParentTaskChange={formActions.handleParentTaskChange}
                       handleSubTaskSelection={formActions.handleSubTaskSelection}
+                    />
+                  </Box>
+                </TabPanel>
+                <TabPanel>
+                  <Box p={modalPadding}>
+                    <DropboxTab 
+                      formData={formHook.formData}
+                      errors={formHook.errors}
+                      handleChange={formHook.handleChange}
+                      isEditMode={formHook.isEditMode}
                     />
                   </Box>
                 </TabPanel>
@@ -248,7 +269,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                   </Button>
                 )}
                 
-                {formHook.activeTab < 2 ? (
+                {formHook.activeTab < 3 ? (
                   <Button 
                     colorScheme="blue" 
                     onClick={() => formHook.setActiveTab(prev => prev + 1)}

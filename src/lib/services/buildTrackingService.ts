@@ -1,37 +1,40 @@
 /**
  * שירות למעקב אחר הפעולות שמתבצעות ביישום
- * השירות מאפשר לעדכן קובץ build_tracking.txt עם פעולות שמתבצעות
+ * השירות מאפשר לתעד פעולות שמתבצעות במערכת
  */
 
-import fs from 'fs';
-import path from 'path';
 import { format } from 'date-fns';
 
 /**
- * פונקציה לעדכון קובץ מעקב הבנייה
- * מוסיפה שורה חדשה לקובץ עם התאריך הנוכחי ותיאור הפעולה
+ * פונקציה לעדכון מעקב הבנייה
+ * מתעדת פעולות שמתבצעות במערכת
  * 
  * @param message תיאור הפעולה שבוצעה
- * @returns הבטחה שמתממשת לאחר עדכון הקובץ
+ * @returns הבטחה שמתממשת לאחר רישום הפעולה
  */
 export async function updateBuildTracking(message: string): Promise<void> {
   try {
-    // בסביבת הדפדפן, נשתמש ב-console.log במקום בכתיבה לקובץ
-    if (typeof window !== 'undefined') {
-      console.log(`[Build Tracking] ${message}`);
-      return;
-    }
-
-    // בצד השרת, נכתוב לקובץ
+    // פורמט התאריך
     const timestamp = format(new Date(), 'yyyy-MM-dd HH:mm:ss');
-    const entry = `[${timestamp}] ${message}\n`;
+    const logEntry = `[${timestamp}] ${message}`;
     
-    // קביעת נתיב הקובץ
-    const filePath = path.join(process.cwd(), 'build_tracking.txt');
+    // רישום ללוג
+    console.log(`[Build Tracking] ${logEntry}`);
     
-    // הוספת השורה לקובץ
-    await fs.promises.appendFile(filePath, entry);
+    // אם נרצה לשלוח את המידע לשרת בעתיד, נוכל להוסיף כאן קוד שמבצע בקשת API
+    // לדוגמה:
+    // if (typeof window !== 'undefined') {
+    //   try {
+    //     await fetch('/api/log-tracking', {
+    //       method: 'POST',
+    //       headers: { 'Content-Type': 'application/json' },
+    //       body: JSON.stringify({ message: logEntry })
+    //     });
+    //   } catch (fetchError) {
+    //     console.error('שגיאה בשליחת נתוני מעקב לשרת:', fetchError);
+    //   }
+    // }
   } catch (error) {
-    console.error('שגיאה בעדכון קובץ מעקב הבנייה:', error);
+    console.error('שגיאה בעדכון מעקב הבנייה:', error);
   }
 } 

@@ -63,7 +63,7 @@ import stageService from '@/lib/services/stageService';
 import taskService from '@/lib/services/taskService';
 import entrepreneurService from '@/lib/services/entrepreneurService';
 import dropboxService from '@/lib/services/dropboxService';
-import type { Task, NewTask, Entrepreneur, Stage, TaskWithChildren } from '@/types/supabase';
+import type { Task, NewTask, Entrepreneur, Stage, TaskWithChildren, ExtendedTask } from '@/types/supabase';
 import { ExtendedNewProject } from '@/types/extendedTypes';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 import { supabase } from '@/lib/supabase';
@@ -418,9 +418,9 @@ export default function NewProject() {
     
     try {
       // יצירת משימה חדשה כתבנית
-      const newTask: NewTask = {
+      const newTask: Partial<ExtendedTask> = {
         id: crypto.randomUUID(),
-        project_id: null, // ללא שיוך לפרויקט - חשוב להשתמש ב-null ולא בסטרינג ריק
+        project_id: undefined, // שינוי מ-null ל-undefined כדי להתאים לטיפוס Partial<ExtendedTask>
         title: newCustomTask.title,
         description: newCustomTask.description || null,
         status: newCustomTask.status,

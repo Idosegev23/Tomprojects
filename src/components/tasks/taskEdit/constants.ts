@@ -22,6 +22,7 @@ export const STATUS_MAP = {
 // הרחבת הטיפוס של המשימה כדי להכיל את כל השדות הדרושים
 export interface ExtendedTask extends Task {
   // assignees_info וגם assignees זמינים דרך ה-Task שהורחב
+  dropbox_folder?: string;
 }
 
 export interface TaskEditModalProps {
