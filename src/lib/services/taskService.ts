@@ -106,6 +106,36 @@ export const taskService = {
     return cleanedTask;
   },
   
+  // פונקציה לקריאת משימות לפי שלב ופרויקט (אופציונלי)
+  async getTasksByStage(stageId: string, projectId?: string): Promise<Task[]> {
+    try {
+      let query = supabase.from('tasks').select('*').eq('stage_id', stageId);
+
+      // אם סופק projectId, נסנן גם לפיו
+      // נצטרך להחליט אם להשתמש בטבלה ספציפית או לסנן בטבלה הראשית
+      // כרגע, נניח שנסנן בטבלה הראשית
+      if (projectId) {
+        query = query.eq('project_id', projectId);
+      } else {
+        // אם אין projectId, אולי נרצה לסנן החוצה משימות שכן שייכות לפרויקט?
+        // נשאיר את זה פתוח לדיון, כרגע נחזיר את כל המשימות לשלב הנתון ללא קשר לפרויקט
+        // query = query.is('project_id', null); // אפשרות אם רוצים רק גלובליות
+      }
+
+      const { data, error } = await query.order('hierarchical_number', { ascending: true });
+
+      if (error) {
+        console.error(`Error fetching tasks for stage ${stageId}${projectId ? ` in project ${projectId}` : ''}:`, error);
+        throw new Error(error.message);
+      }
+
+      return data || [];
+    } catch (err) {
+      console.error(`Error in getTasksByStage for stage ${stageId}:`, err);
+      throw err; // Re-throw the error for the caller to handle
+    }
+  },
+  
   // Placeholder functions for hierarchical numbering to resolve linter errors
   // TODO: Implement or find the actual definitions for these functions
   async getProjectSpecificNextSubHierarchicalNumber(parentId: string, projectId: string): Promise<string> {
