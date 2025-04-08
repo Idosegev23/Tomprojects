@@ -137,6 +137,118 @@ export const taskService = {
     }
   },
 
+  // קבלת כל המשימות בצורה היררכית
+  async getAllTasksHierarchical(projectId?: string): Promise<TaskWithChildren[]> {
+    try {
+      // קבלת כל המשימות הרלוונטיות - גלובליות או פרויקט-ספציפיות
+      const tasks = projectId ? await this.getProjectSpecificTasks(projectId) : await this.getTasks();
+      
+      if (!tasks || tasks.length === 0) {
+        return [];
+      }
+      
+      // ארגון המשימות בצורה היררכית
+      // 1. מיפוי משימות לפי ID להקלה על חיפוש
+      const taskMap = new Map<string, TaskWithChildren>();
+      tasks.forEach(task => {
+        taskMap.set(task.id, { ...task, children: [] });
+      });
+      
+      // 2. בניית עץ המשימות
+      const rootTasks: TaskWithChildren[] = [];
+      
+      taskMap.forEach(task => {
+        if (task.parent_task_id) {
+          // משימה עם הורה - הוספה לרשימת תת-המשימות של ההורה
+          const parent = taskMap.get(task.parent_task_id);
+          if (parent) {
+            parent.children = parent.children || [];
+            parent.children.push(task);
+          } else {
+            // אם ההורה לא קיים, נוסיף כמשימת שורש
+            rootTasks.push(task);
+          }
+        } else {
+          // משימה ראשית ללא הורה
+          rootTasks.push(task);
+        }
+      });
+      
+      // מיון לפי מספר היררכי
+      return rootTasks.sort((a, b) => {
+        if (!a.hierarchical_number && !b.hierarchical_number) return 0;
+        if (!a.hierarchical_number) return 1;
+        if (!b.hierarchical_number) return -1;
+        return a.hierarchical_number.localeCompare(b.hierarchical_number);
+      });
+    } catch (err) {
+      console.error(`Error in getAllTasksHierarchical:`, err);
+      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה בקבלת מבנה המשימות');
+    }
+  },
+  
+  // קבלת תתי-משימות של משימה מסוימת
+  async getSubTasks(parentTaskId: string): Promise<Task[]> {
+    try {
+      // פונקציה לקבלת כל תתי-המשימות של משימה ספציפית
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('parent_task_id', parentTaskId)
+        .order('hierarchical_number', { ascending: true });
+        
+      if (error) {
+        console.error(`Error fetching subtasks for parent ${parentTaskId}:`, error);
+        throw new Error(error.message);
+      }
+      
+      return data || [];
+    } catch (err) {
+      console.error(`Error in getSubTasks for parent ${parentTaskId}:`, err);
+      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה בקבלת תתי-המשימות');
+    }
+  },
+  
+  // קבלת היררכיית משימות ספציפית
+  async getTaskHierarchy(rootTaskId: string): Promise<Task[]> {
+    try {
+      // מציאת כל המשימות שקשורות להיררכיה זו
+      const allTasks: Task[] = [];
+      
+      // קבלת משימת השורש
+      const rootTask = await this.getTaskById(rootTaskId);
+      if (!rootTask) {
+        throw new Error(`Root task ${rootTaskId} not found`);
+      }
+      
+      allTasks.push(rootTask);
+      
+      // פונקציה רקורסיבית לקבלת כל תתי המשימות
+      const fetchSubtasks = async (parentId: string) => {
+        const subtasks = await this.getSubTasks(parentId);
+        
+        for (const subtask of subtasks) {
+          allTasks.push(subtask);
+          // קריאה רקורסיבית לקבלת תתי-משימות של תת-המשימה
+          await fetchSubtasks(subtask.id);
+        }
+      };
+      
+      await fetchSubtasks(rootTaskId);
+      
+      // מיון לפי מספר היררכי
+      return allTasks.sort((a, b) => {
+        if (!a.hierarchical_number && !b.hierarchical_number) return 0;
+        if (!a.hierarchical_number) return 1;
+        if (!b.hierarchical_number) return -1;
+        return a.hierarchical_number.localeCompare(b.hierarchical_number);
+      });
+    } catch (err) {
+      console.error(`Error in getTaskHierarchy for task ${rootTaskId}:`, err);
+      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה בקבלת היררכיית המשימות');
+    }
+  },
+
   // Placeholder functions for hierarchical numbering
   async getProjectSpecificNextSubHierarchicalNumber(parentId: string, projectId: string): Promise<string> {
     console.warn('Placeholder: getProjectSpecificNextSubHierarchicalNumber called');

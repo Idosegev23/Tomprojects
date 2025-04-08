@@ -141,8 +141,8 @@ export default function NewProject() {
     const loadAllTaskTemplates = async () => {
       try {
         setLoadingTasks(true);
-        // שימוש בפונקציה החדשה שמחזירה משימות היררכיות
-        const hierarchicalTasks = await taskService.getAllHierarchicalTaskTemplates();
+        // שימוש בפונקציה הקיימת getAllTasksHierarchical במקום getAllHierarchicalTaskTemplates
+        const hierarchicalTasks = await taskService.getAllTasksHierarchical();
         
         // אם אין תבניות היררכיות, ננסה לקבל את כל תבניות המשימות הרגילות
         if (hierarchicalTasks.length === 0) {
@@ -834,7 +834,7 @@ export default function NewProject() {
                             });
                             
                             // טעינה מחדש של המשימות ההיררכיות
-                            const hierarchicalTasks = await taskService.getAllHierarchicalTaskTemplates();
+                            const hierarchicalTasks = await taskService.getAllTasksHierarchical();
                             setHierarchicalTasks(hierarchicalTasks);
                           } catch (err) {
                             console.error('שגיאה ביצירת תבניות משימות:', err);
