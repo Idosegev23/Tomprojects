@@ -175,21 +175,36 @@ export default function Tasks() {
   
   // מחיקת משימה
   const handleDeleteTask = async (taskId: string) => {
+    // מציאת המשימה למחיקה
+    const taskToDelete = tasks.find(task => task.id === taskId);
+
+    // בדיקה אם המשימה נמצאה ואם יש לה project_id
+    if (!taskToDelete) {
+      toast({ title: 'שגיאה', description: 'המשימה למחיקה לא נמצאה.', status: 'error' });
+      return;
+    }
+    if (!taskToDelete.project_id) {
+      toast({ title: 'שגיאה', description: 'לא ניתן למחוק משימה שאינה משויכת לפרויקט מדף זה.', status: 'error' });
+      return;
+    }
+
+    // הגדרת projectId כמשתנה בטוח לשימוש
+    const projectId: string = taskToDelete.project_id;
+
     try {
-      // מציאת המשימה כדי לקבל את ה-project_id שלה
-      const taskToDelete = tasks.find(task => task.id === taskId);
-      
-      // בדיקת משימות משנה לפני המחיקה
-      const result = await taskService.deleteTask(taskId, taskToDelete?.project_id);
+      const result = await taskService.deleteTask(taskId, projectId);
       
       // עדכון רשימת המשימות המקומית
       setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
       
-      // אם יש משימות משנה, נציג הודעה מתאימה
-      if (result.deletedSubtasks.length > 0) {
+      // בדיקת תתי משימות שנמחקו
+      const deletedSubs = result.deletedSubtasks;
+      
+      // הצגת הודעה מתאימה
+      if (deletedSubs && deletedSubs.length > 0) {
         toast({
           title: 'המשימה נמחקה בהצלחה',
-          description: `נמחקו גם ${result.deletedSubtasks.length} תתי-משימות`,
+          description: `נמחקו גם ${deletedSubs.length} תתי-משימות`,
           status: 'success',
           duration: 3000,
           isClosable: true,

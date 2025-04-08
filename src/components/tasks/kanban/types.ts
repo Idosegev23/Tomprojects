@@ -1,17 +1,17 @@
-import { Task as BaseTask, Project } from '@/types/supabase';
+import { Project } from '@/types/supabase';
+import { ExtendedTask } from '@/types/extendedTypes';
 
-// הרחבת הטיפוס של משימה לכלול מידע נוסף
-export interface Task extends Omit<BaseTask, 'assignees' | 'assignees_info'> {
-  // שימוש ב-assignees_info במקום ב-assignees
+// הרחבת הטיפוס של משימה לכלול מידע נוסף, מבוסס על ExtendedTask
+export interface Task extends Omit<ExtendedTask, 'assignees' | 'assignees_info'> {
+  // שימוש ב-assignees_info במקום ב-assignees (שכבר קיים ב-ExtendedTask)
   assignees_info?: string[] | null;
-  // שמירה על תאימות לאחור
+  // שמירה על תאימות לאחור (שכבר קיים ב-ExtendedTask)
   assignees?: string[] | null;
   
   // תת-משימות
   subtasks?: Task[];
   
-  // שדות נוספים
-  tags?: string[];
+  // שדות נוספים (tags כבר קיים ב-ExtendedTask)
   collaborators?: string[];
   
   // שדה עזר לזיהוי משימת אב (מספר היררכי שלם ללא ".")

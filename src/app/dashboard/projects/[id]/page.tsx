@@ -243,7 +243,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
         setTasks(tasks.filter(task => task.id !== taskId));
         
         // אם יש משימות משנה, נציג הודעה מתאימה
-        if (result.deletedSubtasks.length > 0) {
+        if (result.deletedSubtasks && Array.isArray(result.deletedSubtasks) && result.deletedSubtasks.length > 0) {
           toast({
             title: 'המשימה נמחקה בהצלחה',
             description: `נמחקו גם ${result.deletedSubtasks.length} תתי-משימות`,

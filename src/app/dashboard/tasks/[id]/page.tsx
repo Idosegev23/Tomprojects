@@ -138,14 +138,30 @@ export default function TaskPage() {
   
   // מחיקת משימה
   const handleDeleteTask = async () => {
+    // Add check for task and project_id before proceeding
+    if (!task) {
+      toast({ title: 'שגיאה', description: 'פרטי המשימה לא נטענו.', status: 'error' });
+      return;
+    }
+    if (!task.project_id) {
+      toast({ title: 'שגיאה', description: 'לא ניתן למחוק משימה שאינה משויכת לפרויקט מדף זה.', status: 'error' });
+      // Or maybe handle deletion of global tasks differently?
+      return;
+    }
+
     try {
-      const result = await taskService.deleteTask(taskId, task?.project_id || undefined);
+      // Ensure project_id is treated as string after checks
+      const projectId = task.project_id;
+      const result = await taskService.deleteTask(taskId, projectId);
       
+      // Check for deletedSubtasks existence before accessing length
+      const deletedSubs = result.deletedSubtasks; // Store in variable
+
       // אם יש משימות משנה, נציג הודעה מתאימה
-      if (result.deletedSubtasks.length > 0) {
+      if (deletedSubs && deletedSubs.length > 0) {
         toast({
           title: 'המשימה נמחקה בהצלחה',
-          description: `נמחקו גם ${result.deletedSubtasks.length} תתי-משימות`,
+          description: `נמחקו גם ${deletedSubs.length} תתי-משימות`,
           status: 'success',
           duration: 3000,
           isClosable: true,
