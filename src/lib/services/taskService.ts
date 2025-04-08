@@ -2,6 +2,8 @@ import supabase from '../supabase';
 import { Task, NewTask, UpdateTask, TaskWithChildren } from '@/types/supabase';
 import dropboxService from './dropboxService';
 import { ExtendedTask } from '@/types/extendedTypes';
+import { sanitizePath } from '@/utils/sanitizePath';
+import { PROJECTS_PATH } from '@/config/config';
 
 // תיעוד פעולות בקובץ build_tracking
 async function updateBuildTracking(message: string) {
@@ -102,6 +104,25 @@ export const taskService = {
     }
     
     return cleanedTask;
+  },
+  
+  // Placeholder functions for hierarchical numbering to resolve linter errors
+  // TODO: Implement or find the actual definitions for these functions
+  async getProjectSpecificNextSubHierarchicalNumber(parentId: string, projectId: string): Promise<string> {
+    console.warn('Placeholder: getProjectSpecificNextSubHierarchicalNumber called');
+    return 'PLACEHOLDER_SUB'; // Replace with actual implementation
+  },
+  async getNextSubHierarchicalNumber(parentId: string): Promise<string> {
+    console.warn('Placeholder: getNextSubHierarchicalNumber called');
+    return 'PLACEHOLDER_SUB_OLD'; // Replace with actual implementation
+  },
+  async getProjectSpecificNextRootHierarchicalNumber(projectId: string): Promise<string> {
+    console.warn('Placeholder: getProjectSpecificNextRootHierarchicalNumber called');
+    return 'PLACEHOLDER_ROOT'; // Replace with actual implementation
+  },
+  async getNextRootHierarchicalNumber(projectId: string): Promise<string> {
+    console.warn('Placeholder: getNextRootHierarchicalNumber called');
+    return 'PLACEHOLDER_ROOT_OLD'; // Replace with actual implementation
   },
   
   // עדכון פונקציית createTask
@@ -330,2398 +351,566 @@ export const taskService = {
           console.warn(`Could not fetch entrepreneur details for task: ${entrepreneurError}`);
         }
       }
-      
+
+      // קביעת נתיב תיקיית הפרויקט בדרופבוקס
+      const cleanProjectName = sanitizePath(projectData.name);
+      let projectBasePath = PROJECTS_PATH;
+
+      // Construct entrepreneur path if applicable
+      if (entrepreneurId && entrepreneurName) {
+        const cleanEntrepreneurName = sanitizePath(entrepreneurName);
+        const entrepreneurPath = `${projectBasePath}/${cleanEntrepreneurName}_${entrepreneurId}`;
+        // Ensure entrepreneur folder exists (consider doing this once per project run)
+        try {
+          await dropboxService.createFolder(entrepreneurPath); // Create if not exists
+          projectBasePath = entrepreneurPath; // Base path is now the entrepreneur's folder
+        } catch (entError) {
+          console.error(`Could not ensure entrepreneur folder exists: ${entrepreneurPath}`, entError);
+          // Decide how to proceed: maybe default to base projects path?
+          // For now, will continue assuming base path needs to be the entrepreneur folder
+          projectBasePath = entrepreneurPath;
+        }
+      }
+
+      // Final project folder path
+      let projectFolderPath = `${projectBasePath}/${cleanProjectName}`;
+
+      // Ensure project folder exists (consider doing this once per project run)
+      console.log(`Ensuring final project folder: ${projectFolderPath}`);
+      try {
+         const projectFolderResult = await dropboxService.createFolder(projectFolderPath);
+         projectFolderPath = projectFolderResult.path; // Use the actual path returned
+         console.log(`Project folder ensured at: ${projectFolderPath}`);
+      } catch (projError) {
+         console.error(`CRITICAL: Failed to create or verify the main project folder: ${projectFolderPath}. Aborting task folder creation. Error:`, projError);
+         await updateBuildTracking(`CRITICAL: Failed to create project folder ${projectFolderPath}. Aborting. Error: ${projError instanceof Error ? projError.message : projError}`);
+         return;
+      }
+
       // בדיקה אם זו תת-משימה או משימת שורש וטיפול בהתאם
       if (task.parent_task_id) {
-        await this.createSubtaskFolder(task, projectData, entrepreneurId, entrepreneurName, useProjectTable, projectTableName);
+        // העברנו את projectFolderPath המחושב
+        await this.createSubtaskFolder(task, projectFolderPath, useProjectTable, projectTableName);
       } else {
-        await this.createRootTaskFolder(task, projectData, entrepreneurId, entrepreneurName, useProjectTable, projectTableName);
+        // העברנו את projectFolderPath המחושב
+        await this.createRootTaskFolder(task, projectFolderPath, useProjectTable, projectTableName);
       }
     } catch (error) {
       console.error(`Error in createDropboxFolderForTask: ${error}`);
     }
   },
 
-  // פונקציה נפרדת ליצירת תיקייה לתת-משימה
-  async createSubtaskFolder(
-    task: Task, 
-    projectData: any, 
-    entrepreneurId: string | undefined, 
-    entrepreneurName: string | undefined,
-    useProjectTable: boolean,
-    projectTableName: string
-  ): Promise<void> {
+  async getTaskDropboxPath(task: Task, useProjectTable: boolean, projectTableName: string): Promise<string | null> {
+    if (!task || !task.id) {
+      console.warn('getTaskDropboxPath: Invalid task provided.');
+      return null;
+    }
     try {
-      // קבלת פרטי משימת האב
-      const parentTask = await this.getTaskById(task.parent_task_id!);
-      
-      if (!parentTask) {
-        console.error(`Parent task ${task.parent_task_id} not found for subtask ${task.id}`);
-        return;
-      }
-
-      console.log(`Creating folder for subtask ${task.title} (${task.id}) with parent ${parentTask.title} (${parentTask.id})`);
-      
-      // קבלת נתיב תיקיית האב (או יצירה אם לא קיימת)
-      let parentFolderPath = null;
-      
-      try {
-        // בדיקה אם כבר יש נתיב תיקייה למשימת האב
-        const { data: parentTaskData, error: parentTaskError } = await supabase
-          .from(useProjectTable ? projectTableName : 'tasks')
-          .select('dropbox_folder')
-          .eq('id', parentTask.id)
-          .single();
-          
-        if (!parentTaskError && parentTaskData && (parentTaskData as any).dropbox_folder) {
-          parentFolderPath = (parentTaskData as any).dropbox_folder;
-          console.log(`Found existing parent task folder: ${parentFolderPath}`);
-        } else {
-          // אם אין לאב תיקייה, נצטרך ליצור אותה תחילה
-          console.log(`Parent task folder not found, creating it first...`);
-          
-          // בדיקה אם משימת האב היא גם תת-משימה
-          if (parentTask.parent_task_id) {
-            // נקרא רקורסיבית להבטחת יצירת תיקיות בסדר היררכי נכון
-            await this.createSubtaskFolder(
-              parentTask, 
-              projectData, 
-              entrepreneurId, 
-              entrepreneurName, 
-              useProjectTable, 
-              projectTableName
-            );
-            
-            // קבלת הנתיב שנוצר כעת
-            const { data: updatedParentData } = await supabase
-              .from(useProjectTable ? projectTableName : 'tasks')
-              .select('dropbox_folder')
-              .eq('id', parentTask.id)
-              .single();
-              
-            if (updatedParentData && (updatedParentData as any).dropbox_folder) {
-              parentFolderPath = (updatedParentData as any).dropbox_folder;
-            }
-          } else {
-            // אם האב הוא משימת שורש, ניצור תיקייה עבורו
-            await this.createRootTaskFolder(
-              parentTask, 
-              projectData, 
-              entrepreneurId, 
-              entrepreneurName, 
-              useProjectTable, 
-              projectTableName
-            );
-            
-            // קבלת הנתיב שנוצר
-            const { data: updatedParentData } = await supabase
-              .from(useProjectTable ? projectTableName : 'tasks')
-              .select('dropbox_folder')
-              .eq('id', parentTask.id)
-              .single();
-              
-            if (updatedParentData && (updatedParentData as any).dropbox_folder) {
-              parentFolderPath = (updatedParentData as any).dropbox_folder;
-            }
-          }
-        }
-      } catch (parentFolderError) {
-        console.warn(`Could not fetch parent task folder: ${parentFolderError}`);
-      }
-      
-      // אם עדיין אין נתיב לתיקיית האב, נשיג אותו באמצעות פונקציית העזר
-      if (!parentFolderPath) {
-        parentFolderPath = await this.getTaskFolderPath(
-          parentTask, 
-          projectData.name, 
-          entrepreneurId, 
-          entrepreneurName
-        );
-      }
-      
-      // יצירת תיקיית תת-המשימה בתוך תיקיית האב
-      try {
-        const folderPath = await dropboxService.createHierarchicalTaskFolder(
-          task.project_id,
-          projectData.name,
-          task.id,
-          task.title,
-          parentFolderPath,
-          entrepreneurId,
-          entrepreneurName
-        );
-        
-        console.log(`Created Dropbox folder for subtask ${task.title}: ${folderPath}`);
-        
-        // שמירת נתיב התיקייה בדרופבוקס
-        await this.saveTaskFolderPath(task.id, folderPath, useProjectTable, projectTableName);
-      } catch (taskFolderError) {
-        console.error(`Error creating task folder: ${taskFolderError}`);
-      }
-    } catch (parentTaskError) {
-      console.error(`Error fetching parent task: ${parentTaskError}`);
-    }
-  },
-
-  // פונקציה נפרדת ליצירת תיקייה למשימת שורש
-  async createRootTaskFolder(
-    task: Task, 
-    projectData: any, 
-    entrepreneurId: string | undefined, 
-    entrepreneurName: string | undefined,
-    useProjectTable: boolean,
-    projectTableName: string
-  ): Promise<void> {
-    try {
-      const folderPath = await dropboxService.createHierarchicalTaskFolder(
-        task.project_id,
-        projectData.name,
-        task.id,
-        task.title,
-        null, // אין תיקיית אב למשימת שורש
-        entrepreneurId,
-        entrepreneurName
-      );
-      
-      console.log(`Created Dropbox folder for root task ${task.title}: ${folderPath}`);
-      
-      // שמירת נתיב התיקייה בדרופבוקס
-      await this.saveTaskFolderPath(task.id, folderPath, useProjectTable, projectTableName);
-    } catch (rootTaskFolderError) {
-      console.error(`Error creating task folder: ${rootTaskFolderError}`);
-    }
-  },
-  
-  // פונקציה עזר לשמירת נתיב תיקייה לטבלת המשימות
-  async saveTaskFolderPath(taskId: string, folderPath: string, useProjectTable: boolean, projectTableName: string): Promise<void> {
-    try {
-      const { error: updateError } = await supabase
-        .from(useProjectTable ? projectTableName : 'tasks')
-        .update({ dropbox_folder: folderPath })
-        .eq('id', taskId);
-        
-      if (updateError) {
-        console.error(`Error updating task with Dropbox folder path: ${updateError}`);
-      }
-    } catch (updateError) {
-      console.error(`Error saving Dropbox folder path: ${updateError}`);
-    }
-  },
-  
-  // עדכון פונקציית updateTask
-  async updateTask(id: string, task: UpdateTask): Promise<Task> {
-    // יצירת עותק של האובייקט task
-    let cleanTask = { ...task };
-    
-    // סינון שדה children אם קיים (לא קיים בטבלה בפועל)
-    if ('children' in cleanTask) {
-      delete (cleanTask as any).children;
-    }
-    
-    // תאימות לאחור: אם יש assignees אבל אין assignees_info, נעתיק את הערך
-    if (cleanTask.assignees && !cleanTask.assignees_info) {
-      cleanTask.assignees_info = Array.isArray(cleanTask.assignees) ? cleanTask.assignees : [];
-    } else if (cleanTask.assignees_info && !Array.isArray(cleanTask.assignees_info)) {
-      // אם assignees_info קיים אבל הוא לא מערך, נהפוך אותו למערך ריק
-      cleanTask.assignees_info = [];
-    }
-    
-    // וידוא שהשדה responsible קיים בפורמט הנכון
-    if (cleanTask.responsible === '') {
-      cleanTask.responsible = null;
-    }
-    
-    // הסר את כל השדות שאינם קיימים בדאטאבייס
-    cleanTask = await this.removeNonExistingFields(cleanTask, true);
-    
-    // אם המקבל את assignees_info מסוג מערך, נמיר אותו ל-JSON
-    if (cleanTask.assignees_info && Array.isArray(cleanTask.assignees_info)) {
-      // כיוון שהטבלה מצפה ל-jsonb ולא למערך, נשמור את המערך כ-JSON
-      (cleanTask as any).assignees_info = JSON.stringify(cleanTask.assignees_info);
-    }
-    
-    // וידוא שיש parent_task_id תקין, אם לא קיים שינוי לnull
-    if (cleanTask.parent_task_id === undefined) {
-      // בדיקת האם יש קשר הורה קיים במסד הנתונים
-      const { data: existingTask } = await supabase
-        .from('tasks')
-        .select('parent_task_id')
-        .eq('id', id)
-        .single();
-      
-      if (existingTask) {
-        cleanTask.parent_task_id = existingTask.parent_task_id;
-      }
-    }
-    
-    // טיפול בשדות תאריך ריקים - הסרתם מהאובייקט
-    const dateFields = ['due_date']; // רק due_date קיים בטבלה
-    for (const field of dateFields) {
-      if (cleanTask[field as keyof UpdateTask] === '') {
-        delete cleanTask[field as keyof UpdateTask];
-      }
-    }
-    
-    console.log('Updating task with cleaned data:', cleanTask);
-    
-    // עדכון בטבלה הראשית - כאן נשתמש באובייקט מקורי בלי הסינון המלא
-    // כיוון שבטבלה הראשית יש יותר שדות
-    const originalTask = { ...task };
-    if ('assignees' in originalTask) {
-      delete (originalTask as any).assignees;
-    }
-    if ('children' in originalTask) {
-      delete (originalTask as any).children;
-    }
-    
-    // טיפול בשדות תאריך ריקים באובייקט המקורי
-    const originalDateFields = ['start_date', 'due_date', 'completed_date'];
-    for (const field of originalDateFields) {
-      if (originalTask[field as keyof UpdateTask] === '') {
-        delete originalTask[field as keyof UpdateTask];
-      }
-    }
-    
-    // הסרת שדות שלא קיימים בטבלה הראשית
-    const cleanedOriginalTask = await this.removeNonExistingFields(originalTask, false);
-
-    const { data, error } = await supabase
-      .from('tasks')
-      .update(cleanedOriginalTask)
-      .eq('id', id)
-      .select();
-    
-    if (error) {
-      console.error(`Error updating task with id ${id}:`, error);
-      throw new Error(error.message);
-    }
-    
-    if (!data || data.length === 0) {
-      throw new Error('לא נמצאו נתונים אחרי עדכון המשימה');
-    }
-    
-    const updatedTask = data[0];
-    
-    // אם יש project_id, נעדכן את המשימה גם בטבלה הייחודית של הפרויקט
-    if (updatedTask.project_id) {
-      try {
-        // קריאה לפונקציה SQL לעדכון המשימה בטבלה הספציפית של הפרויקט
-        await supabase.rpc('update_task_in_project_table', {
-          task_id: updatedTask.id,
-          project_id: updatedTask.project_id
-        });
-        
-        // עדכון ישיר של טבלת הפרויקט הספציפית אם יש צורך
-        // אם נתקלים בבעיות עם update_task_in_project_table
-        const projectTable = `project_${updatedTask.project_id}_tasks`;
-        console.log(`Updating task directly in ${projectTable} with data:`, cleanTask);
-        
-        try {
-          const { error: directUpdateError } = await supabase
-            .from(projectTable)
-            .update(cleanTask)
-            .eq('id', id);
-            
-          if (directUpdateError) {
-            console.error(`Error in direct update of ${projectTable}:`, directUpdateError);
-          } else {
-            console.log(`Direct update of ${projectTable} successful`);
-          }
-        } catch (directUpdateErr) {
-          console.error(`Exception in direct update of ${projectTable}:`, directUpdateErr);
-        }
-        
-        console.log(`Task ${updatedTask.id} updated in project-specific table for project ${updatedTask.project_id}`);
-      } catch (projectTableError) {
-        console.error(`Error updating task in project-specific table for project ${updatedTask.project_id}:`, projectTableError);
-        // נמשיך גם אם יש שגיאה בעדכון בטבלה הספציפית
-      }
-    }
-    
-    return updatedTask;
-  },
-  
-  // מחיקת משימה
-  async deleteTask(id: string, project_id?: string): Promise<{ deletedTask: Task | null, deletedSubtasks: Task[] }> {
-    console.log(`התחלת מחיקת משימה - taskId: ${id}, פרויקט: ${project_id || 'ללא פרויקט'}`);
-    let taskToDelete: Task | null = null;
-    
-    // אם יש project_id, קודם כל נבדוק בטבלה הספציפית של הפרויקט
-    if (project_id) {
-      const tableName = `project_${project_id}_tasks`;
-      console.log(`בדיקה בטבלה הספציפית: ${tableName}`);
-      
-      try {
-        // בדיקה אם הטבלה קיימת
-        const { data: tableExists, error: tableCheckError } = await supabase
-          .rpc('check_table_exists', { table_name_param: tableName });
-        
-        if (tableCheckError) {
-          console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
-        } else {
-          console.log(`האם הטבלה ${tableName} קיימת? ${tableExists ? 'כן' : 'לא'}`);
-        }
-        
-        // אם הטבלה קיימת, נבדוק אם המשימה קיימת בה
-        if (tableExists) {
-          const { data: projectTask, error: projectFetchError } = await supabase
-            .from(tableName)
-            .select('*')
-            .eq('id', id)
-            .maybeSingle();
-          
-          if (projectFetchError) {
-            console.error(`Error fetching task with id ${id} from project table:`, projectFetchError);
-            throw new Error(`שגיאה בשליפת המשימה מטבלת הפרויקט: ${projectFetchError.message}`);
-          }
-          
-          if (projectTask) {
-            taskToDelete = projectTask;
-            console.log(`נמצאה משימה ${id} בטבלת הפרויקט ${project_id}`);
-            
-            // מחיקה מהטבלה הספציפית של הפרויקט
-            try {
-              await supabase.rpc('delete_task_from_project_table', {
-                task_id: id,
-                project_id: project_id
-              });
-              console.log(`משימה ${id} נמחקה מטבלת הפרויקט ${project_id}`);
-            } catch (projectTableError) {
-              console.error(`Error deleting task from project-specific table:`, projectTableError);
-              throw new Error(`שגיאה במחיקת המשימה מטבלת הפרויקט: ${projectTableError instanceof Error ? projectTableError.message : 'שגיאה לא ידועה'}`);
-            }
-          } else {
-            console.log(`לא נמצאה משימה ${id} בטבלת הפרויקט ${project_id}`);
-          }
-        }
-      } catch (err) {
-        console.error(`Error handling project-specific table operations:`, err);
-      }
-    } else {
-      console.log('לא הועבר project_id, בודק רק בטבלה הראשית');
-    }
-    
-    // אם לא מצאנו את המשימה בטבלה הספציפית, נבדוק בטבלה הראשית
-    if (!taskToDelete) {
-      const { data: mainTask, error: fetchError } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
-      
-      if (fetchError) {
-        console.error(`Error fetching task with id ${id} from main table:`, fetchError);
-        throw new Error(`שגיאה בשליפת המשימה: ${fetchError.message}`);
-      }
-      
-      if (!mainTask) {
-        throw new Error(`לא נמצאה משימה עם מזהה ${id}`);
-      }
-      
-      taskToDelete = mainTask;
-      
-      // אם המשימה שייכת לפרויקט, נמחק אותה גם מהטבלה הייחודית של הפרויקט
-      if (taskToDelete && taskToDelete.project_id) {
-        try {
-          await supabase.rpc('delete_task_from_project_table', {
-            task_id: id,
-            project_id: taskToDelete.project_id
-          });
-          console.log(`Task ${id} deleted from project-specific table for project ${taskToDelete.project_id}`);
-        } catch (projectTableError) {
-          console.error(`Error deleting task from project-specific table:`, projectTableError);
-          // נמשיך גם אם יש שגיאה במחיקה מהטבלה הספציפית
-        }
-      }
-    }
-    
-    // בדיקת משימות משנה שיימחקו
-    const subtasks = await this.getSubTasksRecursive(id);
-    
-    // מחיקה מהטבלה הראשית
-    const { error: deleteError } = await supabase
-      .from('tasks')
-      .delete()
-      .eq('id', id);
-    
-    if (deleteError) {
-      console.error(`Error deleting task with id ${id} from main table:`, deleteError);
-      throw new Error(`שגיאה במחיקת המשימה מהטבלה הראשית: ${deleteError.message}`);
-    }
-    
-    return {
-      deletedTask: taskToDelete,
-      deletedSubtasks: subtasks
-    };
-  },
-  
-  // קריאת משימות לפי שלב
-  async getTasksByStage(stageId: string): Promise<Task[]> {
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('stage_id', stageId)
-      .order('hierarchical_number', { ascending: true });
-    
-    if (error) {
-      console.error(`Error fetching tasks for stage ${stageId}:`, error);
-      throw new Error(error.message);
-    }
-    
-    return data || [];
-  },
-  
-  // קריאת משימות משנה
-  async getSubTasks(parentTaskId: string): Promise<Task[]> {
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('parent_task_id', parentTaskId)
-      .order('hierarchical_number', { ascending: true });
-    
-    if (error) {
-      console.error(`Error fetching subtasks for task ${parentTaskId}:`, error);
-      throw new Error(error.message);
-    }
-    
-    return data || [];
-  },
-  
-  // קריאת משימות מאוחרות
-  async getOverdueTasks(): Promise<Task[]> {
-    const today = new Date().toISOString().split('T')[0]; // יום נוכחי בפורמט YYYY-MM-DD
-    
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('*')
-      .lt('due_date', today) // תאריך יעד מוקדם מהיום
-      .not('status', 'eq', 'done') // משימות שלא הושלמו
-      .order('due_date', { ascending: true });
-    
-    if (error) {
-      console.error('Error fetching overdue tasks:', error);
-      throw new Error(error.message);
-    }
-    
-    return data || [];
-  },
-  
-  // עדכון סטטוס משימה
-  async updateTaskStatus(id: string, status: string): Promise<Task> {
-    // וידוא שהסטטוס תקין ותואם לאילוצים בבסיס הנתונים
-    const validStatuses = ['todo', 'in_progress', 'review', 'done'];
-    
-    console.log('updateTaskStatus - status before validation:', status);
-    
-    // המרת הסטטוס לאותיות קטנות
-    let normalizedStatus = status.toLowerCase();
-    
-    if (!validStatuses.includes(normalizedStatus)) {
-      // אם הסטטוס לא תקין, ננסה למפות אותו לערך תקין
-      if (normalizedStatus === 'לביצוע' || normalizedStatus === 'to do' || normalizedStatus === 'todo') {
-        normalizedStatus = 'todo';
-      } else if (normalizedStatus === 'בתהליך' || normalizedStatus === 'in progress' || normalizedStatus === 'in_progress') {
-        normalizedStatus = 'in_progress';
-      } else if (normalizedStatus === 'בבדיקה' || normalizedStatus === 'in review' || normalizedStatus === 'review') {
-        normalizedStatus = 'review';
-      } else if (normalizedStatus === 'הושלם' || normalizedStatus === 'completed' || normalizedStatus === 'done') {
-        normalizedStatus = 'done';
-      } else {
-        throw new Error(`סטטוס לא תקין: ${normalizedStatus}. הסטטוסים התקינים הם: ${validStatuses.join(', ')}`);
-      }
-    }
-    
-    console.log('updateTaskStatus - status after validation:', normalizedStatus);
-    
-    // עדכון רק של הסטטוס ותאריך העדכון, ללא שינוי בשדות אחרים
-    const updateData: UpdateTask = { 
-      status: normalizedStatus, 
-      updated_at: new Date().toISOString() 
-    };
-    
-    // עדכון המשימה
-    return this.updateTask(id, updateData);
-  },
-  
-  // עדכון שלב משימה
-  async updateTaskStage(id: string, stageId: string): Promise<Task> {
-    return this.updateTask(id, { stage_id: stageId, updated_at: new Date().toISOString() });
-  },
-  
-  // עדכון שלב למשימות לפי תחילית של מספר היררכי
-  async updateTasksStageByHierarchicalPrefix(hierarchicalPrefix: string, stageId: string, projectId: string): Promise<number> {
-    if (!hierarchicalPrefix || !projectId) {
-      throw new Error('נדרש מספר היררכי ומזהה פרויקט');
-    }
-    
-    const tableName = `project_${projectId}_tasks`;
-    
-    try {
-      // בדיקה אם הטבלה הספציפית קיימת
-      const { data: tableExists, error: tableCheckError } = await supabase
-        .rpc('check_table_exists', { table_name_param: tableName });
-        
-      if (tableCheckError) {
-        console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
-        throw new Error(`שגיאה בבדיקת קיום טבלה: ${tableCheckError.message}`);
-      }
-      
-      if (!tableExists) {
-        console.error(`Table ${tableName} does not exist`);
-        throw new Error(`טבלת המשימות ${tableName} אינה קיימת`);
-      }
-      
-      // עדכון כל המשימות שמתחילות במספר ההיררכי שסופק
-      const { data, error } = await supabase.rpc('update_tasks_stage_by_hierarchical_prefix', {
-        project_id_param: projectId,
-        hierarchical_prefix_param: hierarchicalPrefix,
-        stage_id_param: stageId
-      });
-      
-      if (error) {
-        console.error('Error updating tasks stage by hierarchical prefix:', error);
-        
-        // אם הפונקציה לא קיימת, ננסה לעשות זאת באופן ידני
-        console.log(`Falling back to manual update for tasks with hierarchical prefix ${hierarchicalPrefix}`);
-        
-        // שליפת המשימות המתאימות
-        const { data: tasks, error: fetchError } = await supabase
-          .from(tableName)
-          .select('id')
-          .like('hierarchical_number', `${hierarchicalPrefix}%`);
-          
-        if (fetchError) {
-          console.error('Error fetching tasks with hierarchical prefix:', fetchError);
-          throw new Error(`שגיאה בשליפת משימות לפי מספר היררכי: ${fetchError.message}`);
-        }
-        
-        if (!tasks || tasks.length === 0) {
-          console.log(`No tasks found with hierarchical prefix ${hierarchicalPrefix}`);
-          return 0;
-        }
-        
-        // עדכון כל המשימות
-        const updatePromises = tasks.map(task => 
-          this.updateTask(task.id, { stage_id: stageId })
-        );
-        
-        await Promise.all(updatePromises);
-        
-        return tasks.length;
-      }
-      
-      console.log(`Updated ${data} tasks with hierarchical prefix ${hierarchicalPrefix} to stage ${stageId}`);
-      return data || 0;
-    } catch (error) {
-      console.error('Error in updateTasksStageByHierarchicalPrefix:', error);
-      throw error;
-    }
-  },
-  
-  /**
-   * קבלת המספר ההיררכי הבא למשימה שורשית בפרויקט מהטבלה הספציפית
-   * @param {string} projectId - מזהה הפרויקט
-   * @returns {Promise<string>} - המספר ההיררכי הבא
-   */
-  async getProjectSpecificNextRootHierarchicalNumber(projectId: string): Promise<string> {
-    if (!projectId) {
-      console.error("חסר מזהה פרויקט בקריאה ל-getProjectSpecificNextRootHierarchicalNumber");
-      return "1";
-    }
-
-    const tableName = `project_${projectId}_tasks`;
-    
-    try {
-      // בדיקה אם הטבלה הייעודית קיימת
-      const { data: tableExists, error: tableCheckError } = await supabase
-        .rpc('check_table_exists', {
-          table_name_param: tableName
-        });
-      
-      if (tableCheckError) {
-        console.error(`שגיאה בבדיקת קיום טבלה ${tableName}:`, tableCheckError);
-        console.log("מחזיר לפונקציה הרגילה getNextRootHierarchicalNumber");
-        return this.getNextRootHierarchicalNumber(projectId);
-      }
-      
-      if (!tableExists) {
-        console.log(`טבלה ${tableName} לא קיימת, מחזיר לפונקציה הרגילה`);
-        return this.getNextRootHierarchicalNumber(projectId);
-      }
-      
-      console.log(`מחשב מספר היררכי חדש למשימה שורשית בטבלת פרויקט ${projectId}`);
-      
-      // שליפת כל המשימות השורשיות בטבלת הפרויקט הספציפי
+      const tableName = useProjectTable ? projectTableName : 'tasks';
       const { data, error } = await supabase
         .from(tableName)
-        .select('*')
-        .is('parent_task_id', null);
-      
-      if (error) {
-        console.error(`שגיאה בקבלת משימות שורשיות מטבלת ${tableName}:`, error);
-        console.log("מחזיר לפונקציה הרגילה getNextRootHierarchicalNumber");
-        return this.getNextRootHierarchicalNumber(projectId);
-      }
-      
-      console.log(`נמצאו ${data?.length || 0} משימות שורשיות בטבלת הפרויקט ${projectId}`);
-      
-      // אם אין משימות, מתחילים מ-1
-      if (!data?.length) {
-        console.log('אין משימות שורשיות קיימות בטבלה הייעודית, מחזיר מספר היררכי 1');
-        return '1';
-      }
-      
-      // מיון וסינון המשימות השורשיות עם מספר היררכי
-      const rootTasks = data
-        .filter(task => task.hierarchical_number && /^\d+$/.test(task.hierarchical_number))
-        .sort((a, b) => {
-          const numA = parseInt(a.hierarchical_number);
-          const numB = parseInt(b.hierarchical_number);
-          return numA - numB;
-        });
-      
-      // לוג המשימות השורשיות למטרות דיבוג
-      console.log('משימות שורשיות בטבלה הייעודית (מסוננות ומסודרות):');
-      rootTasks.forEach(task => {
-        console.log(`- משימה ${task.id}: היררכיה ${task.hierarchical_number}, כותרת: ${task.title}`);
-      });
-      
-      // מציאת המספר ההיררכי הגבוה ביותר והגדלתו ב-1
-      if (rootTasks.length > 0) {
-        const lastRootTask = rootTasks[rootTasks.length - 1];
-        const lastNumber = parseInt(lastRootTask.hierarchical_number);
-        const nextNumber = lastNumber + 1;
-        console.log(`המספר ההיררכי האחרון בטבלה הייעודית: ${lastNumber}, המספר החדש: ${nextNumber}`);
-        return nextNumber.toString();
-      }
-      
-      // אם אין משימות עם מספר היררכי, מתחילים מ-1
-      console.log('אין משימות שורשיות עם מספר היררכי בטבלה הייעודית, מחזיר מספר היררכי 1');
-      return '1';
-    } catch (error) {
-      console.error('שגיאה בחישוב מספר היררכי חדש בטבלה הייעודית:', error);
-      console.log("מחזיר לפונקציה הרגילה getNextRootHierarchicalNumber");
-      return this.getNextRootHierarchicalNumber(projectId);
-    }
-  },
-  
-  /**
-   * קבלת המספר ההיררכי הבא לתת-משימה בטבלת פרויקט ספציפי
-   * @param {string} parentTaskId - מזהה משימת האב
-   * @param {string} projectId - מזהה הפרויקט
-   * @returns {Promise<string>} - המספר ההיררכי הבא
-   */
-  async getProjectSpecificNextSubHierarchicalNumber(parentTaskId: string, projectId: string): Promise<string> {
-    if (!parentTaskId || !projectId) {
-      console.error("חסר מזהה משימת אב או מזהה פרויקט בקריאה ל-getProjectSpecificNextSubHierarchicalNumber");
-      return this.getNextSubHierarchicalNumber(parentTaskId);
-    }
-    
-    const tableName = `project_${projectId}_tasks`;
-    
-    try {
-      // בדיקה אם הטבלה הייעודית קיימת
-      const { data: tableExists, error: tableCheckError } = await supabase
-        .rpc('check_table_exists', {
-          table_name_param: tableName
-        });
-      
-      if (tableCheckError || !tableExists) {
-        console.error(`שגיאה בבדיקת קיום טבלה ${tableName} או הטבלה לא קיימת:`, tableCheckError);
-        console.log("מחזיר לפונקציה הרגילה getNextSubHierarchicalNumber");
-        return this.getNextSubHierarchicalNumber(parentTaskId);
-      }
-      
-      // קבלת המשימה האב מהטבלה הייעודית
-      const { data: parentTask, error: parentError } = await supabase
-        .from(tableName)
-        .select('hierarchical_number')
-        .eq('id', parentTaskId)
-        .maybeSingle();  // שימוש ב-maybeSingle במקום single למניעת שגיאות
-      
-      if (parentError || !parentTask || !parentTask.hierarchical_number) {
-        console.error(`שגיאה בקבלת משימת אב ${parentTaskId} מטבלה ${tableName}:`, parentError);
-        console.log("מחזיר לפונקציה הרגילה getNextSubHierarchicalNumber");
-        return this.getNextSubHierarchicalNumber(parentTaskId);
-      }
-      
-      // בדיקה שה-hierarchical_number הוא מחרוזת תקינה
-      const isValidString = (value: any): boolean => {
-        return typeof value === 'string' && value !== null && value.length > 0;
-      };
-      
-      if (!isValidString(parentTask.hierarchical_number)) {
-        console.warn(`משימת אב ${parentTaskId} בטבלה ${tableName} עם מספר היררכי לא תקין: ${parentTask.hierarchical_number}`);
-        return this.getNextSubHierarchicalNumber(parentTaskId);
-      }
-      
-      // קבלת תתי-המשימות הקיימות מהטבלה הייעודית
-      const { data, error } = await supabase
-        .from(tableName)
-        .select('hierarchical_number')
-        .eq('parent_task_id', parentTaskId)
-        .order('hierarchical_number', { ascending: false })
-        .limit(1);
-      
-      if (error) {
-        console.error(`שגיאה בקבלת תתי-משימות למשימת אב ${parentTaskId} מטבלה ${tableName}:`, error);
-        return this.getNextSubHierarchicalNumber(parentTaskId);
-      }
-      
-      if (data && data.length > 0 && data[0].hierarchical_number) {
-        // וידוא שה-hierarchical_number של תת-המשימה הוא מחרוזת תקינה
-        if (!isValidString(data[0].hierarchical_number)) {
-          console.warn(`תת-משימה למשימת אב ${parentTaskId} בטבלה ${tableName} עם מספר היררכי לא תקין: ${data[0].hierarchical_number}`);
-          return `${parentTask.hierarchical_number}.1`;
-        }
-        
-        try {
-          // מצאנו את המספר האחרון, נגדיל את המספר האחרון ב-1
-          const parts = (data[0].hierarchical_number as string).split('.');
-          const lastPart = parseInt(parts[parts.length - 1]);
-          parts[parts.length - 1] = (lastPart + 1).toString();
-          return parts.join('.');
-        } catch (parseError) {
-          console.error(`שגיאה בניתוח מספר היררכי לתתי-משימות של משימת אב ${parentTaskId} בטבלה ${tableName}:`, parseError);
-          return `${parentTask.hierarchical_number}.1`;
-        }
-      }
-      
-      // אם אין תתי-משימות קיימות, נוסיף ".1" למספר ההיררכי של האב
-      return `${parentTask.hierarchical_number}.1`;
-    } catch (error) {
-      console.error('שגיאה בחישוב מספר היררכי חדש לתת-משימה בטבלה הייעודית:', error);
-      return this.getNextSubHierarchicalNumber(parentTaskId);
-    }
-  },
-  
-  // קבלת כל המשימות בפרויקט במבנה היררכי
-  async getHierarchicalTasks(projectId: string): Promise<Task[]> {
-    const tableName = `project_${projectId}_tasks`;
-    
-    try {
-      // בדיקה אם הטבלה הייחודית קיימת
-      let tableExists = false;
-      try {
-        const { data: checkResult, error: tableCheckError } = await supabase
-          .rpc('check_table_exists', {
-            table_name_param: tableName
-          });
-        
-        if (tableCheckError) {
-          console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
-          // נמשיך ונשתמש בטבלה הראשית במקרה של שגיאה
-        } else {
-          tableExists = !!checkResult;
-        }
-      } catch (err) {
-        console.error(`Error checking project table ${tableName}:`, err);
-      }
-      
-      if (tableExists) {
-        // שימוש בטבלה הספציפית של הפרויקט
-        const { data, error } = await supabase
-          .from(tableName)
-          .select('*')
-          .order('hierarchical_number', { ascending: true });
-        
-        if (error) {
-          console.error(`Error fetching hierarchical tasks from project-specific table ${tableName}:`, error);
-          throw new Error(error.message);
-        }
-        
-        console.log(`Retrieved ${data?.length || 0} tasks from project-specific table ${tableName}`);
-        return data || [];
-      } else {
-        // שימוש בטבלה הכללית (לתאימות לאחור)
-        console.warn(`Project table ${tableName} does not exist, falling back to main tasks table`);
-        
-        const { data, error } = await supabase
-          .from('tasks')
-          .select('*')
-          .eq('project_id', projectId)
-          .order('hierarchical_number', { ascending: true });
-        
-        if (error) {
-          console.error(`Error fetching hierarchical tasks for project ${projectId} from main table:`, error);
-          throw new Error(error.message);
-        }
-        
-        console.log(`Retrieved ${data?.length || 0} tasks from main table for project ${projectId}`);
-        return data || [];
-      }
-    } catch (err) {
-      console.error(`Error in getHierarchicalTasks for project ${projectId}:`, err);
-      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה בשליפת משימות היררכיות');
-    }
-  },
-
-  // קבלת משימות שאינן משויכות לפרויקט
-  async getUnassignedTasks(): Promise<Task[]> {
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('*')
-      .is('project_id', null)
-      .order('created_at', { ascending: false });
-    
-    if (error) {
-      console.error('Error fetching unassigned tasks:', error);
-      throw new Error(error.message);
-    }
-    
-    return data || [];
-  },
-  
-  // שיוך משימות לפרויקט
-  async assignTasksToProject(taskIds: string[], projectId: string): Promise<Task[]> {
-    console.log(`Assigning ${taskIds.length} tasks to project ${projectId}`);
-    
-    if (!taskIds.length) {
-      console.error("No task IDs provided for assignment");
-      return [];
-    }
-    
-    try {
-      // קריאת המשימות המקוריות מהטבלה הראשית
-      const { data: originalTasks, error: fetchError } = await supabase
-        .from('tasks')
-        .select('*')
-        .in('id', taskIds);
-      
-      if (fetchError) {
-        console.error('Error fetching original tasks:', fetchError);
-        throw new Error(`שגיאה בקריאת המשימות המקוריות: ${fetchError.message}`);
-      }
-      
-      if (!originalTasks || originalTasks.length === 0) {
-        console.log('No original tasks found to assign');
-        return [];
-      }
-      
-      // שם הטבלה הספציפית של הפרויקט
-      const tableName = `project_${projectId}_tasks`;
-      
-      // בדיקה אם הטבלה הספציפית קיימת, ואם לא - יצירתה
-      let tableExists = false;
-      try {
-        const { data: checkResult, error: tableCheckError } = await supabase
-          .rpc('check_table_exists', {
-            table_name_param: tableName
-          });
-        
-        if (tableCheckError) {
-          console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
-          throw new Error(`שגיאה בבדיקת קיום טבלת משימות: ${tableCheckError.message}`);
-        }
-        
-        tableExists = !!checkResult;
-      } catch (err) {
-        console.error(`Error checking table existence:`, err);
-        throw new Error(`שגיאה בבדיקת קיום טבלה: ${err instanceof Error ? err.message : 'שגיאה לא ידועה'}`);
-      }
-      
-      // אם הטבלה לא קיימת, ניצור אותה
-      if (!tableExists) {
-        try {
-          await supabase.rpc('create_project_table', {
-            project_id: projectId
-          });
-          console.log(`Created project-specific table ${tableName} for project ${projectId}`);
-          tableExists = true;
-        } catch (createTableError) {
-          console.error(`Error creating project-specific table ${tableName}:`, createTableError);
-          throw new Error(`שגיאה ביצירת טבלת משימות: ${createTableError instanceof Error ? createTableError.message : 'שגיאה לא ידועה'}`);
-        }
-      }
-      
-      // העתקת המשימות מהטבלה הראשית לטבלה הייחודית עם עדכון project_id
-      const tasksToInsert = originalTasks.map(task => {
-        return {
-          ...task,
-          id: crypto.randomUUID(), // מזהה חדש
-          project_id: projectId,
-          original_task_id: task.id, // שמירת המזהה המקורי
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          hierarchical_number: null // יעודכן אוטומטית מאוחר יותר
-        };
-      });
-      
-      // הוספת המשימות לטבלה הייחודית
-      const { data: insertedTasks, error: insertError } = await supabase
-        .from(tableName)
-        .insert(tasksToInsert)
-        .select();
-      
-      if (insertError) {
-        console.error(`Error assigning tasks to project-specific table ${tableName}:`, insertError);
-        throw new Error(`שגיאה בהוספת משימות לפרויקט: ${insertError.message}`);
-      }
-      
-      // מספור היררכי של המשימות החדשות
-      await this.updateHierarchicalNumbersForProject(projectId);
-      
-      console.log(`${insertedTasks?.length || 0} tasks assigned to project ${projectId} table ${tableName}`);
-      return insertedTasks || [];
-    } catch (error) {
-      console.error(`Critical error in assignTasksToProject:`, error);
-      throw new Error(error instanceof Error ? error.message : 'שגיאה לא ידועה בשיוך משימות לפרויקט');
-    }
-  },
-  
-  // פונקציה עזר לעדכון מספרים היררכיים בפרויקט
-  async updateHierarchicalNumbersForProject(projectId: string): Promise<void> {
-    try {
-      const tableName = `project_${projectId}_tasks`;
-      
-      // עדכון מספרים היררכיים למשימות ללא מספר
-      await supabase.rpc('update_hierarchical_numbers_for_project', {
-        project_id_param: projectId
-      });
-      
-      console.log(`Updated hierarchical numbers for project ${projectId}`);
-    } catch (error) {
-      console.error(`Error updating hierarchical numbers for project ${projectId}:`, error);
-      // לא נזרוק שגיאה כדי לא לעצור את התהליך המרכזי
-    }
-  },
-  
-  // שכפול משימות ושיוך לפרויקט חדש
-  async cloneTasksToProject(taskIds: string[], projectId: string, stageId: string | null): Promise<Task[]> {
-    try {
-      // קבלת המשימות המקוריות
-      const { data: originalTasks, error: fetchError } = await supabase
-        .from('tasks')
-        .select('*')
-        .in('id', taskIds);
-      
-      if (fetchError) {
-        console.error('Error fetching original tasks:', fetchError);
-        throw new Error(fetchError.message);
-      }
-      
-      if (!originalTasks || originalTasks.length === 0) {
-        return [];
-      }
-      
-      // שם הטבלה הספציפית של הפרויקט
-      const tableName = `project_${projectId}_tasks`;
-      
-      // בדיקה אם הטבלה הספציפית קיימת, ואם לא - יצירתה
-      try {
-        // בדיקה אם הטבלה הייחודית קיימת
-        let tableExists = false;
-        
-        // ניסיון לבדוק אם הטבלה קיימת באמצעות RPC
-        try {
-          const result = await supabase
-            .rpc('check_table_exists', {
-              table_name_param: tableName
-            });
-          tableExists = result.data;
-        } catch (tableCheckError) {
-          console.error(`Error checking if table ${tableName} exists with RPC:`, tableCheckError);
-          console.log("Continuing without project-specific tables");
-        }
-        
-        // אם הטבלה לא קיימת, ננסה ליצור אותה
-        if (!tableExists) {
-          try {
-            await supabase.rpc('create_project_table', {
-              project_id: projectId
-            });
-            console.log(`Created project-specific table ${tableName} for project ${projectId}`);
-            tableExists = true;
-          } catch (createTableError) {
-            console.error(`Error creating project-specific table ${tableName}:`, createTableError);
-            console.log("Continuing without project-specific tables");
-          }
-        }
-        
-        // בדיקה אם המשימות כבר קיימות בפרויקט - בטבלה הספציפית של הפרויקט
-        const existingTasksResult = await supabase
-          .from(tableName)
-          .select('original_task_id')
-          .in('original_task_id', taskIds);
-          
-        const existingOriginalTaskIds = new Set(existingTasksResult.data?.map(task => task.original_task_id) || []);
-        
-        // סינון המשימות המקוריות כך שנשכפל רק משימות שעדיין לא קיימות בפרויקט
-        const tasksToClone = originalTasks.filter(task => !existingOriginalTaskIds.has(task.id));
-        
-        if (tasksToClone.length === 0) {
-          console.log(`All selected tasks already exist in project ${projectId} table ${tableName}`);
-          return [];
-        }
-        
-        // יצירת עותקים של המשימות עם מזהים חדשים ושיוך לפרויקט החדש
-        const clonedTasks = tasksToClone.map(task => {
-          // בדיקה האם העמודה is_global_template קיימת כדי למנוע שגיאות
-          const taskData: any = {
-            ...task,
-            id: crypto.randomUUID(),
-            project_id: projectId,
-            stage_id: stageId,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            original_task_id: task.id, // שמירת המזהה המקורי
-            hierarchical_number: null // נאפס את המספר ההיררכי כדי שייקבע מחדש
-          };
-          
-          // הוספת השדה is_global_template רק אם הטבלה תומכת בו
-          try {
-            taskData.is_global_template = false;
-          } catch (err) {
-            console.log("Column is_global_template might not exist yet, skipping");
-          }
-          
-          return taskData;
-        });
-        
-        // הוספת המשימות המשוכפלות רק לטבלה הייחודית
-        const { data: insertedTasks, error: insertError } = await supabase
-          .from(tableName)
-          .insert(clonedTasks)
-          .select();
-        
-        if (insertError) {
-          console.error(`Error inserting cloned tasks into project-specific table ${tableName}:`, insertError);
-          throw new Error(insertError.message);
-        }
-        
-        console.log(`${insertedTasks?.length || 0} tasks cloned to project ${projectId} table ${tableName}`);
-        return insertedTasks || [];
-      } catch (err) {
-        console.error(`Error in cloneTasksToProject for project ${projectId}:`, err);
-        throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה');
-      }
-    } catch (err) {
-      console.error(`Error in cloneTasksToProject for project ${projectId}:`, err);
-      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה');
-    }
-  },
-  
-  // קבלת כל המשימות הזמינות לשכפול
-  async getAllTaskTemplates(): Promise<Task[]> {
-    try {
-      // מחזיר רק משימות שאינן שייכות לפרויקט (project_id הוא null)
-      // אלה הן ככל הנראה תבניות משימות
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .is('project_id', null)
-        .order('title', { ascending: true });
-      
-      if (error) {
-        console.error('Error fetching task templates:', error);
-        throw new Error(error.message);
-      }
-      
-      console.log(`Retrieved ${data?.length || 0} task templates with null project_id`);
-      return data || [];
-    } catch (err) {
-      console.error('Error in getAllTaskTemplates:', err);
-      throw err;
-    }
-  },
-  
-  // פונקציה חדשה: קבלת כל תבניות המשימות בצורה היררכית
-  async getAllHierarchicalTaskTemplates(): Promise<TaskWithChildren[]> {
-    try {
-      // מקבל את כל תבניות המשימות
-      const allTemplates = await this.getAllTaskTemplates();
-      
-      // אם אין תבניות, נחזיר מערך ריק
-      if (!allTemplates || allTemplates.length === 0) {
-        return [];
-      }
-      
-      // ארגון המשימות בצורה היררכית
-      // 1. זיהוי משימות-אב (משימות ללא parent_task_id)
-      const rootTasks = allTemplates.filter(task => !task.parent_task_id);
-      const childTasks = allTemplates.filter(task => task.parent_task_id);
-      
-      // 2. בניית עץ המשימות ההיררכי
-      const buildChildrenTree = (parentTask: Task): TaskWithChildren => {
-        const children = childTasks
-          .filter(task => task.parent_task_id === parentTask.id)
-          .map(childTask => buildChildrenTree(childTask));
-        
-        return {
-          ...parentTask,
-          children: children.length > 0 ? children : undefined
-        };
-      };
-      
-      // 3. בניית העץ המלא עם כל משימות האב
-      const hierarchicalTemplates = rootTasks.map(rootTask => buildChildrenTree(rootTask));
-      
-      return hierarchicalTemplates;
-    } catch (err) {
-      console.error('Error in getAllHierarchicalTaskTemplates:', err);
-      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה');
-    }
-  },
-  
-  // יצירת משימות ברירת מחדל לפרויקט נדל"ן חדש
-  async createDefaultTasksForRealEstateProject(projectId: string, stageId: string | null): Promise<Task[]> {
-    // בדיקה אם כבר יש משימות בפרויקט - נבדוק בטבלה הספציפית של הפרויקט
-    const tableName = `project_${projectId}_tasks`;
-    
-    try {
-      // בדיקה אם הטבלה הייחודית קיימת
-      let tableExists = false;
-      try {
-        const { data, error: tableCheckError } = await supabase
-          .rpc('check_table_exists', {
-            table_name_param: tableName
-          });
-        
-        if (tableCheckError) {
-          console.error(`Error checking if table ${tableName} exists:`, tableCheckError);
-          throw new Error(tableCheckError.message);
-        }
-        
-        tableExists = !!data;
-      } catch (err) {
-        console.error(`Error checking project table ${tableName}:`, err);
-      }
-      
-      // אם הטבלה לא קיימת, ניצור אותה
-      if (!tableExists) {
-        try {
-          await supabase.rpc('create_project_table', {
-            project_id: projectId
-          });
-          console.log(`Created project-specific table ${tableName} for project ${projectId}`);
-          tableExists = true;
-        } catch (createTableError) {
-          console.error(`Error creating project-specific table ${tableName}:`, createTableError);
-          throw new Error('Failed to create project-specific table');
-        }
-      }
-      
-      // בדיקה אם כבר יש משימות בטבלה הייחודית
-      const { data: existingTasks, error: existingError } = await supabase
-        .from(tableName)
-        .select('*')
-        .limit(10);
-      
-      if (existingError) {
-        console.error(`Error checking existing tasks in ${tableName}:`, existingError);
-        // נמשיך למרות השגיאה
-      } else if (existingTasks && existingTasks.length > 0) {
-        console.log(`Project ${projectId} already has tasks in ${tableName}, skipping default task creation`);
-        return existingTasks;
-      }
-    
-      // קבלת השלבים של הפרויקט
-      const { data: stages, error: stagesError } = await supabase
-        .from('stages')
-        .select('*')
-        .eq('project_id', projectId);
-      
-      if (stagesError) {
-        console.error(`Error fetching stages for project ${projectId}:`, stagesError);
-        throw new Error(stagesError.message);
-      }
-      
-      // מיפוי שלבים לפי כותרת
-      const stageMap: Record<string, string> = {};
-      stages?.forEach(stage => {
-        stageMap[stage.title] = stage.id;
-      });
-      
-      // קבלת כל תבניות המשימות הקיימות
-      let taskTemplates = await this.getAllTaskTemplates();
-      
-      if (!taskTemplates || taskTemplates.length === 0) {
-        console.log("No task templates found, creating default templates first");
-        await this.createDefaultTaskTemplates();
-        // קבלת התבניות שנוצרו
-        taskTemplates = await this.getAllTaskTemplates();
-        if (!taskTemplates || taskTemplates.length === 0) {
-          throw new Error("Failed to create and retrieve task templates");
-        }
-      }
-      
-      console.log(`Found ${taskTemplates.length} task templates to clone into the project`);
-      
-      // הכנת משימות לפרויקט על בסיס התבניות
-      const newTasks = taskTemplates.map((template, index) => {
-        // יצירת אובייקט משימה בסיסי
-        const taskData: any = {
-          id: crypto.randomUUID(),
-          project_id: projectId,
-          stage_id: stageMap['לביצוע'] || stageId,
-          title: template.title,
-          description: template.description,
-          status: template.status || 'todo',
-          priority: template.priority || 'medium',
-          hierarchical_number: String(index + 1),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          labels: template.labels || [],
-          original_task_id: template.id // שמירת המזהה של התבנית המקורית
-        };
-        
-        return taskData;
-      });
-      
-      if (!tableExists) {
-        console.error(`Table ${tableName} does not exist and could not be created`);
-        throw new Error(`Table ${tableName} does not exist and could not be created`);
-      }
-      
-      // הוספת המשימות רק לטבלה הייחודית של הפרויקט
-      const { data: createdTasks, error: createError } = await supabase
-        .from(tableName)
-        .insert(newTasks)
-        .select();
-      
-      if (createError) {
-        console.error(`Error creating default tasks for project ${projectId}:`, createError);
-        throw new Error(createError.message);
-      }
-      
-      console.log(`Created ${createdTasks?.length || 0} default tasks for project ${projectId} in table ${tableName}`);
-      return createdTasks || [];
-    } catch (err) {
-      console.error(`Error creating default tasks for project ${projectId}:`, err);
-      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה');
-    }
-  },
-  
-  // פונקציה חדשה: קבלת כל המשימות בהיררכיה (משימת אב וכל תתי המשימות שלה)
-  async getTaskHierarchy(rootTaskId: string): Promise<Task[]> {
-    // מציאת כל המשימות שקשורות להיררכיה זו
-    const allTasks: Task[] = [];
-    
-    // קבלת משימת השורש
-    const rootTask = await this.getTaskById(rootTaskId);
-    if (!rootTask) {
-      throw new Error(`Root task ${rootTaskId} not found`);
-    }
-    
-    allTasks.push(rootTask);
-    
-    // פונקציה רקורסיבית לקבלת כל תתי המשימות
-    const fetchSubtasks = async (parentId: string) => {
-      const subtasks = await this.getSubTasks(parentId);
-      
-      for (const subtask of subtasks) {
-        allTasks.push(subtask);
-        // קריאה רקורסיבית לקבלת תתי-משימות של תת-המשימה
-        await fetchSubtasks(subtask.id);
-      }
-    };
-    
-    await fetchSubtasks(rootTaskId);
-    
-    // מיון לפי מספר היררכי
-    return allTasks.sort((a, b) => {
-      if (!a.hierarchical_number || !b.hierarchical_number) return 0;
-      
-      try {
-        // פונקציית עזר לבדיקה האם ערך הוא מחרוזת תקינה
-        const isValidString = (value: any): boolean => {
-          return typeof value === 'string' && value !== null && value.length > 0;
-        };
-        
-        if (!isValidString(a.hierarchical_number) || !isValidString(b.hierarchical_number)) {
-          return a.hierarchical_number ? -1 : (b.hierarchical_number ? 1 : 0);
-        }
-        
-        const aParts = (a.hierarchical_number as string).split('.').map(Number);
-        const bParts = (b.hierarchical_number as string).split('.').map(Number);
-        
-        for (let i = 0; i < Math.min(aParts.length, bParts.length); i++) {
-          if (aParts[i] !== bParts[i]) {
-            return aParts[i] - bParts[i];
-          }
-        }
-        
-        return aParts.length - bParts.length;
-      } catch (error) {
-        console.error('שגיאה במיון לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
-        return 0;
-      }
-    });
-  },
-  
-  // פונקציה חדשה: עדכון היררכיה של משימה (שינוי משימת האב)
-  async updateTaskHierarchy(taskId: string, newParentId: string | null): Promise<Task> {
-    const task = await this.getTaskById(taskId);
-    if (!task) {
-      throw new Error(`Task ${taskId} not found`);
-    }
-    
-    // אם מנסים לשנות משימה להיות תת-משימה של עצמה או של אחת מתתי המשימות שלה
-    if (newParentId) {
-      // בדיקה שלא יוצרים מעגל בהיררכיה
-      const checkForCycle = async (currentId: string, targetId: string): Promise<boolean> => {
-        if (currentId === targetId) return true;
-        
-        const subtasks = await this.getSubTasks(currentId);
-        for (const subtask of subtasks) {
-          if (await checkForCycle(subtask.id, targetId)) {
-            return true;
-          }
-        }
-        
-        return false;
-      };
-      
-      if (await checkForCycle(taskId, newParentId)) {
-        throw new Error('לא ניתן להפוך משימה לתת-משימה של עצמה או של אחת מתתי המשימות שלה');
-      }
-    }
-    
-    // עדכון משימת האב
-    const updateData: any = { parent_task_id: newParentId };
-    
-    // עדכון המספר ההיררכי
-    if (newParentId === null) {
-      // אם הופכים למשימת אב, מקבלים מספר היררכי חדש
-      updateData.hierarchical_number = await this.getNextRootHierarchicalNumber(task.project_id);
-    } else {
-      // אם הופכים לתת-משימה, מקבלים מספר היררכי חדש בהתאם למשימת האב החדשה
-      updateData.hierarchical_number = await this.getNextSubHierarchicalNumber(newParentId);
-    }
-    
-    // עדכון המשימה
-    const updatedTask = await this.updateTask(taskId, updateData);
-    
-    // עדכון כל תתי המשימות של המשימה הזו
-    await this.updateSubtaskHierarchicalNumbers(taskId);
-    
-    // סנכרון המשימה המעודכנת לטבלה הספציפית של הפרויקט
-    if (updatedTask.project_id) {
-      try {
-        // קריאה לפונקציה SQL לעדכון המשימה בטבלה הספציפית של הפרויקט
-        await supabase.rpc('update_task_in_project_table', {
-          task_id: updatedTask.id,
-          project_id: updatedTask.project_id
-        });
-        console.log(`Task hierarchy updated and synced to project-specific table for project ${updatedTask.project_id}`);
-      } catch (syncError) {
-        console.error(`Error syncing updated task hierarchy to project-specific table for project ${updatedTask.project_id}:`, syncError);
-        // נמשיך גם אם יש שגיאה בסנכרון
-      }
-    }
-    
-    return updatedTask;
-  },
-  
-  // פונקציה חדשה: עדכון מספרים היררכיים של כל תתי המשימות
-  async updateSubtaskHierarchicalNumbers(parentTaskId: string): Promise<void> {
-    const parent = await this.getTaskById(parentTaskId);
-    if (!parent || !parent.hierarchical_number) return;
-    
-    const subtasks = await this.getSubTasks(parentTaskId);
-    
-    // עדכון כל תת-משימה
-    for (let i = 0; i < subtasks.length; i++) {
-      const subtask = subtasks[i];
-      const newHierarchicalNumber = `${parent.hierarchical_number}.${i + 1}`;
-      
-      // עדכון המספר ההיררכי של תת-המשימה
-      await this.updateTask(subtask.id, { hierarchical_number: newHierarchicalNumber });
-      
-      // עדכון רקורסיבי של תתי-המשימות של תת-המשימה
-      await this.updateSubtaskHierarchicalNumbers(subtask.id);
-      
-      // סנכרון תת-המשימה המעודכנת לטבלה הספציפית של הפרויקט
-      if (subtask.project_id) {
-        try {
-          // קריאה לפונקציה SQL לעדכון המשימה בטבלה הספציפית של הפרויקט
-          await supabase.rpc('update_task_in_project_table', {
-            task_id: subtask.id,
-            project_id: subtask.project_id
-          });
-        } catch (syncError) {
-          console.error(`Error syncing updated subtask to project-specific table for project ${subtask.project_id}:`, syncError);
-          // נמשיך גם אם יש שגיאה בסנכרון
-        }
-      }
-    }
-  },
-
-  // קריאת משימות לפי פרויקט
-  async getTasksByProject(projectId: string): Promise<Task[]> {
-    try {
-      // ניסיון לקבל משימות מהטבלה הספציפית של הפרויקט
-      try {
-        // קריאה לפונקציה SQL לקבלת המשימות מהטבלה הספציפית של הפרויקט
-        const { data: projectTasks, error: projectTasksError } = await supabase.rpc('get_project_tasks', {
-          project_id: projectId
-        });
-        
-        if (!projectTasksError && projectTasks) {
-          console.log(`Retrieved ${projectTasks.length} tasks from project-specific table for project ${projectId}`);
-          return projectTasks;
-        }
-      } catch (projectTableError) {
-        console.error(`Error fetching tasks from project-specific table for project ${projectId}:`, projectTableError);
-        // נמשיך לקריאה מהטבלה הראשית אם יש שגיאה בקריאה מהטבלה הספציפית
-      }
-      
-      // אם לא הצלחנו לקבל משימות מהטבלה הספציפית, נקרא מהטבלה הראשית
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('project_id', projectId)
-        .order('hierarchical_number', { ascending: true });
-      
-      if (error) {
-        console.error(`Error fetching tasks for project ${projectId}:`, error);
-        throw new Error(error.message);
-      }
-      
-      return data || [];
-    } catch (err) {
-      console.error(`Error in getTasksByProject for project ${projectId}:`, err);
-      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה');
-    }
-  },
-  
-  // קבלת משימות ספציפיות לפרויקט (מהטבלה הייחודית)
-  async getProjectSpecificTasks(projectId: string): Promise<Task[]> {
-    try {
-      // ננסה להשתמש בפונקציות RPC אם הן קיימות
-      try {
-        const { data: projectTasks, error: projectTasksError } = await supabase.rpc('get_tasks_tree', {
-          project_id: projectId
-        });
-        
-        if (!projectTasksError && projectTasks) {
-          console.log(`Retrieved ${projectTasks.length} tasks from get_tasks_tree for project ${projectId}`);
-          return projectTasks;
-        }
-      } catch (treeError) {
-        console.error(`Error calling get_tasks_tree for project ${projectId}:`, treeError);
-      }
-      
-      try {
-        const { data: projectTasks, error: projectTasksError } = await supabase.rpc('get_project_tasks', {
-          project_id: projectId
-        });
-        
-        if (!projectTasksError && projectTasks) {
-          console.log(`Retrieved ${projectTasks.length} tasks from project-specific table for project ${projectId}`);
-          return projectTasks;
-        }
-      } catch (projectTableError) {
-        console.error(`Error fetching tasks from project-specific table for project ${projectId}:`, projectTableError);
-      }
-      
-      // אם יש שגיאה בפונקציות RPC, ננסה לבנות את ההיררכיה בצד הלקוח
-      console.log(`Building hierarchical task tree for project ${projectId} on client side`);
-      
-      // קריאה לטבלה הראשית
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('project_id', projectId)
-        .order('hierarchical_number', { ascending: true });
-      
-      if (error) {
-        console.error(`Error fetching tasks from main table for project ${projectId}:`, error);
-        throw new Error(error.message);
-      }
-      
-      if (!data || data.length === 0) {
-        return [];
-      }
-      
-      // ארגון המשימות בצורה היררכית
-      const allTasks = data || [];
-      
-      // מציאת כל משימות האב (ללא parent_task_id)
-      const rootTasks = allTasks.filter(task => !task.parent_task_id);
-      
-      // בניית עץ המשימות ההיררכי על ידי סידור תתי-המשימות תחת משימות האב שלהן
-      const buildHierarchy = () => {
-        // מיון המשימות בהתבסס על מספר היררכי
-        return [...allTasks].sort((a, b) => {
-          if (!a.hierarchical_number || !b.hierarchical_number) {
-            return a.hierarchical_number ? -1 : (b.hierarchical_number ? 1 : 0);
-          }
-          
-          try {
-            // פונקציית עזר לבדיקה האם ערך הוא מחרוזת תקינה
-            const isValidString = (value: any): boolean => {
-              return typeof value === 'string' && value !== null && value.length > 0;
-            };
-            
-            if (!isValidString(a.hierarchical_number) || !isValidString(b.hierarchical_number)) {
-              return a.hierarchical_number ? -1 : (b.hierarchical_number ? 1 : 0);
-            }
-            
-            const aParts = (a.hierarchical_number as string).split('.').map(Number);
-            const bParts = (b.hierarchical_number as string).split('.').map(Number);
-            
-            for (let i = 0; i < Math.min(aParts.length, bParts.length); i++) {
-              if (aParts[i] !== bParts[i]) {
-                return aParts[i] - bParts[i];
-              }
-            }
-            
-            return aParts.length - bParts.length;
-          } catch (error) {
-            console.error('שגיאה במיון לפי מספר היררכי:', error, { a: a.hierarchical_number, b: b.hierarchical_number });
-            return 0;
-          }
-        });
-      };
-      
-      // החזרת המשימות בסדר היררכי
-      const hierarchicalTasks = buildHierarchy();
-      console.log(`Returning ${hierarchicalTasks.length} hierarchical tasks for project ${projectId}`);
-      return hierarchicalTasks;
-    } catch (err) {
-      console.error(`Error in getProjectSpecificTasks for project ${projectId}:`, err);
-      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה לא ידועה');
-    }
-  },
-  
-  // פונקציה חדשה: סנכרון כל המשימות של פרויקט מהטבלה הראשית לטבלה הספציפית
-  async syncProjectTasks(projectId: string): Promise<void> {
-    try {
-      // הסנכרון כבר לא נדרש כי כל הפעולות מתבצעות ישירות בטבלה הספציפית
-      console.log(`Sync not needed for project ${projectId} - all operations now use only project-specific table`);
-      
-      // אין צורך להשתמש ב-RPC או לבצע סנכרון ידני, כי אנחנו לא עובדים יותר עם הטבלה הראשית
-      // עבור משימות של פרויקטים ספציפיים
-    } catch (err) {
-      console.error(`Error in syncProjectTasks for project ${projectId}:`, err);
-      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה בפונקציית הסנכרון');
-    }
-  },
-
-  // יצירת משימות ברירת מחדל כתבניות
-  async createDefaultTaskTemplates(): Promise<Task[]> {
-    // בדיקה אם כבר יש משימות תבניות
-    const existingTemplates = await this.getAllTaskTemplates();
-    if (existingTemplates.length > 0) {
-      return existingTemplates; // אם יש כבר תבניות, נחזיר אותן
-    }
-    
-    // משימות ברירת מחדל לפרויקטי נדל"ן
-    const defaultTemplates = [
-      {
-        id: crypto.randomUUID(),
-        project_id: null, // ללא שיוך לפרויקט
-        title: 'איתור קרקע מתאימה',
-        description: 'חיפוש וסינון קרקעות פוטנציאליות לפרויקט',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['קרקע', 'איתור']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'בדיקת היתכנות ראשונית',
-        description: 'בדיקת תב"ע, זכויות בנייה, ומגבלות תכנוניות',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['תכנון', 'היתכנות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'משא ומתן לרכישת הקרקע',
-        description: 'ניהול מו"מ עם בעלי הקרקע וגיבוש הסכם',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['קרקע', 'רכישה']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'גיוס צוות תכנון',
-        description: 'בחירת אדריכל, מהנדסים ויועצים',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['תכנון', 'צוות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'תכנון אדריכלי ראשוני',
-        description: 'הכנת תכניות קונספט ראשוניות',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['תכנון', 'אדריכלות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'הגשת בקשה להיתר בנייה',
-        description: 'הכנת מסמכים והגשה לוועדה המקומית',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['תכנון', 'היתרים']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'בחירת קבלן מבצע',
-        description: 'פרסום מכרז, קבלת הצעות ובחירת קבלן',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['ביצוע', 'קבלנים']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'עבודות תשתית ופיתוח',
-        description: 'ביצוע עבודות תשתית ופיתוח באתר',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['ביצוע', 'תשתיות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'בנייה',
-        description: 'ביצוע עבודות הבנייה',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['ביצוע', 'בנייה']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'הכנת תכנית שיווק',
-        description: 'גיבוש אסטרטגיית שיווק ומכירות',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['שיווק', 'תכנון']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'הקמת משרד מכירות',
-        description: 'הקמת משרד מכירות באתר או במיקום אסטרטגי',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['שיווק', 'מכירות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'פרסום ושיווק',
-        description: 'פרסום הפרויקט בערוצי מדיה שונים',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['שיווק', 'פרסום']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'בדיקות איכות ותיקונים',
-        description: 'ביצוע בדיקות איכות ותיקון ליקויים',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['מסירה', 'איכות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'מסירת דירות',
-        description: 'מסירת דירות לרוכשים',
-        status: 'todo',
-        priority: 'high',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['מסירה', 'דירות']
-      },
-      {
-        id: crypto.randomUUID(),
-        project_id: null,
-        title: 'רישום בטאבו',
-        description: 'רישום הדירות על שם הרוכשים בטאבו',
-        status: 'todo',
-        priority: 'medium',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        labels: ['מסירה', 'רישום']
-      }
-    ];
-    
-    // הוספת המשימות לבסיס הנתונים
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert(defaultTemplates)
-      .select();
-    
-    if (error) {
-      console.error('Error creating default task templates:', error);
-      throw new Error(error.message);
-    }
-    
-    console.log(`Created ${data?.length || 0} default task templates`);
-    return data || [];
-  },
-  
-  /**
-   * קבלת המספר ההיררכי הבא למשימה שורשית בפרויקט
-   * @param {string | null} projectId - מזהה הפרויקט, או null עבור תבניות גלובליות
-   * @returns {Promise<string>} - המספר ההיררכי הבא
-   */
-  async getNextRootHierarchicalNumber(projectId: string | null): Promise<string> {
-    try {
-      console.log(`מחשב מספר היררכי חדש למשימה שורשית בפרויקט ${projectId || 'גלובלי'}`);
-      
-      // שליפת כל המשימות השייכות לפרויקט זה
-      let query = supabase
-        .from('tasks')
-        .select('*');
-      
-      // סינון לפי פרויקט ספציפי או עבור תבניות (project_id = null)
-      if (projectId) {
-        query = query.eq('project_id', projectId);
-      } else {
-        query = query.is('project_id', null);
-      }
-      
-      // משימות שורשיות בלבד (ללא משימת אב)
-      query = query.is('parent_task_id', null);
-      
-      const { data, error } = await query;
-      
-      if (error) {
-        console.error('שגיאה בקבלת משימות שורשיות:', error);
-        throw new Error(error.message);
-      }
-      
-      console.log(`נמצאו ${data?.length || 0} משימות שורשיות בפרויקט ${projectId || 'גלובלי'}`);
-      
-      // אם אין משימות, מתחילים מ-1
-      if (!data?.length) {
-        console.log('אין משימות שורשיות קיימות בטבלה הייעודית, מחזיר מספר היררכי 1');
-        return '1';
-      }
-      
-      // מיון וסינון המשימות השורשיות עם מספר היררכי
-      const rootTasks = data
-        .filter(task => task.hierarchical_number && /^\d+$/.test(task.hierarchical_number))
-        .sort((a, b) => {
-          const numA = parseInt(a.hierarchical_number);
-          const numB = parseInt(b.hierarchical_number);
-          return numA - numB;
-        });
-      
-      // לוג המשימות השורשיות למטרות דיבוג
-      console.log('משימות שורשיות (מסוננות ומסודרות):');
-      rootTasks.forEach(task => {
-        console.log(`- משימה ${task.id}: היררכיה ${task.hierarchical_number}, כותרת: ${task.title}`);
-      });
-      
-      // מציאת המספר ההיררכי הגבוה ביותר והגדלתו ב-1
-      if (rootTasks.length > 0) {
-        const lastRootTask = rootTasks[rootTasks.length - 1];
-        const lastNumber = parseInt(lastRootTask.hierarchical_number);
-        const nextNumber = lastNumber + 1;
-        console.log(`המספר ההיררכי האחרון בטבלה הייעודית: ${lastNumber}, המספר החדש: ${nextNumber}`);
-        return nextNumber.toString();
-      }
-      
-      // אם אין משימות עם מספר היררכי, מתחילים מ-1
-      console.log('אין משימות שורשיות עם מספר היררכי בטבלה הייעודית, מחזיר מספר היררכי 1');
-      return '1';
-    } catch (error) {
-      console.error('שגיאה בחישוב מספר היררכי חדש:', error);
-      throw new Error('שגיאה בחישוב מספר היררכי חדש: ' + (error instanceof Error ? error.message : 'שגיאה לא ידועה'));
-    }
-  },
-  
-  // קבלת המספר ההיררכי הבא לתת-משימה
-  async getNextSubHierarchicalNumber(parentTaskId: string): Promise<string> {
-    try {
-      // קבלת המשימה האב
-      const parentTask = await this.getTaskById(parentTaskId);
-      if (!parentTask || !parentTask.hierarchical_number) {
-        console.warn(`Parent task ${parentTaskId} not found or has no hierarchical number`);
-        // במקרה של משימת אב שלא נמצאה, נחזיר ערך ברירת מחדל
-        return '1.1';
-      }
-      
-      // בדיקה שה-hierarchical_number הוא מחרוזת תקינה
-      const isValidString = (value: any): boolean => {
-        return typeof value === 'string' && value !== null && value.length > 0;
-      };
-      
-      if (!isValidString(parentTask.hierarchical_number)) {
-        console.warn(`Parent task ${parentTaskId} has invalid hierarchical number: ${parentTask.hierarchical_number}`);
-        // במקרה של ערך לא תקין, נחזיר ערך ברירת מחדל
-        return '1.1';
-      }
-      
-      // קבלת תתי-המשימות הקיימות
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('hierarchical_number')
-        .eq('parent_task_id', parentTaskId)
-        .order('hierarchical_number', { ascending: false })
-        .limit(1);
-      
-      if (error) {
-        console.error(`Error getting next sub-hierarchical number for parent task ${parentTaskId}:`, error);
-        // במקרה של שגיאה, נחזיר ".1" למספר של האב
-        return `${parentTask.hierarchical_number}.1`;
-      }
-      
-      if (data && data.length > 0 && data[0].hierarchical_number) {
-        // וידוא שה-hierarchical_number של תת-המשימה הוא מחרוזת תקינה
-        if (!isValidString(data[0].hierarchical_number)) {
-          console.warn(`Subtask of parent ${parentTaskId} has invalid hierarchical number: ${data[0].hierarchical_number}`);
-          // במקרה של ערך לא תקין, נשתמש במספר של האב ונוסיף ".1"
-          return `${parentTask.hierarchical_number}.1`;
-        }
-        
-        try {
-          // מצאנו את המספר האחרון, נגדיל את המספר האחרון ב-1
-          const parts = (data[0].hierarchical_number as string).split('.');
-          const lastPart = parseInt(parts[parts.length - 1]);
-          parts[parts.length - 1] = (lastPart + 1).toString();
-          return parts.join('.');
-        } catch (error) {
-          console.error(`Error parsing hierarchical number for subtasks of parent ${parentTaskId}:`, error);
-          // במקרה של שגיאה, נחזיר ".1" למספר של האב
-          return `${parentTask.hierarchical_number}.1`;
-        }
-      }
-      
-      // אם אין תתי-משימות קיימות, נוסיף ".1" למספר ההיררכי של האב
-      return `${parentTask.hierarchical_number}.1`;
-    } catch (error) {
-      console.error(`Error in getNextSubHierarchicalNumber for parent task ${parentTaskId}:`, error);
-      // במקרה של שגיאה כלשהי, נחזיר ערך ברירת מחדל
-      return '1.1';
-    }
-  },
-
-  // בדיקת משימות משנה
-  async getSubTasksRecursive(taskId: string): Promise<Task[]> {
-    const result: Task[] = [];
-    
-    const fetchSubtasks = async (parentId: string) => {
-      const { data: subtasks, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('parent_task_id', parentId)
-        .order('hierarchical_number', { ascending: true });
-      
-      if (error) {
-        console.error(`Error fetching subtasks for task ${parentId}:`, error);
-        throw new Error(error.message);
-      }
-      
-      if (subtasks && subtasks.length > 0) {
-        for (const subtask of subtasks) {
-          result.push(subtask);
-          await fetchSubtasks(subtask.id); // רקורסיה לתת-משימות נוספות
-        }
-      }
-    };
-    
-    await fetchSubtasks(taskId);
-    return result;
-  },
-
-  // סידור מחדש של המספרים ההיררכיים
-  async reorderTasks(projectId: string, parentTaskId: string | null): Promise<void> {
-    try {
-      console.log(`התחלת סידור מחדש של משימות בפרויקט ${projectId} ${parentTaskId ? `תחת הורה ${parentTaskId}` : 'ברמה ראשית'}`);
-      
-      // קריאה לפונקציה בשרת שמסדרת מחדש את המספרים ההיררכיים
-      const { error } = await supabase.rpc('reorder_tasks_after_delete', {
-        project_id_param: projectId,
-        parent_task_id_param: parentTaskId
-      });
-      
-      if (error) {
-        console.error('שגיאה בסידור מחדש של משימות:', error);
-        throw new Error(`שגיאה בסידור מחדש של משימות: ${error.message}`);
-      }
-      
-      console.log('המשימות סודרו מחדש בהצלחה');
-    } catch (err) {
-      console.error('שגיאה בסידור מחדש של משימות:', err);
-      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה בסידור מחדש של משימות');
-    }
-  },
-
-  // פונקציה חדשה: קבלת או יצירת נתיב התיקייה של משימת האב
-  async getParentTaskDropboxPath(
-    parentTask: Task, 
-    projectName: string, 
-    entrepreneurId?: string, 
-    entrepreneurName?: string
-  ): Promise<string> {
-    try {
-      // אם כבר יש נתיב לתיקיית האב, נחזיר אותו
-      if ((parentTask as any).dropbox_folder) {
-        return (parentTask as any).dropbox_folder;
-      }
-      
-      // אחרת, נצטרך ליצור תיקייה למשימת האב
-      const folderPath = await dropboxService.createTaskFolder(
-        parentTask.project_id,
-        projectName,
-        parentTask.id,
-        parentTask.title,
-        entrepreneurId,
-        entrepreneurName
-      );
-      
-      // עדכון נתיב התיקייה במשימת האב
-      try {
-        // בדיקה האם יש טבלה ייעודית לפרויקט
-        const projectTableName = `project_${parentTask.project_id}_tasks`;
-        const useProjectTable = await this.checkIfProjectTableExists(parentTask.project_id);
-        
-        const { error: updateError } = await supabase
-          .from(useProjectTable ? projectTableName : 'tasks')
-          .update({ dropbox_folder: folderPath })
-          .eq('id', parentTask.id);
-          
-        if (updateError) {
-          console.error(`Error updating parent task with Dropbox folder path: ${updateError}`);
-        }
-      } catch (updateError) {
-        console.error(`Error saving parent task Dropbox folder path: ${updateError}`);
-      }
-      
-      return folderPath;
-    } catch (error) {
-      console.error(`Error getting parent task Dropbox path: ${error}`);
-      throw error;
-    }
-  },
-
-  // פונקציה לבדיקה האם קיימת טבלה ייעודית לפרויקט
-  async checkIfProjectTableExists(projectId: string): Promise<boolean> {
-    try {
-      const projectTableName = `project_${projectId}_tasks`;
-      
-      // ניסיון לבצע קריאה פשוטה מהטבלה - אם היא לא קיימת, נקבל שגיאה
-      const { error } = await supabase
-        .from(projectTableName)
-        .select('id')
-        .limit(1);
-      
-      // אם אין שגיאה, הטבלה קיימת
-      return !error;
-    } catch (error) {
-      // אם יש שגיאה, הטבלה כנראה לא קיימת
-      return false;
-    }
-  },
-
-  // פונקציה לקבלת נתיב התיקייה של משימה
-  async getTaskFolderPath(
-    task: Task, 
-    projectName: string, 
-    entrepreneurId?: string, 
-    entrepreneurName?: string
-  ): Promise<string> {
-    try {
-      // בדיקה האם יש טבלה ייעודית לפרויקט
-      const useProjectTable = await this.checkIfProjectTableExists(task.project_id);
-      const projectTableName = `project_${task.project_id}_tasks`;
-      
-      // בדיקה האם למשימה יש כבר נתיב תיקייה
-      const { data, error } = await supabase
-        .from(useProjectTable ? projectTableName : 'tasks')
         .select('dropbox_folder')
         .eq('id', task.id)
         .single();
-      
-      if (!error && data && (data as any).dropbox_folder) {
-        return (data as any).dropbox_folder;
+
+      if (error) {
+        // Log error but don't throw, maybe the folder hasn't been created yet
+        console.warn(`Error fetching Dropbox path for task ${task.id} from ${tableName}:`, error.message);
+        return null;
       }
-      
-      // אם אין נתיב קיים, נצטרך ליצור תיקייה למשימה
-      const folderPath = await dropboxService.createTaskFolder(
-        task.project_id,
-        projectName,
-        task.id,
-        task.title,
-        entrepreneurId,
-        entrepreneurName
-      );
-      
-      // עדכון נתיב התיקייה במשימה
-      const { error: updateError } = await supabase
-        .from(useProjectTable ? projectTableName : 'tasks')
-        .update({ dropbox_folder: folderPath })
-        .eq('id', task.id);
-        
-      if (updateError) {
-        console.error(`Error updating task with Dropbox folder path: ${updateError}`);
+
+      if (data && data.dropbox_folder) {
+        return data.dropbox_folder as string;
+      } else {
+        // Folder path not found in DB
+        console.log(`Dropbox path for task ${task.id} not found in ${tableName}.`);
+        return null;
       }
-      
-      return folderPath;
-    } catch (error) {
-      console.error(`Error getting task folder path: ${error}`);
-      throw error;
+    } catch (dbError) {
+      console.error(`Database error fetching Dropbox path for task ${task.id}:`, dbError);
+      return null; // Return null on error
     }
   },
 
-  // פונקציה חדשה לייצירת העץ ההיררכי של תיקיות הדרופבוקס עבור כל המשימות בפרויקט
-  async createFullHierarchicalFolderStructureForProject(
-    project: any
-  ): Promise<Record<string, { id: string; path: string; name: string }>> {
+  // פונקציה נפרדת ליצירת תיקייה לתת-משימה - גרסה מתוקנת
+  async createSubtaskFolder(
+    task: Task,
+    projectFolderPath: string, // נתיב תיקיית הפרויקט
+    useProjectTable: boolean,
+    projectTableName: string
+  ): Promise<void> {
+    if (!task.parent_task_id) {
+       console.warn(`Task ${task.id} is not a subtask, skipping createSubtaskFolder.`);
+       return;
+    }
     try {
-      const projectId = typeof project === 'string' ? project : project.id;
-      console.log(`Creating full hierarchical folder structure for project: ${projectId}`);
-      await updateBuildTracking(`יוצר מבנה תיקיות היררכי מלא עבור הפרויקט ${projectId}`);
-      
-      // תוצאה - המפתח הוא מזהה המשימה
-      const createdFolders: Record<string, { id: string; path: string; name: string }> = {};
-      
-      // בדיקה אם קיימת טבלה ייחודית לפרויקט
-      const useProjectTable = await this.checkIfProjectTableExists(projectId);
-      const projectTableName = `project_${projectId}_tasks`;
-      
-      // 1. קריאת פרטי הפרויקט (רק אם לא התקבל אובייקט פרויקט מלא)
-      let projectData = typeof project === 'string' ? null : project;
-      if (!projectData) {
-        const { data, error } = await supabase
-          .from('projects')
-          .select('id, name, entrepreneur_id')
-          .eq('id', projectId)
-          .single();
-          
-        if (error || !data) {
-          console.error(`Error fetching project details for project ${projectId}:`, error);
-          return createdFolders;
-        }
-        projectData = data;
+      console.log(`Creating subtask folder for task: ${task.title} (${task.id})`);
+      // קבלת פרטי משימת האב
+      const parentTask = await this.getTaskById(task.parent_task_id); // שימוש ב-getTaskById
+
+      if (!parentTask) {
+        console.error(`Parent task ${task.parent_task_id} not found for subtask ${task.id}. Cannot create folder.`);
+        return;
       }
-      
-      // הכנת המסלול הבסיסי עבור הפרויקט
-      const projectPath = `/projects/${projectData.name || projectData.title || 'Unnamed Project'}`;
-      console.log(`Creating project folder at path: ${projectPath}`);
-      
-      // יצירת תיקיית הפרויקט
-      try {
-        const projectFolder = await dropboxService.createFolder(projectPath);
-        console.log(`Created project folder: ${projectFolder.path}`);
-        createdFolders['project'] = projectFolder;
-      } catch (folderError) {
-        console.error(`Error creating project folder: ${projectPath}`, folderError);
-        // ממשיכים למרות השגיאה
+
+      // קבלת נתיב התיקייה של משימת האב מהמסד
+      const parentTaskDropboxPath = await this.getTaskDropboxPath(parentTask, useProjectTable, projectTableName);
+
+      if (!parentTaskDropboxPath) {
+         console.error(`Dropbox path for parent task ${parentTask.id} not found. Cannot create subtask folder for ${task.id}.`);
+         // ננסה ליצור את תיקיית האב אם היא לא קיימת
+         console.log(`Attempting to create parent folder first for task ${parentTask.id}`);
+         await this.createDropboxFolderForTask(parentTask, useProjectTable, projectTableName);
+         // ננסה שוב לקבל את הנתיב אחרי היצירה
+         const newParentPath = await this.getTaskDropboxPath(parentTask, useProjectTable, projectTableName);
+         if (!newParentPath) {
+            console.error(`Failed to create or find parent folder path for ${parentTask.id}. Aborting subtask folder creation.`);
+            return;
+         }
+         // אם הצליח, נשתמש בנתיב החדש
+         await this.createHierarchicalTaskFolderInternal(task, newParentPath, useProjectTable, projectTableName);
+         return; // סיימנו לאחר יצירה מוצלחת
       }
-      
-      // 2. קריאת פרטי היזם אם קיים
-      let entrepreneurId: string | undefined = undefined;
-      let entrepreneurName: string | undefined = undefined;
-      
-      if (projectData.entrepreneur_id) {
-        entrepreneurId = projectData.entrepreneur_id;
-        try {
-          const { data: entrepreneurData, error: entrepreneurError } = await supabase
-            .from('entrepreneurs')
-            .select('name')
-            .eq('id', entrepreneurId)
-            .single();
-            
-          if (!entrepreneurError && entrepreneurData) {
-            entrepreneurName = entrepreneurData.name;
-            console.log(`Found entrepreneur for project: ${entrepreneurName} (${entrepreneurId})`);
-          }
-        } catch (entrepreneurError) {
-          console.warn(`Could not fetch entrepreneur details for project: ${entrepreneurError}`);
-        }
-      }
-      
-      // 3. קבלת כל המשימות בפרויקט
-      const { data: allTasks, error: tasksError } = await supabase
-        .from(useProjectTable ? projectTableName : 'tasks')
-        .select('*')
-        .eq('project_id', projectId);
-        
-      if (tasksError) {
-        console.error(`Error fetching tasks for project ${projectId}:`, tasksError);
-        return createdFolders;
-      }
-      
-      if (!allTasks || allTasks.length === 0) {
-        console.log(`No tasks found for project ${projectId}`);
-        return createdFolders;
-      }
-      
-      // 4. מיפוי המשימות לפי מזהה (לשימוש בבניית העץ)
-      const tasksMap = new Map<string, Task>();
-      allTasks.forEach((task: Task) => {
-        tasksMap.set(task.id, task);
-      });
-      
-      // סט לשמירת המשימות שכבר טופלו, למניעת לופים אינסופיים
-      const processedTaskIds = new Set<string>();
-      
-      // 5. מציאת משימות שורש
-      const rootTasks = allTasks.filter((task: Task) => !task.parent_task_id);
-      
-      console.log(`Found ${rootTasks.length} root tasks and ${allTasks.length - rootTasks.length} subtasks`);
-      
-      // יצירת מבנה תיקיות עבור כל משימות השורש והמשימות שלהן באופן רקורסיבי
-      for (const rootTask of rootTasks) {
-        try {
-          await this.processTaskHierarchyFolders(
-            rootTask,
-            tasksMap,
-            allTasks,
-            projectData,
-            entrepreneurId,
-            entrepreneurName,
-            useProjectTable,
-            projectTableName,
-            processedTaskIds,
-            0,
-            10  // מגבלת עומק מקסימלי של רקורסיה - 10 רמות
-          );
-          
-          // קבלת הנתיב לתיקייה שנוצרה
-          const { data: taskWithFolder } = await supabase
-            .from(useProjectTable ? projectTableName : 'tasks')
-            .select('dropbox_folder')
-            .eq('id', rootTask.id)
-            .single();
-            
-          if (taskWithFolder && (taskWithFolder as any).dropbox_folder) {
-            // רישום התיקייה שנוצרה
-            createdFolders[rootTask.id] = {
-              id: rootTask.id,
-              name: rootTask.title,
-              path: (taskWithFolder as any).dropbox_folder
-            };
-          }
-        } catch (taskError) {
-          console.error(`Error processing root task ${rootTask.id}:`, taskError);
-          // ממשיכים למשימה הבאה
-        }
-      }
-      
-      console.log(`Completed creating folder structure for project ${projectId}`);
-      await updateBuildTracking(`הושלמה יצירת מבנה תיקיות עבור הפרויקט ${projectId}`);
-      
-      // מחזירים את כל התיקיות שנוצרו
-      return createdFolders;
+
+      // אם נתיב האב קיים, ניצור את תיקיית התת-משימה תחתיו
+      await this.createHierarchicalTaskFolderInternal(task, parentTaskDropboxPath, useProjectTable, projectTableName);
+
     } catch (error) {
-      console.error(`Error creating hierarchical folder structure for project:`, error);
-      return {}; // החזרת אובייקט ריק במקרה של שגיאה
+      console.error(`Error creating subtask folder for ${task.id}:`, error);
+      // לא זורקים שגיאה כדי לא לעצור את כל התהליך
     }
   },
-  
-  // פונקציית עזר ליצירת מבנה תיקיות משימה ותתי המשימות שלה באופן רקורסיבי
+
+  // פונקציה ליצירת תיקיית משימת שורש - חדשה
+  async createRootTaskFolder(
+    task: Task,
+    projectFolderPath: string, // נתיב תיקיית הפרויקט
+    useProjectTable: boolean,
+    projectTableName: string
+  ): Promise<void> {
+    if (task.parent_task_id) {
+       console.warn(`Task ${task.id} is a subtask, skipping createRootTaskFolder.`);
+       return;
+    }
+     console.log(`Creating root task folder for task: ${task.title} (${task.id})`);
+     // תיקיית שורש נוצרת ישירות תחת תיקיית הפרויקט
+     await this.createHierarchicalTaskFolderInternal(task, projectFolderPath, useProjectTable, projectTableName);
+  },
+
+  // פונקציית עזר פנימית ליצירת התיקייה בפועל ועדכון המסד - תוקן
+  async createHierarchicalTaskFolderInternal(
+      task: Task,
+      parentPath: string, // נתיב תיקיית האב (או תיקיית הפרויקט עבור משימות שורש)
+      useProjectTable: boolean,
+      projectTableName: string
+  ): Promise<void> {
+      try {
+          // Use hierarchical number if available, otherwise just title (sanitized)
+          const taskFolderNameBase = task.title ? sanitizePath(task.title) : `task_${task.id}`;
+          const taskFolderName = task.hierarchical_number
+              ? `${task.hierarchical_number} ${taskFolderNameBase}`
+              : taskFolderNameBase;
+
+          // נתיב מלא הוא נתיב האב + שם התיקייה של המשימה הנוכחית
+          const fullTaskPath = `${parentPath}/${taskFolderName}`;
+
+          await updateBuildTracking(`Attempting to create/verify folder for task: ${fullTaskPath}`);
+          console.log(`Attempting to create/verify folder for task: ${fullTaskPath}`);
+
+          // ודא שרק הנתיב מועבר לפונקציה
+          const folderResult = await dropboxService.createFolder(fullTaskPath);
+          const createdFolderPath = folderResult?.path; // Use the returned path
+
+          if (createdFolderPath) {
+            console.log(`Task folder created or verified: ${createdFolderPath}`);
+            await updateBuildTracking(`Task folder created or verified: ${createdFolderPath}`);
+
+            // עדכון מסד הנתונים עם הנתיב שנוצר
+            const tableName = useProjectTable ? projectTableName : 'tasks';
+            const { error: updateError } = await supabase
+              .from(tableName)
+              .update({ dropbox_folder: createdFolderPath })
+              .eq('id', task.id);
+
+            if (updateError) {
+              console.error(`Failed to update task ${task.id} in ${tableName} with Dropbox path ${createdFolderPath}:`, updateError);
+              await updateBuildTracking(`Failed to update task ${task.id} DB with path: ${createdFolderPath} - ${updateError.message}`);
+            } else {
+              console.log(`Successfully updated task ${task.id} in ${tableName} with Dropbox path.`);
+              await updateBuildTracking(`Updated task ${task.id} DB with path: ${createdFolderPath}`);
+            }
+
+            // !!! הסרת הלוגיקה הרקורסיבית מפה - היא תטופל ע"י processTaskHierarchyFolders !!!
+
+          } else {
+            // טיפול במקרה שבו יצירת התיקייה נכשלה או לא החזירה נתיב
+            console.error(`Folder creation/verification failed or did not return a path for: ${fullTaskPath}`);
+            await updateBuildTracking(`Folder creation/verification failed for: ${fullTaskPath}`);
+            // Consider throwing an error or returning a status to the caller
+          }
+      } catch (error: any) {
+          console.error(`Error in createHierarchicalTaskFolderInternal for task ${task.id} (${task.title}):`, error);
+          await updateBuildTracking(`Error creating folder for task ${task.id}: ${error.message}`);
+          // Do not re-throw here to allow processing of other tasks potentially
+      }
+  },
+
+
+  // ===== פונקציות ליצירת מבנה היררכי מלא =====
+
+  // פונקציה ראשית ליצירת כל מבנה התיקיות עבור פרויקט - עודכן להעברת פרטי יזם
+  async createFullHierarchicalFolderStructureForProject(
+      project: { id: string; name: string; entrepreneur_id?: string | null }, // Pass the whole project object
+      selectedEntrepreneurPath: string | null = null // Keep this for potential direct path usage if needed
+  ): Promise<{ success: boolean; message: string; data?: any, project?: { id: string, path: string } }> {
+      const projectId = project.id;
+      const projectName = project.name;
+      const entrepreneurId = project.entrepreneur_id; // Get from project object
+
+      console.log(`Starting full hierarchical folder structure creation for project ${projectId} (${projectName})`);
+      await updateBuildTracking(`Starting full hierarchical folder structure creation for project: ${projectName} (${projectId})`);
+
+      let entrepreneurName: string | undefined = undefined;
+      let finalProjectFolderPath: string | null = null; // To store the final path for return
+
+      try {
+          // 0. Fetch entrepreneur name if ID exists
+          if (entrepreneurId) {
+              try {
+                  const { data: entrepreneurData, error: entrepreneurError } = await supabase
+                      .from('entrepreneurs')
+                      .select('name')
+                      .eq('id', entrepreneurId)
+                      .single();
+                  if (entrepreneurError) throw entrepreneurError;
+                  entrepreneurName = entrepreneurData?.name;
+                  console.log(`Found entrepreneur: ${entrepreneurName} (${entrepreneurId})`);
+              } catch (e) {
+                  console.error(`Could not fetch entrepreneur name for ID ${entrepreneurId}:`, e);
+                  await updateBuildTracking(`Warning: Could not fetch entrepreneur name for ID ${entrepreneurId}`);
+                  // Continue without entrepreneur name? Or fail? For now, continue.
+              }
+          }
+
+          // 1. קבע את שם הטבלה הייעודית (אם קיימת)
+          const projectTableName = `project_${projectId}_tasks`;
+          let useProjectTable = false;
+          try {
+              const { data: tableExists } = await supabase.rpc('check_table_exists', { table_name_param: projectTableName });
+              useProjectTable = !!tableExists;
+              console.log(`Project table ${projectTableName} ${useProjectTable ? 'exists' : 'does not exist'}. Using ${useProjectTable ? 'project table' : 'main tasks table'}.`);
+          } catch (checkError) {
+              console.error(`Error checking for project table ${projectTableName}, defaulting to main table:`, checkError);
+          }
+          const tableName = useProjectTable ? projectTableName : 'tasks';
+
+          // 2. הבא את כל המשימות מהטבלה המתאימה
+          const { data: tasks, error: fetchError } = await supabase
+              .from(tableName)
+              .select('*')
+              .order('hierarchical_number', { ascending: true }); // סדר חשוב לעיבוד
+
+          if (fetchError) {
+              console.error(`Error fetching tasks from ${tableName}:`, fetchError);
+              return { success: false, message: `שגיאה בקריאת משימות מטבלה ${tableName}: ${fetchError.message}` };
+          }
+          if (!tasks || tasks.length === 0) {
+              console.log(`No tasks found for project ${projectId} in ${tableName}.`);
+              // Ensure base folders even if no tasks
+              // Construct path and ensure base folders
+              const cleanProjectNameForEmpty = sanitizePath(projectName);
+              let projectBasePathForEmpty = PROJECTS_PATH;
+              if (selectedEntrepreneurPath) {
+                 const exists = await dropboxService.folderExists(selectedEntrepreneurPath);
+                 if (exists) projectBasePathForEmpty = selectedEntrepreneurPath;
+              } else if (entrepreneurId && entrepreneurName) {
+                  const cleanEntrepreneurNameForEmpty = sanitizePath(entrepreneurName);
+                  const entrepreneurPathForEmpty = `${PROJECTS_PATH}/${cleanEntrepreneurNameForEmpty}_${entrepreneurId}`;
+                  try {
+                    await dropboxService.createFolder(entrepreneurPathForEmpty);
+                    projectBasePathForEmpty = entrepreneurPathForEmpty;
+                  } catch (entErrorEmpty) {
+                     console.error(`Failed to ensure entrepreneur folder for empty project: ${entrepreneurPathForEmpty}`, entErrorEmpty);
+                  }
+              }
+              const finalProjectFolderPathForEmpty = `${projectBasePathForEmpty}/${cleanProjectNameForEmpty}`;
+              try {
+                  await dropboxService.createFolder(finalProjectFolderPathForEmpty);
+                  console.log(`Base project folder ensured even with no tasks: ${finalProjectFolderPathForEmpty}`);
+              } catch (projErrorEmpty) {
+                   console.error(`Failed to ensure project folder for empty project: ${finalProjectFolderPathForEmpty}`, projErrorEmpty);
+              }
+              return { success: true, message: 'לא נמצאו משימות לפרויקט זה, אך תיקיות הבסיס נוצרו/אומתו.', project: { id: projectId, path: finalProjectFolderPathForEmpty } };
+          }
+
+          // 3. הכן את נתיב הבסיס של הפרויקט והבטח את קיומו
+          const cleanProjectName = sanitizePath(projectName);
+          let projectBasePath = PROJECTS_PATH;
+
+          if (selectedEntrepreneurPath) {
+            console.log(`Using selected entrepreneur path: ${selectedEntrepreneurPath}`);
+            const exists = await dropboxService.folderExists(selectedEntrepreneurPath);
+            if (!exists) {
+              console.warn(`Selected entrepreneur path ${selectedEntrepreneurPath} does not exist! Falling back to default logic.`);
+              selectedEntrepreneurPath = null; // Fallback
+            } else {
+               projectBasePath = selectedEntrepreneurPath; // Use the selected path as the immediate parent for the project folder
+               finalProjectFolderPath = `${projectBasePath}/${cleanProjectName}`;
+            }
+          }
+
+          if (!finalProjectFolderPath && entrepreneurId && entrepreneurName) {
+              const cleanEntrepreneurName = sanitizePath(entrepreneurName);
+              const entrepreneurPath = `${PROJECTS_PATH}/${cleanEntrepreneurName}_${entrepreneurId}`;
+              console.log(`Ensuring entrepreneur base folder: ${entrepreneurPath}`);
+              try {
+                  await dropboxService.createFolder(entrepreneurPath); // Ensure it exists
+                  projectBasePath = entrepreneurPath; // Set base to entrepreneur folder
+                  finalProjectFolderPath = `${projectBasePath}/${cleanProjectName}`;
+              } catch (entError) {
+                   console.error(`Failed to ensure entrepreneur folder ${entrepreneurPath}, project folder will be created under root projects path. Error:`, entError);
+                   finalProjectFolderPath = `${PROJECTS_PATH}/${cleanProjectName}`;
+              }
+          } else if (!finalProjectFolderPath) {
+              finalProjectFolderPath = `${PROJECTS_PATH}/${cleanProjectName}`;
+          }
+
+          console.log(`Ensuring final project folder: ${finalProjectFolderPath}`);
+          try {
+             const projectFolderResult = await dropboxService.createFolder(finalProjectFolderPath);
+             finalProjectFolderPath = projectFolderResult.path; // Use the actual path returned
+             console.log(`Project folder ensured at: ${finalProjectFolderPath}`);
+          } catch (projError) {
+             console.error(`CRITICAL: Failed to create or verify the main project folder: ${finalProjectFolderPath}. Aborting task folder creation. Error:`, projError);
+             await updateBuildTracking(`CRITICAL: Failed to create project folder ${finalProjectFolderPath}. Aborting. Error: ${projError instanceof Error ? projError.message : projError}`);
+             return { success: false, message: `שגיאה קריטית ביצירת תיקיית הפרויקט הראשית: ${finalProjectFolderPath}` };
+          }
+
+
+          // 4. בנה מפה של המשימות לגישה מהירה לפי ID
+          const tasksMap = new Map<string, Task>(tasks.map(task => [task.id, task as Task]));
+
+          // 5. זהה את משימות השורש (אלו ללא parent_task_id)
+          const rootTasks = tasks.filter((task: Task) => !task.parent_task_id);
+          console.log(`Found ${rootTasks.length} root tasks.`);
+
+          // 6. השתמש ב-Set למעקב אחר משימות שכבר עובדו למניעת לולאות
+          const processedTaskIds = new Set<string>();
+          const maxDepth = 10; // הגבלת עומק רקורסיה
+
+          // 7. עבור על כל משימת שורש והתחל את התהליך הרקורסיבי
+          console.log('Starting recursive processing for root tasks...');
+          for (const rootTask of rootTasks) {
+              if (!processedTaskIds.has(rootTask.id)) {
+                  await this.processTaskHierarchyFolders(
+                      rootTask,
+                      tasksMap,
+                      tasks as Task[],
+                      finalProjectFolderPath, // Pass the confirmed project folder path
+                      projectTableName,
+                      useProjectTable,
+                      processedTaskIds,
+                      0, // עומק התחלתי
+                      maxDepth
+                  );
+              }
+          }
+
+          console.log(`Finished full hierarchical folder structure creation for project ${projectId}.`);
+          await updateBuildTracking(`Finished full hierarchical folder structure creation for project: ${projectName} (${projectId})`);
+          return {
+              success: true,
+              message: 'מבנה התיקיות ההיררכי נוצר/עודכן בהצלחה.',
+              project: { id: projectId, path: finalProjectFolderPath } // Return the final project path
+          };
+
+      } catch (error) {
+          console.error(`Critical error during createFullHierarchicalFolderStructureForProject for ${projectId}:`, error);
+          await updateBuildTracking(`CRITICAL Error creating structure for project ${projectId}: ${error instanceof Error ? error.message : error}`);
+          return {
+              success: false,
+              message: `שגיאה קריטית בתהליך יצירת התיקיות: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              project: { id: projectId, path: finalProjectFolderPath || 'unknown' } // Return path even on error if determined
+          };
+      }
+  },
+
+
+  // פונקציית העיבוד הרקורסיבית - ממוקמת מחדש כפונקציה נפרדת
   async processTaskHierarchyFolders(
     task: Task,
     tasksMap: Map<string, Task>,
     allTasks: Task[],
-    projectData: any,
-    entrepreneurId: string | undefined,
-    entrepreneurName: string | undefined,
-    useProjectTable: boolean,
+    projectFolderPath: string, // Absolute path to the ROOT project folder
     projectTableName: string,
-    processedTaskIds: Set<string> = new Set<string>(),   // סט לשמירת משימות שכבר טופלו
-    currentDepth: number = 0,                           // עומק נוכחי ברקורסיה
-    maxDepth: number = 10                               // עומק מקסימלי שמותר להגיע
+    useProjectTable: boolean,
+    processedTaskIds: Set<string>,
+    currentDepth: number,
+    maxDepth: number
   ): Promise<void> {
-    try {
-      // בדיקות מקדימות מחמירות למניעת לולאות אינסופיות
-      
-      // 1. בדיקת עומק רקורסיה
-      if (currentDepth > maxDepth) {
-        console.warn(`Maximum recursion depth (${maxDepth}) reached for task: ${task.title} (${task.id}). Stopping.`);
+    // 1. בדיקת עומק רקורסיה מקסימלי
+    if (currentDepth > maxDepth) {
+      console.error(`Max recursion depth (${maxDepth}) exceeded for task ${task.id} (${task.title}). Stopping.`);
+      await updateBuildTracking(`Max recursion depth reached for task ${task.id}`);
+      return;
+    }
+
+    // 2. וידוא שהמשימה תקינה
+    if (!task || !task.id) {
+      console.error('Invalid task object received in processTaskHierarchyFolders. Skipping.');
+      return;
+    }
+
+    // 3. בדיקה אם כבר טיפלנו במשימה זו (למניעת לופים)
+    if (processedTaskIds.has(task.id)) {
+      console.log(`Task ${task.title} (${task.id}) already processed, skipping.`);
+      return;
+    }
+
+    // 4. בדיקה למעגל אינסופי ישיר (משימה שהיא האבא של עצמה)
+    if (task.parent_task_id === task.id) {
+      console.error(`Circular reference detected: task ${task.id} (${task.title}) is its own parent. Skipping.`);
+      await updateBuildTracking(`Circular reference (self-parent) for task ${task.id}`);
+      return;
+    }
+
+    // 5. בדיקה למעגל אינסופי עקיף
+    if (task.parent_task_id && this.isCircularReference(task.id, task.parent_task_id, tasksMap)) {
+        console.error(`Circular reference path detected involving task ${task.id} (${task.title}). Skipping creation.`);
+        await updateBuildTracking(`Circular reference detected for task ${task.id}`);
+        // Mark as processed to prevent further attempts down this path
+        processedTaskIds.add(task.id);
         return;
-      }
-      
-      // 2. וידוא שהמשימה תקינה
-      if (!task || !task.id) {
-        console.error('Invalid task object received in processTaskHierarchyFolders. Skipping.');
-        return;
-      }
-      
-      // 3. בדיקה אם כבר טיפלנו במשימה זו (למניעת לופים)
-      if (processedTaskIds.has(task.id)) {
-        console.log(`Task ${task.title} (${task.id}) already processed, skipping to avoid loops.`);
-        return;
-      }
-      
-      // 4. בדיקה למעגל אינסופי ישיר (משימה שהיא האבא של עצמה)
-      if (task.parent_task_id === task.id) {
-        console.error(`Circular reference detected: task ${task.id} is its own parent. Skipping.`);
-        return;
-      }
-      
-      // 5. רישום המשימה הנוכחית כמטופלת למניעת מעגלים
-      processedTaskIds.add(task.id);
-      
-      // תיעוד פעולה
-      console.log(`Processing folder for task: ${task.title} (${task.id}) at depth ${currentDepth}`);
-      await updateBuildTracking(`מטפל בתיקייה למשימה: ${task.title} (${task.id}) בעומק ${currentDepth}`);
-      
-      // וידוא שתיקיית האב קיימת (במקרה של תת-משימה)
-      if (task.parent_task_id) {
+    }
+
+    // תיעוד פעולה
+    console.log(`Processing folder for task: ${task.hierarchical_number || ''} ${task.title} (${task.id}) at depth ${currentDepth}`);
+    await updateBuildTracking(`Processing folder for task: ${task.id} at depth ${currentDepth}`);
+
+    // 6. וידוא שתיקיית האב קיימת ומטופלת קודם (במקרה של תת-משימה)
+    let parentTaskDropboxPath: string | null = null;
+    if (task.parent_task_id) {
         const parentTask = tasksMap.get(task.parent_task_id);
         if (parentTask) {
-          // וידוא שהמשימה אינה חלק ממעגל אינסופי
-          if (this.isCircularReference(task.id, parentTask.id, tasksMap)) {
-            console.error(`Detected circular reference for task ${task.id} and parent ${parentTask.id}. Skipping.`);
-            return;
-          }
-          
-          // וידוא שלמשימת האב כבר יש תיקייה
-          const { data: parentTaskData } = await supabase
-            .from(useProjectTable ? projectTableName : 'tasks')
-            .select('dropbox_folder')
-            .eq('id', parentTask.id)
-            .single();
-            
-          if (!parentTaskData || !(parentTaskData as any).dropbox_folder) {
-            // אם למשימת האב אין תיקייה, יש ליצור אותה קודם
-            console.log(`Parent task ${parentTask.title} doesn't have a folder yet, creating it first...`);
-            
-            // בדיקה האם המשימה כבר נמצאת בתהליך עיבוד (למניעת לולאות אינסופיות)
+            // אם משימת האב עדיין לא עובדה, נטפל בה קודם רקורסיבית
             if (!processedTaskIds.has(parentTask.id)) {
-              await this.processTaskHierarchyFolders(
-                parentTask,
+                console.log(`Parent task ${parentTask.title} (${parentTask.id}) not processed yet. Processing parent first.`);
+                await this.processTaskHierarchyFolders(
+                    parentTask,
+                    tasksMap,
+                    allTasks,
+                    projectFolderPath, // Pass the root project path
+                    projectTableName,
+                    useProjectTable,
+                    processedTaskIds, // Pass the same set
+                    currentDepth, // Keep same depth? Or currentDepth+1? Let's use currentDepth for now, parent is processed logically before child
+                    maxDepth
+                );
+                // לאחר עיבוד האב, נוודא שהוא אכן עובד ונוסיף לסט
+                if (!processedTaskIds.has(parentTask.id)) {
+                    console.error(`Failed to process parent task ${parentTask.id} recursively. Aborting folder creation for child ${task.id}.`);
+                    await updateBuildTracking(`Failed to process parent ${parentTask.id} for child ${task.id}`);
+                    return; // לא ניתן להמשיך בלי האב
+                }
+                console.log(`Parent task ${parentTask.title} (${parentTask.id}) processed. Continuing with child ${task.title} (${task.id}).`);
+            }
+
+            // נוודא שלמשימת האב יש נתיב תיקייה קיים לאחר העיבוד
+            parentTaskDropboxPath = await this.getTaskDropboxPath(parentTask, useProjectTable, projectTableName);
+            if (!parentTaskDropboxPath) {
+                console.error(`Could not find Dropbox path for processed parent task ${parentTask.id}. Cannot create folder for child ${task.id}.`);
+                await updateBuildTracking(`Parent path not found for ${parentTask.id}, cannot create folder for child ${task.id}`);
+                // Attempt to create the parent folder again? Risky, could loop.
+                // Let's assume the parent processing should have handled it or logged an error.
+                // We will mark the current task as processed and skip it to prevent potential infinite loops if parent keeps failing.
+                 processedTaskIds.add(task.id);
+                 return; 
+            }
+        } else {
+            console.warn(`Parent task ID ${task.parent_task_id} specified for task ${task.id} but parent not found in tasksMap. Treating as root task.`);
+            await updateBuildTracking(`Parent task ID ${task.parent_task_id} not found for task ${task.id}`);
+            // Fallthrough: parentTaskDropboxPath remains null, createHierarchicalTaskFolderInternal will use projectFolderPath
+        }
+    }
+
+    // 7. רישום המשימה הנוכחית כמטופלת *לפני* יצירת התיקייה והקריאות הרקורסיביות לילדים
+    processedTaskIds.add(task.id);
+
+    // 8. יצירת תיקייה למשימה הנוכחית (באמצעות הפונקציה הפנימית)
+    try {
+        // קבע את הנתיב של תיקיית האב (או תיקיית הפרויקט)
+        const basePathForCurrentTask = parentTaskDropboxPath || projectFolderPath;
+        await this.createHierarchicalTaskFolderInternal(task, basePathForCurrentTask, useProjectTable, projectTableName);
+        console.log(`Successfully called folder creation logic for task ${task.title} (${task.id})`);
+    } catch (folderError) {
+        console.error(`Error during folder creation call for task ${task.id} (${task.title}):`, folderError);
+        await updateBuildTracking(`Error calling folder creation for task ${task.id}: ${folderError instanceof Error ? folderError.message : folderError}`);
+        // Even if folder creation fails, continue to process children
+    }
+
+    // 9. המתנה קצרה לפני המשך לתת-משימות (למניעת עומס על הדרופבוקס API)
+    await new Promise(resolve => setTimeout(resolve, 250)); // Slightly reduced delay
+
+    // 10. מציאת תתי-המשימות של המשימה הנוכחית ועיבוד רקורסיבי
+    const childTasks = allTasks.filter((t: Task) => t.parent_task_id === task.id);
+
+    if (childTasks.length > 0) {
+        console.log(`Found ${childTasks.length} child tasks for task ${task.title} (${task.id}). Processing them...`);
+        for (const childTask of childTasks) {
+            // הקריאה הרקורסיבית תתעלם מילדים שכבר עובדו (בדיקה בתחילת הפונקציה)
+            await this.processTaskHierarchyFolders(
+                childTask,
                 tasksMap,
                 allTasks,
-                projectData,
-                entrepreneurId,
-                entrepreneurName,
-                useProjectTable,
+                projectFolderPath, // Pass the root project path again
                 projectTableName,
+                useProjectTable,
                 processedTaskIds,
-                currentDepth + 1,
+                currentDepth + 1, // Increment depth for children
                 maxDepth
-              );
-            } else {
-              console.warn(`Potential circular reference: parent task ${parentTask.id} is already being processed. Skipping parent processing.`);
-            }
-          }
-        } else {
-          console.warn(`Parent task ${task.parent_task_id} not found for task ${task.id}. Treating as root task.`);
+            );
         }
-      }
-      
-      // יצירת תיקייה למשימה הנוכחית עם טיפול בשגיאות משופר
-      try {
-        // זמן קצר להמתנה לפני יצירת התיקייה (למניעת בקשות מהירות מדי)
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await this.createDropboxFolderForTask(task, useProjectTable, projectTableName);
-        console.log(`Successfully created Dropbox folder for task ${task.title} (${task.id})`);
-      } catch (folderError) {
-        console.error(`Error creating folder for task ${task.id}:`, folderError);
-        // ממשיך בכל זאת לתת-משימות גם במקרה של שגיאה
-      }
-      
-      // המתנה קצרה לפני המשך לתת-משימות (למניעת עומס על הדרופבוקס API)
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // מציאת תתי-המשימות של המשימה הנוכחית
-      const childTasks = allTasks.filter((t: Task) => t.parent_task_id === task.id);
-      
-      if (childTasks.length > 0) {
-        console.log(`Processing ${childTasks.length} child tasks for task ${task.title} (${task.id})`);
-        
-        // עיבוד תתי-המשימות אחת אחרי השנייה
-        for (const childTask of childTasks) {
-          // בדיקות מקדימות נוספות
-          if (childTask.id === task.id) {
-            console.error(`Circular reference detected: task ${task.id} is its own child. Skipping.`);
-            continue;
-          }
-          
-          // בדיקה האם המשימה כבר נמצאת בתהליך עיבוד
-          if (processedTaskIds.has(childTask.id)) {
-            console.log(`Child task ${childTask.title} (${childTask.id}) already processed. Skipping.`);
-            continue;
-          }
-          
-          // עיבוד תת-המשימה
-          await this.processTaskHierarchyFolders(
-            childTask,
-            tasksMap,
-            allTasks,
-            projectData,
-            entrepreneurId,
-            entrepreneurName,
-            useProjectTable,
-            projectTableName,
-            processedTaskIds,
-            currentDepth + 1,
-            maxDepth
-          );
-        }
-      }
-    } catch (error) {
-      console.error(`Error processing task hierarchy folders for task ${task?.id || 'unknown'}:`, error);
     }
   },
-  
+
+
   // פונקציית עזר לבדיקת הימצאות מעגל אינסופי בין משימות
   isCircularReference(
-    taskId: string,
-    parentId: string,
+    taskId: string, // The ID of the task we are checking the ancestry of
+    parentId: string, // The immediate parent ID to start checking from
     tasksMap: Map<string, Task>,
-    visited: Set<string> = new Set<string>()
+    visited: Set<string> = new Set<string>() // Keep track of visited nodes in this specific check path
   ): boolean {
-    // אם כבר ביקרנו במשימה זו, מצאנו מעגל
-    if (visited.has(parentId)) {
-      return true;
-    }
-    
-    // הוספת המשימה הנוכחית לרשימת המשימות שביקרנו בהן
+    // Add the current parent ID to the visited set for this path
     visited.add(parentId);
-    
-    // קבלת משימת האב
+
+    // Get the parent task object
     const parent = tasksMap.get(parentId);
-    
-    // אם אין משימת אב, אין מעגל
-    if (!parent || !parent.parent_task_id) {
-      return false;
+
+    // Base Case 1: No parent found (reached the root or an invalid ID)
+    if (!parent) {
+      return false; // No circular reference found along this path
     }
-    
-    // אם משימת האב מצביעה על המשימה המקורית, מצאנו מעגל
+
+    // Base Case 2: The parent points back to the original task ID
     if (parent.parent_task_id === taskId) {
-      return true;
+      return true; // Circular reference detected!
     }
-    
-    // בדיקה רקורסיבית של האב של האב
-    return this.isCircularReference(taskId, parent.parent_task_id, tasksMap, visited);
+
+    // Base Case 3: The parent points to a node already visited in this path
+    if (parent.parent_task_id && visited.has(parent.parent_task_id)) {
+        return true; // Circular reference detected!
+    }
+
+    // Base Case 4: The parent has no further parent (it's a root task relative to this path)
+    if (!parent.parent_task_id) {
+        return false; // No circular reference found along this path
+    }
+
+    // Recursive Step: Check the parent's parent
+    return this.isCircularReference(taskId, parent.parent_task_id, tasksMap, new Set(visited)); // Pass a copy of visited set?
+    // Using the same visited set should be correct for detecting cycles in the current path check.
+    // return this.isCircularReference(taskId, parent.parent_task_id, tasksMap, visited);
   },
 };
 

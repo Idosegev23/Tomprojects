@@ -699,75 +699,41 @@ export const dropboxService = {
 
   // פונקציה חדשה: יצירת תיקייה למשימה בכל רמה של ההירארכיה, בהתאם להיררכיית המשימות
   async createHierarchicalTaskFolder(
-    projectId: string,
-    projectName: string,
+    projectFolderPath: string,
     taskId: string,
     taskTitle: string,
-    parentFolderPath: string | null = null,
-    entrepreneurId?: string,
-    entrepreneurName?: string
+    parentTaskFolderPath: string | null = null
   ): Promise<string> {
     // אם הדרופבוקס לא מוגדר, נחזיר מזהה דמה
     if (!checkDropboxConfig()) {
-      return `mock-hierarchical-task-folder-${projectId}-${taskId}`;
+      return `mock-hierarchical-task-folder-${taskId}`;
     }
     
     try {
       // וידוא שיש מזהים תקינים
-      if (!projectId || !taskId) {
-        throw new Error('Invalid project or task ID');
+      if (!taskId || !projectFolderPath) {
+        throw new Error('Invalid task ID or project folder path');
       }
       
-      // וידוא קיום תיקיות בסיס
-      await this.ensureBaseFolders();
-      
-      // ניקוי השמות
-      const cleanProjectName = sanitizePath(projectName || 'project');
+      // ניקוי שם המשימה
       const cleanTaskTitle = sanitizePath(taskTitle || 'task');
       
-      console.log(`Creating hierarchical task folder for task: ${taskTitle} (${taskId}) in project: ${projectName}`);
+      console.log(`Creating hierarchical task folder for task: ${taskTitle} (${taskId})`);
       
       let basePath: string;
       
-      if (parentFolderPath) {
+      if (parentTaskFolderPath) {
         // אם יש נתיב של משימת אב, נשתמש בו כבסיס
-        console.log(`Using parent folder path: ${parentFolderPath}`);
-        basePath = parentFolderPath;
+        console.log(`Using parent task folder path: ${parentTaskFolderPath}`);
+        basePath = parentTaskFolderPath;
       } else {
-        // אחרת, נבנה את הנתיב לתיקיית הפרויקט - רק עם שם הפרויקט, ללא ה-UUID
-        if (entrepreneurId && entrepreneurName) {
-          const cleanEntrepreneurName = sanitizePath(entrepreneurName);
-          const entrepreneurPath = `${PROJECTS_PATH}/${cleanEntrepreneurName}_${entrepreneurId}`;
-          
-          // בדיקה אם תיקיית היזם כבר קיימת לפני יצירתה
-          const entrepreneurFolderExists = await this.folderExists(entrepreneurPath);
-          if (entrepreneurFolderExists) {
-            console.log(`Using existing entrepreneur folder: ${entrepreneurPath}`);
-          } else {
-            console.log(`Creating new entrepreneur folder: ${entrepreneurPath}`);
-            await this.createFolder(entrepreneurPath);
-          }
-          
-          // שימוש רק בשם הפרויקט ללא UUID
-          basePath = `${entrepreneurPath}/${cleanProjectName}`;
-        } else {
-          // שימוש רק בשם הפרויקט ללא UUID
-          basePath = `${PROJECTS_PATH}/${cleanProjectName}`;
-        }
-        
-        // בדיקה אם תיקיית הפרויקט כבר קיימת
-        const projectFolderExists = await this.folderExists(basePath);
-        if (projectFolderExists) {
-          console.log(`Using existing project folder: ${basePath}`);
-        } else {
-          console.log(`Creating new project folder: ${basePath}`);
-          await this.createFolder(basePath);
-        }
+        // אחרת, זו משימת שורש, הבסיס הוא תיקיית הפרויקט
+        console.log(`Using project folder path as base: ${projectFolderPath}`);
+        basePath = projectFolderPath;
       }
       
-      // יצירת תיקיית המשימה בנתיב הבסיס - שילוב השם ו-ID לזיהוי ייחודי
-      const formattedTaskTitle = `${cleanTaskTitle} [${taskId}]`;
-      const taskPath = `${basePath}/${formattedTaskTitle}`;
+      // יצירת הנתיב המלא לתיקיית המשימה (רק עם שם המשימה)
+      const taskPath = `${basePath}/${cleanTaskTitle}`;
       
       // בדיקה אם תיקיית המשימה כבר קיימת
       const taskFolderExists = await this.folderExists(taskPath);

@@ -8,6 +8,16 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   const projectId = params.id;
+  let selectedEntrepreneurPath: string | null = null;
+  
+  try {
+    // ננסה לקרוא את הגוף של הבקשה כדי לקבל את נתיב תיקיית היזם
+    const body = await req.json();
+    selectedEntrepreneurPath = body?.selectedEntrepreneurPath || null;
+    console.log('Selected Entrepreneur Path from request:', selectedEntrepreneurPath);
+  } catch (error) {
+    console.log('No request body or failed to parse, proceeding without selected path.');
+  }
   
   // לוג פעולה
   console.log(`API call to create Dropbox folder structure for project: ${projectId}`);
@@ -42,8 +52,11 @@ export async function POST(
       throw new Error('הפונקציה createFullHierarchicalFolderStructureForProject לא קיימת בשירות המשימות');
     }
     
-    // יצירת מבנה התיקיות ההיררכי
-    const createdFolders = await taskService.createFullHierarchicalFolderStructureForProject(project);
+    // יצירת מבנה התיקיות ההיררכי - מעבירים את נתיב היזם הנבחר
+    const createdFolders = await taskService.createFullHierarchicalFolderStructureForProject(
+      project,
+      selectedEntrepreneurPath
+    );
     
     // עדכון הפרויקט עם מידע על מבנה התיקיות שנוצר
     try {
@@ -53,6 +66,7 @@ export async function POST(
           dropbox_structure_created: true,
           dropbox_structure_created_at: new Date().toISOString(),
           dropbox_structure_status: 'success',
+          // שמירת הנתיב של תיקיית הפרויקט שנוצרה
           dropbox_root_folder: createdFolders?.project?.path || '',
         })
         .eq('id', projectId);

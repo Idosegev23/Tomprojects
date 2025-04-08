@@ -1,0 +1,1 @@
+export const PROJECTS_PATH = '/נכסים בבלעדיות/פרויקטים חדשים'; 
