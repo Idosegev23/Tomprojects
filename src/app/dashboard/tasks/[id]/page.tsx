@@ -48,10 +48,11 @@ import projectService from '@/lib/services/projectService';
 import stageService from '@/lib/services/stageService';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 import { Task, Project, Stage } from '@/types/supabase';
+import { ExtendedTask } from '@/types/extendedTypes';
 import DropboxFilesTab from '@/components/dropbox/DropboxFilesTab';
 
 export default function TaskPage() {
-  const [task, setTask] = useState<Task | null>(null);
+  const [task, setTask] = useState<ExtendedTask | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [stage, setStage] = useState<Stage | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -525,7 +526,7 @@ export default function TaskPage() {
             
             {/* טאב קבצים */}
             <TabPanel p={4}>
-              <DropboxFilesTab folderPath={task.dropbox_folder} />
+              <DropboxFilesTab folderPath={task?.dropbox_folder} />
             </TabPanel>
           </TabPanels>
         </Tabs>

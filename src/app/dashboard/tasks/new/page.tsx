@@ -333,7 +333,8 @@ export default function NewTask() {
         estimated_hours: task.estimated_hours !== null && task.estimated_hours !== undefined 
           ? parseFloat(task.estimated_hours.toString()) 
           : 0,
-      } as ExtendedNewTask;
+        project_id: task.project_id && task.project_id.trim() !== '' ? task.project_id : undefined
+      };
 
       const newTask = await taskService.createTask(formattedTask);
       

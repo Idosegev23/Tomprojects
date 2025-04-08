@@ -269,7 +269,7 @@ export const taskTemplateService = {
       const templateCopy = { ...template };
       
       // יצירת אובייקט המשימה החדשה - שימוש בטיפוס NewTask
-      const newTaskData: NewTask = {
+      const newTaskData = {
         title: templateCopy.title,
         description: templateCopy.description,
         priority: templateCopy.priority,
@@ -278,7 +278,7 @@ export const taskTemplateService = {
         hierarchical_number: templateCopy.hierarchical_number,
         responsible: templateCopy.responsible,
         category: templateCopy.category,
-        project_id: projectId, // משויכת לפרויקט המבוקש
+        project_id: projectId || undefined, // משויכת לפרויקט המבוקש והמרה ל-undefined אם אין ערך
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         ...overrideData as any, // דריסת נתונים שסופקו

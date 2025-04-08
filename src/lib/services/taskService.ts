@@ -9,7 +9,19 @@ import { PROJECTS_PATH } from '@/config/config';
 async function updateBuildTracking(message: string) {
   try {
     console.log(`Build tracking: ${message}`);
-    // ניתן להוסיף כאן קוד לתיעוד פעולות בקובץ או בבסיס נתונים
+    
+    // עדכון קובץ build_tracking
+    const { data, error } = await supabase
+      .from('build_tracking')
+      .insert({
+        message: message,
+        timestamp: new Date().toISOString(),
+        component: 'taskService'
+      });
+      
+    if (error) {
+      console.error('Error writing to build_tracking:', error);
+    }
   } catch (error) {
     console.error('Error updating build tracking:', error);
   }
@@ -49,7 +61,7 @@ export const taskService = {
   },
 
   // קריאת משימה אחת לפי מזהה
-  async getTaskById(id: string): Promise<Task | null> {
+  async getTaskById(id: string): Promise<ExtendedTask | null> {
     try {
       const { data, error } = await supabase
         .from('tasks')
@@ -62,7 +74,7 @@ export const taskService = {
         throw new Error(error.message);
       }
 
-      return data;
+      return data as ExtendedTask;
     } catch (err) {
       console.error(`Error in getTaskById for task ${id}:`, err);
       return null;
