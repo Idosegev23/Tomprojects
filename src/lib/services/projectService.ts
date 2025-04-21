@@ -588,7 +588,7 @@ export const projectService = {
       try {
         // ניסיון ראשון - קריאה לפונקציית RPC
         const { data, error } = await supabase.rpc('get_build_tracking', {
-          project_id_param: projectId
+          p_project_id: projectId
         });
 
         if (!error && data) {
