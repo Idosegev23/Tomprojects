@@ -542,7 +542,7 @@ export default function NewProject() {
         const { data, error } = await supabase.rpc('init_project_tables_and_data', {
           project_id_param: createdProject.id,
           create_default_stages: true,
-          create_default_tasks: false,
+          create_default_tasks: true,
           selected_task_ids: selectedTaskIds.length > 0 ? selectedTaskIds : null
         });
         
