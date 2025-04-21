@@ -140,6 +140,7 @@ export default function NewProject() {
   // מודל מעקב אחר תהליך היצירה
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
   const [newProjectId, setNewProjectId] = useState<string | null>(null);
+  const [createDropboxFolders, setCreateDropboxFolders] = useState(true);
   
   // טעינת כל המשימות הזמינות כתבניות
   useEffect(() => {
@@ -569,53 +570,66 @@ export default function NewProject() {
           ]
         });
         
-        // יצירת מבנה תיקיות בדרופבוקס עבור המשימות שנבחרו
-        try {
-          // עדכון המעקב - יצירת תיקיות
-          await projectService.updateBuildTracking(createdProject.id, {
+        // --- התניית יצירת תיקיות דרופבוקס ---
+        if (createDropboxFolders) {
+          try {
+            // עדכון המעקב - יצירת תיקיות
+            await projectService.updateBuildTracking(createdProject.id, {
+              logs: [
+                {
+                  message: "מתחיל יצירת מבנה תיקיות בדרופבוקס",
+                  timestamp: new Date().toISOString()
+                }
+              ]
+            });
+
+            console.log(`יצירת מבנה תיקיות עבור משימות הפרויקט בדרופבוקס`);
+
+            // קריאה לפונקציה שיוצרת את מבנה התיקיות ההיררכי
+            await taskService.createFullHierarchicalFolderStructureForProject({
+              id: createdProject.id,
+              name: createdProject.name,
+              entrepreneur_id: createdProject.entrepreneur_id
+            }, project.dropbox_folder_path || null);
+
+            console.log(`מבנה תיקיות נוצר בהצלחה`);
+
+            // עדכון המעקב - הצלחה ביצירת תיקיות
+            await projectService.updateBuildTracking(createdProject.id, {
+              logs: [
+                {
+                  message: "מבנה התיקיות נוצר בהצלחה",
+                  timestamp: new Date().toISOString()
+                }
+              ]
+            });
+          } catch (folderError) {
+            console.error('שגיאה ביצירת מבנה תיקיות בדרופבוקס:', folderError);
+
+            // עדכון המעקב - שגיאה ביצירת תיקיות
+            await projectService.updateBuildTracking(createdProject.id, {
+              logs: [
+                {
+                  message: `שגיאה ביצירת תיקיות: ${folderError instanceof Error ? folderError.message : 'שגיאה לא ידועה'}`,
+                  timestamp: new Date().toISOString()
+                }
+              ]
+            });
+            // לא נזרוק שגיאה כאן כדי לא לעצור את התהליך
+          }
+        } else {
+           // עדכון מעקב אופציונלי אם דילגו על יצירת תיקיות
+           await projectService.updateBuildTracking(createdProject.id, {
             logs: [
               {
-                message: "יוצר מבנה תיקיות בדרופבוקס",
+                message: "דילוג על יצירת תיקיות בדרופבוקס בהתאם לבחירה.",
                 timestamp: new Date().toISOString()
               }
             ]
           });
-          
-          console.log(`יצירת מבנה תיקיות עבור משימות הפרויקט בדרופבוקס`);
-          
-          // קריאה לפונקציה שיוצרת את מבנה התיקיות ההיררכי
-          await taskService.createFullHierarchicalFolderStructureForProject({
-            id: createdProject.id,
-            name: createdProject.name,
-            entrepreneur_id: createdProject.entrepreneur_id
-          }, project.dropbox_folder_path || null);
-          
-          console.log(`מבנה תיקיות נוצר בהצלחה`);
-          
-          // עדכון המעקב - הצלחה ביצירת תיקיות
-          await projectService.updateBuildTracking(createdProject.id, {
-            logs: [
-              {
-                message: "מבנה התיקיות נוצר בהצלחה",
-                timestamp: new Date().toISOString()
-              }
-            ]
-          });
-        } catch (folderError) {
-          console.error('שגיאה ביצירת מבנה תיקיות בדרופבוקס:', folderError);
-          
-          // עדכון המעקב - שגיאה ביצירת תיקיות
-          await projectService.updateBuildTracking(createdProject.id, {
-            logs: [
-              {
-                message: `שגיאה ביצירת תיקיות: ${folderError instanceof Error ? folderError.message : 'שגיאה לא ידועה'}`,
-                timestamp: new Date().toISOString()
-              }
-            ]
-          });
-          // לא נזרוק שגיאה כאן כדי לא לעצור את התהליך
         }
-        
+        // --- סוף התניית יצירת תיקיות דרופבוקס ---
+
         // עדכון המעקב - סיום התהליך
         await projectService.updateBuildTracking(createdProject.id, {
           logs: [
@@ -843,6 +857,14 @@ export default function NewProject() {
                   דפדפן תיקיות דרופבוקס
                 </Button>
               </Flex>
+              <Checkbox
+                mt={2}
+                isChecked={createDropboxFolders}
+                onChange={(e) => setCreateDropboxFolders(e.target.checked)}
+                isDisabled={!!dropboxFolderError}
+              >
+                צור מבנה תיקיות בדרופבוקס עבור הפרויקט
+              </Checkbox>
             </FormControl>
             
             <FormControl>
