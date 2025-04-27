@@ -352,6 +352,49 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   // הבטחה שהמשימות תואמות את הטיפוס המצופה
   const tasksWithCorrectType = tasks as unknown as SupabaseTask[];
   
+  // פונקציה לטיפול בסידור מחדש של משימות
+  const handleReorderTasks = async (parentTaskId: string | null, taskIds: string[]) => {
+    try {
+      // קריאה ל-service לסידור מחדש של המשימות
+      await taskService.reorderTasks(id, parentTaskId, taskIds);
+      
+      // רענון המשימות מהשרת
+      const tasksData = await taskService.getProjectSpecificTasks(id);
+      
+      // המרת נתוני המשימות לטיפוס המורחב
+      const foundStage = (taskStageId: string | null) => stages.find(stage => stage.id === taskStageId);
+      
+      const enhancedTasks = tasksData.map(task => {
+        const stage = foundStage(task.stage_id);
+        return {
+          ...task,
+          stageName: stage?.title || 'ללא שלב',
+          stageColor: 'gray',
+          assignees: task.assignees || null,
+        };
+      });
+      
+      setTasks(enhancedTasks as KanbanTask[]);
+      
+      toast({
+        title: 'סדר המשימות עודכן בהצלחה',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error('שגיאה בסידור מחדש של המשימות:', error);
+      
+      toast({
+        title: 'שגיאה בסידור מחדש של המשימות',
+        description: error instanceof Error ? error.message : 'אירעה שגיאה בסידור המשימות',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+  
   return (
     <Box>
       {loading ? (
@@ -405,6 +448,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
             onTaskEdited={handleEditTask}
             onTaskStatusChanged={handleStatusChange}
             onTaskDrop={handleTaskDrop}
+            onReorderTasks={handleReorderTasks}
           />
 
           {/* מודל עריכת משימה */}

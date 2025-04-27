@@ -1128,12 +1128,92 @@ export const taskService = {
 
   // Placeholder function for reordering tasks (hierarchy)
   // TODO: Implement logic to update hierarchical_number or similar based on new order
-  async reorderTasks(projectId: string, parentTaskId: string | null): Promise<void> {
-    console.warn(`Placeholder: reorderTasks called for project ${projectId} under parent ${parentTaskId}`);
-    // Here you would typically:
-    // 1. Receive the new order of tasks (maybe as an array of task IDs).
-    // 2. Recalculate and update the hierarchical_number for the affected tasks.
-    return; // Placeholder does nothing
+  async reorderTasks(projectId: string, parentTaskId: string | null, taskIds: string[]): Promise<void> {
+    try {
+      await updateBuildTracking(`סידור מחדש של משימות בפרויקט ${projectId} ${parentTaskId ? `תחת הורה ${parentTaskId}` : 'ברמת שורש'}`);
+      console.log(`Reordering tasks in project ${projectId} ${parentTaskId ? `under parent ${parentTaskId}` : 'at root level'}`);
+      
+      if (!taskIds || taskIds.length === 0) {
+        console.warn('No tasks provided for reordering');
+        return;
+      }
+      
+      // בדיקה אם יש צורך להשתמש בטבלה ספציפית לפרויקט
+      let useProjectTable = false;
+      let projectTableName = 'tasks';
+      
+      if (projectId) {
+        const tableName = `project_${projectId}_tasks`;
+        try {
+          const { data: tableExists, error: checkError } = await supabase
+            .rpc('check_table_exists', { table_name_param: tableName });
+            
+          if (!checkError && tableExists) {
+            projectTableName = tableName;
+            useProjectTable = true;
+            console.log(`Using project-specific table ${projectTableName} for reordering tasks`);
+          }
+        } catch (checkError) {
+          console.warn(`Error checking if table ${tableName} exists:`, checkError);
+        }
+      }
+      
+      // נמצא את המשימות הרלוונטיות (לפי משימת אב, או משימות שורש)
+      let query = supabase
+        .from(useProjectTable ? projectTableName : 'tasks')
+        .select('id, hierarchical_number');
+        
+      if (parentTaskId) {
+        // מצב של תת-משימות - נסנן לפי משימת האב
+        query = query.eq('parent_task_id', parentTaskId);
+      } else {
+        // מצב של משימות שורש - נסנן לפי פרויקט ומשימות ללא הורה
+        query = query.eq('project_id', projectId).is('parent_task_id', null);
+      }
+      
+      const { data: tasks, error } = await query;
+      
+      if (error) {
+        console.error(`Error fetching tasks for reordering:`, error);
+        throw new Error(`שגיאה בקבלת המשימות לסידור: ${error.message}`);
+      }
+      
+      if (!tasks || tasks.length === 0) {
+        console.warn('No tasks found for reordering');
+        return;
+      }
+      
+      // נסדר את המשימות לפי הסדר החדש
+      const parentTask = parentTaskId ? await this.getTaskById(parentTaskId) : null;
+      const parentPrefix = parentTask?.hierarchical_number ? `${parentTask.hierarchical_number}.` : '';
+      
+      console.log(`Updating hierarchical numbers for ${taskIds.length} tasks:`);
+      
+      // עדכון המספרים ההיררכיים לפי הסדר החדש
+      for (let i = 0; i < taskIds.length; i++) {
+        const taskId = taskIds[i];
+        const newHierarchicalNumber = parentTaskId ? `${parentPrefix}${i + 1}` : `${i + 1}`;
+        
+        console.log(`Updating task ${taskId} to hierarchical number ${newHierarchicalNumber}`);
+        
+        try {
+          // עדכון המספר ההיררכי
+          await this.updateTask(taskId, { hierarchical_number: newHierarchicalNumber });
+          
+          // עדכון רקורסיבי של תתי-המשימות של המשימה הזו
+          await this.updateSubtaskHierarchicalNumbers(taskId);
+        } catch (updateError) {
+          console.error(`Error updating hierarchical number for task ${taskId}:`, updateError);
+          // נמשיך למשימה הבאה גם אם יש שגיאה
+        }
+      }
+      
+      console.log('Task reordering completed successfully');
+      await updateBuildTracking(`סידור המשימות הושלם בהצלחה`);
+    } catch (err) {
+      console.error(`Error in reorderTasks:`, err);
+      throw new Error(`שגיאה בסידור המשימות: ${err instanceof Error ? err.message : 'שגיאה לא ידועה'}`);
+    }
   },
 
   // Placeholder function for syncing tasks after project table creation

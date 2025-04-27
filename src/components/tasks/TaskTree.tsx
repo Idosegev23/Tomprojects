@@ -382,7 +382,7 @@ interface TaskTreeProps {
   onTaskDeleted?: (taskId: string) => void;
   onTaskStatusChanged?: (taskId: string, newStatus: string) => void;
   searchTerm?: string;
-  onReorderTasks?: (taskId: string, fromIndex: number, toIndex: number) => void;
+  onReorderTasks?: (parentTaskId: string | null, taskIds: string[]) => void;
   onTaskDropped?: (taskId: string, fromColumn: string, toColumn: string) => void;
   loading?: boolean;
   errorMessage?: string;
@@ -600,7 +600,21 @@ const TaskTree: React.FC<TaskTreeProps> = ({
   // פונקציה לטיפול בגרירה ושינוי סדר (תשמש בעתיד)
   const handleReorderTask = (taskId: string, fromIndex: number, toIndex: number) => {
     if (onReorderTasks) {
-      onReorderTasks(taskId, fromIndex, toIndex);
+      // מוצאים את המשימה
+      const task = tasks.find(t => t.id === taskId);
+      if (task) {
+        // מוצאים את כל תתי-המשימות של אותה משימה או את כל משימות האב
+        const parentId = task.parent_task_id;
+        const siblingTasks = tasks.filter(t => t.parent_task_id === parentId);
+        
+        // יוצרים מערך חדש של המשימות בסדר החדש
+        const reorderedTasks = [...siblingTasks];
+        const taskToMove = reorderedTasks.splice(fromIndex, 1)[0];
+        reorderedTasks.splice(toIndex, 0, taskToMove);
+        
+        // מעבירים את רשימת ה-IDs בסדר החדש
+        onReorderTasks(parentId, reorderedTasks.map(t => t.id));
+      }
     }
   };
   

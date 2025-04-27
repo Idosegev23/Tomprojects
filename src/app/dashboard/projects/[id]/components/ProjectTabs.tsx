@@ -49,6 +49,7 @@ interface ProjectTabsProps {
   onTaskEdited: (task: KanbanTask) => void;
   onTaskStatusChanged: (taskId: string, status: string) => void;
   onTaskDrop: (taskId: string, newStartDate: string, newEndDate: string) => void;
+  onReorderTasks?: (parentTaskId: string | null, taskIds: string[]) => void;
 }
 
 export default function ProjectTabs({
@@ -65,8 +66,30 @@ export default function ProjectTabs({
   onTaskDeleted,
   onTaskEdited,
   onTaskStatusChanged,
-  onTaskDrop
+  onTaskDrop,
+  onReorderTasks
 }: ProjectTabsProps) {
+  // פונקציית מתאם בין ממשק TaskTree לממשק שלנו
+  const handleReorderTasks = (taskId: string, fromIndex: number, toIndex: number) => {
+    if (onReorderTasks) {
+      // מוצאים את המשימה
+      const task = tasks.find(t => t.id === taskId);
+      if (task) {
+        // מוצאים את כל תתי-המשימות של אותה משימה או את כל משימות האב
+        const parentId = task.parent_task_id;
+        const siblingTasks = tasks.filter(t => t.parent_task_id === parentId);
+        
+        // יוצרים מערך חדש של המשימות בסדר החדש
+        const reorderedTasks = [...siblingTasks];
+        const taskToMove = reorderedTasks.splice(fromIndex, 1)[0];
+        reorderedTasks.splice(toIndex, 0, taskToMove);
+        
+        // מעבירים את רשימת ה-IDs בסדר החדש
+        onReorderTasks(parentId, reorderedTasks.map(t => t.id));
+      }
+    }
+  };
+
   return (
     <Card variant="outline" shadow="sm" mb={4}>
       <CardBody p={0}>
@@ -182,6 +205,7 @@ export default function ProjectTabs({
                 onTaskDeleted={onTaskDeleted}
                 onTaskStatusChanged={onTaskStatusChanged}
                 loading={loading}
+                onReorderTasks={handleReorderTasks}
               />
             </TabPanel>
             
