@@ -608,7 +608,7 @@ export const taskService = {
             
             if (!isNaN(rootNumber) && rootNumber > maxNumber) {
               maxNumber = rootNumber;
-              console.log(`מצאתי מספר היררכי גבוה יותר בטבלה הראשית: ${rootNumber}`);
+              console.log(`מצאתי מספר היררכי גבוה יותר בטבלה הספציפית: ${rootNumber}`);
             }
           }
         });
@@ -708,7 +708,7 @@ export const taskService = {
             
             if (!isNaN(rootNumber) && rootNumber > maxNumber) {
               maxNumber = rootNumber;
-              console.log(`מצאתי מספר היררכי גבוה יותר בטבלה הראשית: ${rootNumber}`);
+              console.log(`מצאתי מספר היררכי גבוה יותר בטבלה הספציפית: ${rootNumber}`);
             }
           }
         });
@@ -886,75 +886,75 @@ export const taskService = {
         throw new Error(`Task ${taskId} not found`);
       }
       
-      // בדיקה אם יש צורך להשתמש בטבלה ספציפית לפרויקט
-      let tableName = 'tasks';
-      let useProjectTable = false;
+      // וידוא שזמן העדכון מוגדר
+      const taskToUpdateBase = { ...updates, updated_at: new Date().toISOString() };
       
-      if (currentTask.project_id) {
-        const projectTableName = `project_${currentTask.project_id}_tasks`;
-        try {
-          const { data: tableExists, error: checkError } = await supabase
-            .rpc('check_table_exists', { table_name_param: projectTableName });
-            
-          if (!checkError && tableExists) {
-            tableName = projectTableName;
-            useProjectTable = true;
-            console.log(`Using project-specific table ${projectTableName} for updating task ${taskId}`);
-          }
-        } catch (checkError) {
-          console.warn(`Error checking if table ${projectTableName} exists:`, checkError);
-          // נמשיך עם הטבלה הראשית אם יש שגיאה בבדיקת הטבלה הספציפית
-        }
-      }
+      // עדכון תמיד בטבלה הראשית
+      const mainTaskToUpdate = await this.removeNonExistingFields(taskToUpdateBase, false);
+      console.log(`Updating task ${taskId} in main tasks table:`, mainTaskToUpdate);
       
-      // הכנת הנתונים לעדכון
-      const taskToUpdate = await this.removeNonExistingFields(updates, useProjectTable);
-      taskToUpdate.updated_at = new Date().toISOString(); // וידוא שזמן העדכון מוגדר
-      
-      // הוספת לוג מפורט כדי להבין בדיוק מה מעודכן
-      console.log(`Updating task ${taskId} in table ${tableName}:`, taskToUpdate);
-      
-      // ביצוע העדכון בבסיס הנתונים
-      const { data, error } = await supabase
-        .from(tableName)
-        .update(taskToUpdate)
+      // ביצוע העדכון בטבלת המשימות הראשית
+      const { data: mainData, error: mainError } = await supabase
+        .from('tasks')
+        .update(mainTaskToUpdate)
         .eq('id', taskId)
         .select('*')
         .single();
       
-      if (error) {
-        console.error(`Error updating task ${taskId} in ${tableName}:`, error);
-        
-        // אם ניסינו להשתמש בטבלה ספציפית ונכשלנו, ננסה את הטבלה הראשית
-        if (useProjectTable) {
-          console.log(`Falling back to main tasks table for update of task ${taskId}`);
-          const { data: fallbackData, error: fallbackError } = await supabase
-            .from('tasks')
-            .update(taskToUpdate)
-            .eq('id', taskId)
-            .select('*')
-            .single();
-            
-          if (fallbackError) {
-            console.error(`Error updating task ${taskId} in fallback table:`, fallbackError);
-            throw new Error(fallbackError.message);
-          }
-          
-          // עדכון מוצלח בטבלה הראשית
-          console.log(`Successfully updated task ${taskId} in fallback table`);
-          return fallbackData as ExtendedTask;
-        }
-        
-        throw new Error(error.message);
+      if (mainError) {
+        console.error(`Error updating task ${taskId} in main tasks table:`, mainError);
+        throw new Error(mainError.message);
       }
       
-      if (!data) {
+      let finalData = mainData;
+      
+      // אם יש פרויקט, נעדכן גם בטבלה הספציפית של הפרויקט
+      if (currentTask.project_id) {
+        const projectTableName = `project_${currentTask.project_id}_tasks`;
+        
+        try {
+          // בדיקה אם טבלת הפרויקט קיימת
+          const { data: tableExists, error: checkError } = await supabase
+            .rpc('check_table_exists', { table_name_param: projectTableName });
+            
+          if (!checkError && tableExists) {
+            console.log(`Using project-specific table ${projectTableName} for updating task ${taskId}`);
+            
+            // הכנת הנתונים לטבלה הספציפית
+            const projectTaskToUpdate = await this.removeNonExistingFields(taskToUpdateBase, true);
+            console.log(`Updating task ${taskId} in project table ${projectTableName}:`, projectTaskToUpdate);
+            
+            // ביצוע העדכון בטבלה הספציפית
+            const { data: projectData, error: projectError } = await supabase
+              .from(projectTableName)
+              .update(projectTaskToUpdate)
+              .eq('id', taskId)
+              .select('*')
+              .single();
+              
+            if (projectError) {
+              console.error(`Error updating task ${taskId} in project table ${projectTableName}:`, projectError);
+              // ממשיכים עם התוצאה מהטבלה הראשית
+            } else {
+              // אם העדכון בטבלה הספציפית הצליח, נשתמש בתוצאה ממנה
+              finalData = projectData;
+            }
+          }
+        } catch (checkError) {
+          console.warn(`Error checking if table ${projectTableName} exists:`, checkError);
+          // נמשיך עם התוצאה מהטבלה הראשית
+        }
+      }
+      
+      if (!finalData) {
         throw new Error(`Task ${taskId} not found after update`);
       }
       
-      // עדכון מוצלח
+      // רישום בכלי המעקב אחר בניה
+      await updateBuildTracking(`Successfully updated task ${taskId} with fields: ${Object.keys(updates).join(', ')}`);
+      
       console.log(`Successfully updated task ${taskId}`);
-      return data as ExtendedTask;
+      return finalData as ExtendedTask;
     } catch (err) {
       console.error(`Error in updateTask for ${taskId}:`, err);
       throw err;
@@ -972,8 +972,37 @@ export const taskService = {
         throw new Error('Missing status value');
       }
       
-      console.log(`Updating status for task ${taskId} to ${status}`);
-      return await this.updateTask(taskId, { status });
+      // המרת הסטטוס לאותיות קטנות
+      let normalizedStatus = status.toLowerCase();
+      
+      // וידוא שהסטטוס תקין
+      const validStatuses = ['todo', 'in_progress', 'review', 'done'];
+      if (!validStatuses.includes(normalizedStatus)) {
+        // אם הסטטוס לא תקין, ננסה למפות אותו לערך תקין
+        if (normalizedStatus === 'לביצוע' || normalizedStatus === 'to do' || normalizedStatus === 'todo') {
+          normalizedStatus = 'todo';
+        } else if (normalizedStatus === 'בתהליך' || normalizedStatus === 'in progress' || normalizedStatus === 'in_progress') {
+          normalizedStatus = 'in_progress';
+        } else if (normalizedStatus === 'בבדיקה' || normalizedStatus === 'in review' || normalizedStatus === 'review') {
+          normalizedStatus = 'review';
+        } else if (normalizedStatus === 'הושלם' || normalizedStatus === 'completed' || normalizedStatus === 'done') {
+          normalizedStatus = 'done';
+        } else {
+          throw new Error(`סטטוס לא תקין: ${normalizedStatus}. הסטטוסים התקינים הם: ${validStatuses.join(', ')}`);
+        }
+      }
+      
+      console.log(`Updating status for task ${taskId} to ${normalizedStatus}`);
+      await updateBuildTracking(`Updating task ${taskId} status to ${normalizedStatus}`);
+      
+      // עדכון הסטטוס דרך הפונקציה המשופרת שלנו
+      const updatedTask = await this.updateTask(taskId, { status: normalizedStatus });
+      
+      if (updatedTask && updatedTask.status !== normalizedStatus) {
+        console.warn(`Warning: Task ${taskId} status was not updated correctly. Expected ${normalizedStatus}, got ${updatedTask.status}`);
+      }
+      
+      return updatedTask;
     } catch (err) {
       console.error(`Error in updateTaskStatus for ${taskId}:`, err);
       throw err;
@@ -1307,15 +1336,111 @@ export const taskService = {
     }
   },
 
-  // Placeholder function for syncing tasks after project table creation
-  // TODO: Implement logic to copy/move relevant tasks to the project-specific table
+  // פונקציה לסנכרון המשימות בין הטבלה הראשית וטבלת הפרויקט הספציפית
   async syncProjectTasks(projectId: string): Promise<void> {
-    console.warn(`Placeholder: syncProjectTasks called for project ${projectId}`);
-    // Here you would typically:
-    // 1. Find tasks in the main 'tasks' table belonging to this projectId.
-    // 2. Copy or move these tasks to the newly created project_PROJECTID_tasks table.
-    // 3. Potentially update references or perform clean-up.
-    return; // Placeholder does nothing
+    try {
+      if (!projectId) {
+        throw new Error('Missing project ID');
+      }
+      
+      console.log(`מתחיל סנכרון משימות עבור פרויקט ${projectId}`);
+      await updateBuildTracking(`התחלת סנכרון משימות עבור פרויקט ${projectId}`);
+      
+      // בדיקה אם טבלת הפרויקט קיימת
+      const projectTableName = `project_${projectId}_tasks`;
+      const { data: tableExists, error: checkError } = await supabase
+        .rpc('check_table_exists', { table_name_param: projectTableName });
+        
+      if (checkError || !tableExists) {
+        console.warn(`טבלת הפרויקט ${projectTableName} לא קיימת, מדלג על סנכרון`);
+        return;
+      }
+      
+      // קבלת כל המשימות מהטבלה הראשית שמשויכות לפרויקט זה
+      const { data: mainTasks, error: mainTasksError } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('project_id', projectId);
+        
+      if (mainTasksError) {
+        console.error(`שגיאה בקבלת משימות מהטבלה הראשית:`, mainTasksError);
+        throw new Error(mainTasksError.message);
+      }
+      
+      if (!mainTasks || mainTasks.length === 0) {
+        console.log(`אין משימות בטבלה הראשית עבור פרויקט ${projectId}`);
+        return;
+      }
+      
+      // קבלת כל המשימות מטבלת הפרויקט
+      const { data: projectTasks, error: projectTasksError } = await supabase
+        .from(projectTableName)
+        .select('*');
+        
+      if (projectTasksError) {
+        console.error(`שגיאה בקבלת משימות מטבלת הפרויקט:`, projectTasksError);
+        throw new Error(projectTasksError.message);
+      }
+      
+      // יצירת מפות לחיפוש מהיר
+      const projectTasksMap = new Map(projectTasks?.map(task => [task.id, task]) || []);
+      
+      // עדכון כל משימה בטבלת הפרויקט אם יש צורך
+      for (const mainTask of mainTasks) {
+        const projectTask = projectTasksMap.get(mainTask.id);
+        
+        // אם המשימה לא קיימת בטבלת הפרויקט, נוסיף אותה
+        if (!projectTask) {
+          console.log(`משימה ${mainTask.id} לא קיימת בטבלת הפרויקט, מוסיף אותה`);
+          
+          // הכנת הנתונים לטבלת הפרויקט
+          const taskToInsert = await this.removeNonExistingFields(mainTask, true);
+          
+          const { error: insertError } = await supabase
+            .from(projectTableName)
+            .insert(taskToInsert);
+            
+          if (insertError) {
+            console.error(`שגיאה בהוספת משימה ${mainTask.id} לטבלת הפרויקט:`, insertError);
+          }
+        } 
+        // אם המשימה קיימת, נבדוק אם יש צורך לעדכן אותה
+        else if (projectTask.status !== mainTask.status || 
+                 projectTask.updated_at !== mainTask.updated_at ||
+                 projectTask.hierarchical_number !== mainTask.hierarchical_number) {
+          console.log(`משימה ${mainTask.id} קיימת בטבלת הפרויקט אבל צריכה עדכון`);
+          
+          // פרטים ספציפיים שחשוב לעדכן בטבלת הפרויקט
+          const updates = {
+            status: mainTask.status,
+            priority: mainTask.priority,
+            title: mainTask.title,
+            description: mainTask.description,
+            hierarchical_number: mainTask.hierarchical_number,
+            parent_task_id: mainTask.parent_task_id,
+            updated_at: mainTask.updated_at
+          };
+          
+          // הכנת הנתונים לטבלת הפרויקט
+          const taskToUpdate = await this.removeNonExistingFields(updates, true);
+          
+          const { error: updateError } = await supabase
+            .from(projectTableName)
+            .update(taskToUpdate)
+            .eq('id', mainTask.id);
+            
+          if (updateError) {
+            console.error(`שגיאה בעדכון משימה ${mainTask.id} בטבלת הפרויקט:`, updateError);
+          }
+        }
+      }
+      
+      await updateBuildTracking(`סנכרון משימות עבור פרויקט ${projectId} הושלם בהצלחה`);
+      console.log(`סנכרון משימות עבור פרויקט ${projectId} הושלם`);
+    } catch (err) {
+      console.error(`שגיאה בסנכרון משימות עבור פרויקט ${projectId}:`, err);
+      await updateBuildTracking(`שגיאה בסנכרון משימות: ${err instanceof Error ? err.message : 'שגיאה לא ידועה'}`);
+    }
   },
 
   // בדיקת משימות משנה

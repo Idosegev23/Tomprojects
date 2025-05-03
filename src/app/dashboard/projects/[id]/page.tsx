@@ -293,8 +293,13 @@ export default function ProjectPage({ params }: ProjectPageProps) {
         }
       }
       
+      console.log(`[handleStatusChange] מעדכן סטטוס משימה ${taskId} ל-${normalizedStatus}`);
+      
       // עדכון הסטטוס בשרת
       const updatedTask = await taskService.updateTaskStatus(taskId, normalizedStatus);
+      
+      // סנכרון טבלת הפרויקט עם הטבלה הראשית
+      await taskService.syncProjectTasks(id);
       
       // עדכון המשימה ברשימה המקומית
       setTasks(tasks.map(task => task.id === taskId ? updatedTask : task));
