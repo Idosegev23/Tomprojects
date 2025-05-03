@@ -24,11 +24,7 @@ import {
   getPriorityText, 
   formatDate 
 } from './taskUtils';
-
-// טיפוס למשימה עם תת-משימות (יש להתאים אותו לטיפוס בקובץ TaskTable)
-interface TaskWithChildren extends TaskWithStage {
-  childTasks?: TaskWithChildren[];
-}
+import { TaskWithChildren } from './TaskTable';
 
 interface TaskRowProps {
   task: TaskWithChildren;
@@ -205,9 +201,24 @@ const TaskRow: React.FC<TaskRowProps> = ({
         
         <Box flex="1" display={{ base: "none", md: "block" }}>
           {task.hierarchical_number ? (
-            <Tag size="sm" bgColor="blue.50" color="blue.800" fontSize="xs">
-              {task.hierarchical_number}
-            </Tag>
+            <Flex align="center">
+              <Tag size="sm" bgColor="blue.50" color="blue.800" fontSize="xs">
+                {isTaskParent && task.displayIndex ? (
+                  // הצגת המספור הדינמי ליד המספור המקורי למשימות אב
+                  <>{task.displayIndex} (#{task.hierarchical_number})</>
+                ) : (
+                  // הצגת המספור המקורי בלבד לתתי-משימות
+                  <>{task.hierarchical_number}</>
+                )}
+              </Tag>
+              {isTaskParent && task.displayIndex && (
+                <Tooltip label="מספור דינמי רציף" placement="top">
+                  <Box ml={1} fontSize="xs" color="gray.500" fontStyle="italic">
+                    (מספור רציף)
+                  </Box>
+                </Tooltip>
+              )}
+            </Flex>
           ) : (
             <Text fontSize="sm" color="gray.500">-</Text>
           )}

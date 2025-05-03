@@ -47,10 +47,6 @@ const TaskTable: React.FC<TaskTableProps> = ({
   // state חדש לניהול מצב ההרחבה הגלובלי
   const [expandAll, setExpandAll] = useState<boolean>(false);
   
-  // משתנים לחיפוש
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  
   // טיפול בלחיצה על עמודה למיון
   const handleSort = (field: SortField) => {
     if (sortField === field) {
