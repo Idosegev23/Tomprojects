@@ -21,12 +21,14 @@ import {
   Divider,
   Progress,
   Icon,
+  MenuDivider
 } from '@chakra-ui/react';
-import { FiMoreVertical, FiEdit, FiTrash2, FiCalendar, FiUser, FiBriefcase, FiClock, FiLink, FiCheckCircle, FiXCircle } from 'react-icons/fi';
+import { FiMoreVertical, FiEdit, FiTrash2, FiCalendar, FiUser, FiBriefcase, FiClock, FiLink, FiCheckCircle, FiXCircle, FiUserPlus } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import { TaskCardProps } from './types';
 import { getPriorityColor, getPriorityLabel, formatDate, getDueStatus } from './utils';
 import { FaUserAlt } from 'react-icons/fa';
+import taskService from '@/lib/services/taskService';
 
 // קומפוננטה מונפשת לכרטיס משימה
 const MotionBox = motion(Box);
@@ -38,6 +40,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onEditTask,
   onDeleteTask,
   getProjectName,
+  onStatusChange
 }) => {
   const dueStatus = getDueStatus(task.due_date);
   const borderColor = useColorModeValue('gray.200', 'gray.600');
@@ -48,18 +51,15 @@ const TaskCard: React.FC<TaskCardProps> = ({
     : null;
 
   // פונקציה המחזירה צבע לפי סטטוס המשימה
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'todo':
-        return 'gray';
-      case 'in_progress':
-        return 'blue';
-      case 'review':
-        return 'orange';
-      case 'done':
-        return 'green';
-      default:
-        return 'gray';
+  const getStatusColor = (status: string | null | undefined): string => {
+    if (!status) return 'gray';
+    
+    switch(status.toLowerCase()) {
+      case 'todo': return 'gray';
+      case 'in_progress': return 'blue';
+      case 'review': return 'orange';
+      case 'done': return 'green';
+      default: return 'gray';
     }
   };
   
@@ -102,6 +102,32 @@ const TaskCard: React.FC<TaskCardProps> = ({
     if (e.currentTarget) {
       e.currentTarget.style.opacity = '1';
       e.currentTarget.classList.remove('dragging');
+    }
+  };
+  
+  const handleStatusChange = async (newStatus: string) => {
+    try {
+      console.log(`TaskCard: Changing task ${task.id} status from ${task.status} to ${newStatus}`);
+      
+      // אם קיימת פונקציית callback לשינוי סטטוס, נשתמש בה
+      if (onStatusChange) {
+        await onStatusChange(task.id, newStatus);
+      } else {
+        // אחרת נעדכן ישירות
+        try {
+          // עדכון הסטטוס בשרת
+          await taskService.updateTaskStatus(task.id, newStatus);
+          
+          // סנכרון טבלת הפרויקט אם קיים מזהה פרויקט
+          if (task.project_id) {
+            await taskService.syncProjectTasks(task.project_id);
+          }
+        } catch (error) {
+          console.error('Error updating task status directly:', error);
+        }
+      }
+    } catch (error) {
+      console.error('TaskCard: Error changing task status:', error);
     }
   };
   
@@ -158,57 +184,68 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 </Badge>
               )}
               
-              <Badge 
-                colorScheme={getStatusColor(task.status)} 
-                variant="solid" 
-                fontSize="xs" 
-                borderRadius="full"
-                px={2}
-              >
-                {task.status === 'todo' ? 'לביצוע' : 
-                 task.status === 'in_progress' ? 'בתהליך' : 
-                 task.status === 'review' ? 'בבדיקה' : 'הושלם'}
-              </Badge>
-              
-              <Badge 
-                colorScheme={getPriorityColor(task.priority)} 
-                variant={task.priority === 'high' || task.priority === 'urgent' ? "solid" : "subtle"}
-                fontSize="xs"
-                borderRadius="full"
-                px={2}
-              >
-                {getPriorityLabel(task.priority)}
-              </Badge>
+              <Menu closeOnSelect={true}>
+                <MenuButton
+                  as={IconButton}
+                  aria-label="אפשרויות"
+                  icon={<FiMoreVertical />}
+                  variant="ghost"
+                  size="xs"
+                />
+                <MenuList>
+                  {onEditTask && (
+                    <MenuItem 
+                      icon={<FiEdit />} 
+                      onClick={() => onEditTask(task)}
+                    >
+                      ערוך
+                    </MenuItem>
+                  )}
+                  
+                  {/* תפריט לשינוי סטטוס */}
+                  <MenuItem
+                    onClick={() => handleStatusChange('todo')}
+                    color={task.status === 'todo' ? getStatusColor('todo') : undefined}
+                    fontWeight={task.status === 'todo' ? 'bold' : 'normal'}
+                  >
+                    העבר למצב: לביצוע
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => handleStatusChange('in_progress')}
+                    color={task.status === 'in_progress' ? getStatusColor('in_progress') : undefined}
+                    fontWeight={task.status === 'in_progress' ? 'bold' : 'normal'}
+                  >
+                    העבר למצב: בתהליך
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => handleStatusChange('review')}
+                    color={task.status === 'review' ? getStatusColor('review') : undefined}
+                    fontWeight={task.status === 'review' ? 'bold' : 'normal'}
+                  >
+                    העבר למצב: בבדיקה
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => handleStatusChange('done')}
+                    color={task.status === 'done' ? getStatusColor('done') : undefined}
+                    fontWeight={task.status === 'done' ? 'bold' : 'normal'}
+                  >
+                    העבר למצב: הושלם
+                  </MenuItem>
+                  
+                  <MenuDivider />
+                  
+                  {onDeleteTask && (
+                    <MenuItem 
+                      icon={<FiTrash2 />} 
+                      onClick={() => onDeleteTask(task.id)}
+                      color="red.500"
+                    >
+                      מחק
+                    </MenuItem>
+                  )}
+                </MenuList>
+              </Menu>
             </HStack>
-            
-            <Menu closeOnSelect={true}>
-              <MenuButton
-                as={IconButton}
-                aria-label="אפשרויות"
-                icon={<FiMoreVertical />}
-                variant="ghost"
-                size="xs"
-              />
-              <MenuList>
-                {onEditTask && (
-                  <MenuItem 
-                    icon={<FiEdit />} 
-                    onClick={() => onEditTask(task)}
-                  >
-                    ערוך
-                  </MenuItem>
-                )}
-                {onDeleteTask && (
-                  <MenuItem 
-                    icon={<FiTrash2 />} 
-                    onClick={() => onDeleteTask(task.id)}
-                    color="red.500"
-                  >
-                    מחק
-                  </MenuItem>
-                )}
-              </MenuList>
-            </Menu>
           </Flex>
           
           <Text 

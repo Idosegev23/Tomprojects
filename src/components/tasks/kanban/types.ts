@@ -58,6 +58,7 @@ export interface TaskCardProps {
   onEditTask?: (task: Task) => void;
   onDeleteTask?: (taskId: string) => void;
   getProjectName: (projectId: string) => string;
+  onStatusChange?: (taskId: string, newStatus: string) => Promise<void>;
 }
 
 // טיפוס לכותרת הקנבן
