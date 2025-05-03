@@ -22,7 +22,6 @@ interface TaskTableProps {
 // הרחבת טיפוס המשימה לכלול תת-משימות
 export interface TaskWithChildren extends TaskWithStage {
   childTasks?: TaskWithChildren[];
-  displayIndex?: number; // מספור דינמי לתצוגה
 }
 
 const TaskTable: React.FC<TaskTableProps> = ({
@@ -103,30 +102,6 @@ const TaskTable: React.FC<TaskTableProps> = ({
     
     return rootTasks;
   }, [tasks]);
-  
-  // הוספת מספור דינמי למשימות האב
-  const addDisplayIndices = useCallback((taskTree: TaskWithChildren[]): TaskWithChildren[] => {
-    // סינון רק של משימות אב (אלו עם מספר היררכי שלם, ללא נקודות)
-    const parentTasksOnly = taskTree.filter(task => {
-      if (!task.hierarchical_number) return false;
-      const hierarchicalNumber = String(task.hierarchical_number);
-      return /^\d+$/.test(hierarchicalNumber);
-    });
-    
-    // מיון משימות האב לפי המספר ההיררכי המקורי שלהן
-    parentTasksOnly.sort((a, b) => {
-      if (!a.hierarchical_number || !b.hierarchical_number) return 0;
-      return parseInt(String(a.hierarchical_number)) - parseInt(String(b.hierarchical_number));
-    });
-    
-    // הקצאת מספור רציף (1, 2, 3, ...) למשימות האב
-    parentTasksOnly.forEach((task, index) => {
-      task.displayIndex = index + 1;
-    });
-    
-    // החזרת כל העץ המקורי עם המספור הדינמי שהוסף
-    return taskTree;
-  }, []);
   
   // מיון המשימות לפי השדה והכיוון שנבחרו
   const sortTasks = useCallback((taskList: TaskWithChildren[]): TaskWithChildren[] => {
@@ -229,8 +204,7 @@ const TaskTable: React.FC<TaskTableProps> = ({
   // בניית העץ וסינון ומיון המשימות
   const taskTree = buildTaskTree();
   const sortedTaskTree = sortTasks(taskTree);
-  const taskTreeWithIndices = addDisplayIndices(sortedTaskTree);
-  const filteredTaskTree = searchQuery ? filterTasks(taskTreeWithIndices) : taskTreeWithIndices;
+  const filteredTaskTree = searchQuery ? filterTasks(sortedTaskTree) : sortedTaskTree;
   
   // הפעלת חיפוש בלחיצה על Enter
   const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
