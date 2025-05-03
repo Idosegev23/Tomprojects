@@ -70,23 +70,10 @@ export default function ProjectTabs({
   onReorderTasks
 }: ProjectTabsProps) {
   // פונקציית מתאם בין ממשק TaskTree לממשק שלנו
-  const handleReorderTasks = (taskId: string, fromIndex: number, toIndex: number) => {
+  const handleReorderTasks = (parentTaskId: string | null, taskIds: string[]) => {
     if (onReorderTasks) {
-      // מוצאים את המשימה
-      const task = tasks.find(t => t.id === taskId);
-      if (task) {
-        // מוצאים את כל תתי-המשימות של אותה משימה או את כל משימות האב
-        const parentId = task.parent_task_id;
-        const siblingTasks = tasks.filter(t => t.parent_task_id === parentId);
-        
-        // יוצרים מערך חדש של המשימות בסדר החדש
-        const reorderedTasks = [...siblingTasks];
-        const taskToMove = reorderedTasks.splice(fromIndex, 1)[0];
-        reorderedTasks.splice(toIndex, 0, taskToMove);
-        
-        // מעבירים את רשימת ה-IDs בסדר החדש
-        onReorderTasks(parentId, reorderedTasks.map(t => t.id));
-      }
+      // העברת מזהה המשימה ההורה ורשימת המזהים של המשימות בסדר החדש
+      onReorderTasks(parentTaskId, taskIds);
     }
   };
 

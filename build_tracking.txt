@@ -28,4 +28,9 @@
    - הוספת הגדרה אוטומטית של מספרים היררכיים לשלבים חדשים
    - טיפול טוב יותר בשדות חסרים וערכי ברירת מחדל
 
+6. תיקון שגיאת בנייה בפרויקטים
+   - תיקון אי התאמה בפונקציית handleReorderTasks ב-ProjectTabs.tsx
+   - התאמת החתימה לדרישות של רכיב TaskTree
+   - שינוי מ-(taskId: string, fromIndex: number, toIndex: number) ל-(parentTaskId: string | null, taskIds: string[])
+
 כל התיקונים כוללים לוגים מפורטים יותר לצורכי דיבאג וטיפול בשגיאות החריגות.
