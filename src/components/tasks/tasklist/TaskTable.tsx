@@ -277,7 +277,7 @@ const TaskTable: React.FC<TaskTableProps> = ({
   
   return (
     <Card variant="outline" boxShadow="sm" borderRadius="md">
-      <CardHeader p={4}>
+      <Box p={4} borderBottom="1px solid" borderColor={borderColor}>
         <Flex flexDirection={{ base: "column", md: "row" }} gap={4} justifyContent="space-between">
           <HStack>
             <InputGroup size="md" width={{ base: "100%", md: "300px" }}>
@@ -317,7 +317,7 @@ const TaskTable: React.FC<TaskTableProps> = ({
             </Button>
           </HStack>
         </Flex>
-      </CardHeader>
+      </Box>
       
       <CardBody p={0}>
         <TaskTableHeader 
