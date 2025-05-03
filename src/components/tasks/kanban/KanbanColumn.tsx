@@ -89,7 +89,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
         e.preventDefault();
         e.stopPropagation();
         console.log(`עמודה ${id}: יציאת אובייקט מהעמודה`);
-        onDragLeave();
+        onDragLeave(e);
       }}
       onDrop={(e) => {
         e.preventDefault();

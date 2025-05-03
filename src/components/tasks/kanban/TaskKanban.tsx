@@ -130,7 +130,7 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
     setDragOverColumn(columnId);
   };
   
-  const handleDragLeave = () => {
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     setDragOverColumn(null);
   };
   

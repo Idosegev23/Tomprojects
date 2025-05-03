@@ -399,7 +399,7 @@ export function useTaskList({
       setLoading(true);
       
       // ביצוע בקשה לשרת לעדכון ההיררכיה
-      await taskService.reorderTasks(projectId, parentTaskId);
+      await taskService.reorderTasks(projectId, parentTaskId, []);
       
       // טעינת המשימות מחדש עם ההיררכיה המעודכנת
       await loadData();
