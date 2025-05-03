@@ -148,10 +148,12 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
   
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
     e.preventDefault();
+    e.stopPropagation();
     
     // קבלת מזהה המשימה מנתוני הגרירה
     let taskId;
     let taskData;
+    let sourceStatus;
     
     try {
       // קבלת מידע על המשימה מנתוני הדראג אנד דרופ
@@ -164,6 +166,10 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
         taskData = JSON.parse(jsonData);
         console.log('נתוני JSON שהתקבלו:', taskData);
       }
+      
+      // קבלת הסטטוס המקורי של המשימה (אם קיים)
+      sourceStatus = e.dataTransfer.getData('source-status');
+      console.log('סטטוס מקורי:', sourceStatus);
     } catch (error) {
       console.error('שגיאה בקריאת נתוני גרירה:', error);
     }
@@ -175,35 +181,52 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
     setDragOverColumn(null);
     setShowGhostCard(false);
     
-    if (!taskId || !currentDraggingTask) {
-      console.log('אין מזהה משימה או משימה נגררת', taskId, currentDraggingTask?.id);
+    if (!taskId) {
+      console.log('אין מזהה משימה בנתוני הגרירה');
       handleDragEnd();
       return;
     }
     
     try {
       if (viewMode === 'status') {
-        const originalStatus = currentDraggingTask.status;
+        // קביעת סטטוס המקור - או מהנתונים שהועברו, או מהמשימה שנגררה, או מה-JSON
+        const originalStatus = sourceStatus || (currentDraggingTask?.status) || (taskData && taskData.status);
+        console.log(`סטטוס מקורי שזוהה: ${originalStatus}, סטטוס יעד: ${targetId}`);
         
-        // עדכון סטטוס המשימה
+        // עדכון סטטוס המשימה רק אם הסטטוס אכן השתנה
         if (originalStatus !== targetId) {
           console.log(`מעדכן סטטוס של משימה ${taskId} מ-${originalStatus} ל-${targetId}`);
           
           if (onStatusChange) {
-            await onStatusChange(taskId, targetId);
-            
-            toast({
-              title: 'סטטוס המשימה עודכן',
-              description: `הסטטוס שונה ל${statusLabels[targetId] || targetId}`,
-              status: 'success',
-              duration: 2000,
-              isClosable: true,
-            });
+            try {
+              await onStatusChange(taskId, targetId);
+              
+              toast({
+                title: 'סטטוס המשימה עודכן',
+                description: `הסטטוס שונה ל${statusLabels[targetId] || targetId}`,
+                status: 'success',
+                duration: 2000,
+                isClosable: true,
+              });
+              
+              // עדכון רישום בנייה אחרי עדכון מוצלח
+              console.log(`עדכון סטטוס משימה ${taskId} הושלם בהצלחה`);
+            } catch (updateError) {
+              console.error('שגיאה בעדכון סטטוס המשימה:', updateError);
+              
+              toast({
+                title: 'שגיאה בעדכון סטטוס המשימה',
+                description: updateError instanceof Error ? updateError.message : 'שגיאה לא ידועה',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+              });
+            }
           } else {
-            console.log('אין פונקציית onStatusChange');
+            console.log('אין פונקציית onStatusChange - לא מעדכן סטטוס');
           }
         } else {
-          console.log('הסטטוס לא השתנה');
+          console.log('הסטטוס לא השתנה - דילוג על העדכון');
         }
       }
       // לא ניתן לשנות קטגוריה בגרירה

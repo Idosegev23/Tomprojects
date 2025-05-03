@@ -83,6 +83,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
         e.currentTarget.classList.add('dragging');
       }
       
+      // הוספת שדה לזיהוי הסטטוס המקורי של המשימה
+      if (task.status) {
+        e.dataTransfer.setData('source-status', task.status);
+      }
+      
       // העברה לפונקציית הטיפול של הקומפוננטה האב
       onDragStart(e, task);
     } catch (error) {

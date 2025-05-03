@@ -77,12 +77,29 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
       onDragOver={(e) => {
         e.preventDefault(); // חשוב מאוד לאפשר את הdrop
         e.stopPropagation();
+        console.log(`עמודה ${id}: גרירת אובייקט מעל העמודה`);
         onDragOver(e);
       }}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
+      onDragEnter={(e) => {
+        e.preventDefault(); // מניעת ברירת המחדל חשובה גם כאן
+        e.stopPropagation();
+        console.log(`עמודה ${id}: כניסת אובייקט לעמודה`);
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log(`עמודה ${id}: יציאת אובייקט מהעמודה`);
+        onDragLeave();
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log(`עמודה ${id}: שחרור אובייקט בעמודה`);
+        onDrop(e);
+      }}
       position="relative"
-      className={isDragOver ? "drop-highlight" : ""}
+      className={isDragOver ? "drop-highlight column-droppable" : "column-droppable"}
+      data-column-id={id}
       _after={isDragOver ? {
         content: '""',
         position: 'absolute',
@@ -107,13 +124,22 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
         onDragOver={(e) => {
           e.preventDefault();
           e.stopPropagation();
+          console.log(`עמודה ${id} (כותרת): גרירת אובייקט מעל הכותרת`);
           onDragOver(e);
+        }}
+        onDragEnter={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log(`עמודה ${id} (כותרת): כניסת אובייקט לכותרת`);
         }}
         onDrop={(e) => {
           e.preventDefault();
           e.stopPropagation();
+          console.log(`עמודה ${id} (כותרת): שחרור אובייקט בכותרת`);
           onDrop(e);
         }}
+        className="column-header droppable-area"
+        data-column-id={id}
       >
         <Flex justify="space-between" align="center">
           <HStack>
@@ -140,7 +166,25 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
           spacing={2}
           h="calc(100% - 50px)"
           overflowY="auto"
-          className="task-column"
+          className="task-column droppable-area"
+          data-column-id={id}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log(`עמודה ${id} (תוכן): גרירת אובייקט מעל התוכן`);
+            onDragOver(e);
+          }}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log(`עמודה ${id} (תוכן): כניסת אובייקט לתוכן`);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log(`עמודה ${id} (תוכן): שחרור אובייקט בתוכן`);
+            onDrop(e);
+          }}
         >
           {/* משימות אב */}
           {parentTasks.map(task => (

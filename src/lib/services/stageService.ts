@@ -176,7 +176,7 @@ export const stageService = {
   // יצירת שלב חדש
   async createStage(projectId: string, stage: any): Promise<Stage> {
     const projectPrefix = projectId ? `project_${projectId}` : "";
-    const tableName = projectId ? `project_${projectId}_stages` : "stages";
+    const tableName = "stages"; // השתמש רק בטבלה הראשית לפשטות
     
     // בדיקה האם טבלת ההיסטוריה קיימת
     try {
@@ -201,22 +201,6 @@ export const stageService = {
       
       if (fixError) {
         console.error(`שגיאה בתיקון טבלת השלבים ${tableName}:`, fixError);
-        
-        // אם הפונקציה הראשונה נכשלה, ננסה את הפונקציה המיוחדת
-        try {
-          console.log(`מנסה להשתמש בפונקציה המיוחדת לתיקון טבלת השלבים ${tableName}...`);
-          const { data: fixSpecificResult, error: fixSpecificError } = await supabase.rpc('fix_specific_project_stages_table', {
-            project_id_param: projectId
-          });
-          
-          if (fixSpecificError) {
-            console.error(`שגיאה בתיקון מיוחד של טבלת השלבים ${tableName}:`, fixSpecificError);
-          } else {
-            console.log(`תיקון מיוחד של טבלת השלבים ${tableName} הושלם בהצלחה:`, fixSpecificResult);
-          }
-        } catch (specificError) {
-          console.error(`שגיאה לא צפויה בתיקון מיוחד של טבלת השלבים ${tableName}:`, specificError);
-        }
       } else {
         console.log(`תיקון טבלת השלבים ${tableName} הושלם בהצלחה:`, fixResult);
       }
@@ -224,194 +208,123 @@ export const stageService = {
       console.error(`שגיאה לא צפויה בתיקון טבלת השלבים ${tableName}:`, error);
     }
 
+    // בדיקה וקביעת מספר סידורי
+    if (!stage.sort_order && stage.sort_order !== 0) {
+      try {
+        // ספירת מספר השלבים הקיימים בפרויקט
+        const { data: existingStages, error: countError } = await supabase
+          .from('stages')
+          .select('id')
+          .eq('project_id', projectId);
+          
+        if (!countError) {
+          // הגדרת המספר הסידורי להיות אחרי כל השלבים הקיימים
+          const nextSortOrder = (existingStages?.length || 0) + 1;
+          console.log(`קובע מספר סידורי ${nextSortOrder} לשלב חדש בפרויקט ${projectId}`);
+          stage.sort_order = nextSortOrder;
+        }
+      } catch (error) {
+        console.error('שגיאה בספירת שלבים קיימים:', error);
+        // השתמש במספר ברירת מחדל במקרה של שגיאה
+        stage.sort_order = 999;
+      }
+    }
+    
+    // בדיקה והגדרת מספר היררכי
+    if (!stage.hierarchical_number) {
+      try {
+        // ספירת מספר השלבים הקיימים בפרויקט
+        const { data: existingStages, error: countError } = await supabase
+          .from('stages')
+          .select('hierarchical_number')
+          .eq('project_id', projectId)
+          .order('hierarchical_number', { ascending: false });
+          
+        if (!countError && existingStages && existingStages.length > 0) {
+          // מציאת המספר ההיררכי הגבוה ביותר
+          let maxNumber = 0;
+          
+          existingStages.forEach(existingStage => {
+            if (existingStage.hierarchical_number) {
+              const number = parseInt(existingStage.hierarchical_number, 10);
+              if (!isNaN(number) && number > maxNumber) {
+                maxNumber = number;
+              }
+            }
+          });
+          
+          // הגדרת המספר ההיררכי להיות אחד יותר מהגבוה ביותר
+          const nextHierarchicalNumber = (maxNumber || 0) + 1;
+          console.log(`קובע מספר היררכי ${nextHierarchicalNumber} לשלב חדש בפרויקט ${projectId}`);
+          stage.hierarchical_number = nextHierarchicalNumber.toString();
+        } else {
+          // אם אין שלבים קיימים, קבע את המספר ההיררכי ל-1
+          console.log(`אין שלבים קיימים בפרויקט ${projectId}, קובע מספר היררכי 1`);
+          stage.hierarchical_number = "1";
+        }
+      } catch (error) {
+        console.error('שגיאה בהגדרת מספר היררכי אוטומטי:', error);
+        // השתמש במספר ברירת מחדל במקרה של שגיאה
+        stage.hierarchical_number = "1";
+      }
+    }
+
     try {
       // יצירת אובייקט שלב שמכיל רק את השדות הקיימים בטבלה
       const validStageData = {
-        id: stage.id,
+        id: stage.id || undefined,
         title: stage.title,
+        description: stage.description,
         hierarchical_number: stage.hierarchical_number,
-        due_date: stage.due_date,
+        due_date: stage.due_date || stage.end_date,
         status: stage.status,
         progress: stage.progress,
         color: stage.color,
         parent_stage_id: stage.parent_stage_id,
         dependencies: stage.dependencies,
         sort_order: stage.sort_order,
-        created_at: stage.created_at,
-        updated_at: stage.updated_at,
+        created_at: stage.created_at || new Date().toISOString(),
+        updated_at: stage.updated_at || new Date().toISOString(),
         project_id: projectId
       };
       
       // מסיר שדות שהם undefined כדי שלא תהיה התנגשות עם ערכי ברירת מחדל בדאטהבייס
-      const cleanedStageData = Object.fromEntries(
-        Object.entries(validStageData).filter(([_, value]) => value !== undefined)
-      );
+      const cleanedStageData: Record<string, any> = {};
+      
+      for (const [key, value] of Object.entries(validStageData)) {
+        if (value !== undefined) {
+          cleanedStageData[key] = value;
+        }
+      }
 
       console.log(`מנסה ליצור שלב בטבלה ${tableName} עם הנתונים:`, cleanedStageData);
-
-      // שליחת הבקשה ליצירת השלב
+      
+      // אם לא הועבר ID, ניצור ID חדש
+      if (!cleanedStageData.id) {
+        cleanedStageData.id = uuidv4();
+      }
+      
+      // הוספת השלב לטבלה
       const { data, error } = await supabase
         .from(tableName)
         .insert(cleanedStageData)
         .select()
         .single();
-
+      
       if (error) {
         console.error(`שגיאה ביצירת שלב בטבלה ${tableName}:`, error);
-        
-        // בדיקה אם השגיאה קשורה לטבלת ההיסטוריה
-        if (error.message?.includes('stages_history')) {
-          console.log('השגיאה קשורה לטבלת ההיסטוריה - מנסה לתקן ולנסות שוב');
-          
-          try {
-            // נסיון נוסף לתקן את טבלת ההיסטוריה
-            const { data: fixHistoryResult, error: fixHistoryError } = await supabase.rpc('ensure_stages_history_table');
-            
-            if (fixHistoryError) {
-              console.error('שגיאה בתיקון טבלת היסטוריית שלבים:', fixHistoryError);
-              throw new Error('לא ניתן לתקן את טבלת ההיסטוריה: ' + fixHistoryError.message);
-            }
-            
-            console.log('תיקון טבלת היסטוריית שלבים הושלם, מנסה ליצור שלב שוב');
-            
-            // נסיון נוסף ליצירת השלב
-            const { data: retryData, error: retryError } = await supabase
-              .from(tableName)
-              .insert(cleanedStageData)
-              .select()
-              .single();
-              
-            if (retryError) {
-              console.error('שגיאה בנסיון השני ליצירת שלב:', retryError);
-              throw retryError;
-            }
-            
-            return retryData as Stage;
-          } catch (fixError) {
-            console.error('שגיאה בנסיון לתקן את הבעיה:', fixError);
-            throw new Error('לא ניתן ליצור שלב עקב בעיה עם טבלת ההיסטוריה');
-          }
-        }
-        
-        // אם השגיאה קשורה לעמודות חסרות
-        if (error.message?.includes('column') || error.message?.includes('does not exist')) {
-          console.log('יתכן ויש בעיה עם מבנה הטבלה - מנסה לבדוק אילו עמודות קיימות');
-          
-          try {
-            // נבדוק אילו עמודות קיימות בטבלה באמצעות הפונקציה שהגדרנו
-            const existingColumns = await getTableColumns(tableName);
-            
-            if (existingColumns.length > 0) {
-              console.log(`עמודות קיימות בטבלה ${tableName}:`, existingColumns);
-              
-              // יצירת אובייקט חדש רק עם העמודות הקיימות
-              const filteredStageData: any = {};
-              
-              for (const column of existingColumns) {
-                if (cleanedStageData.hasOwnProperty(column)) {
-                  filteredStageData[column] = (cleanedStageData as any)[column];
-                }
-              }
-              
-              console.log('מנסה ליצור שלב עם עמודות קיימות בלבד:', filteredStageData);
-              
-              // נסיון נוסף ליצירת השלב עם העמודות הקיימות בלבד
-              const { data: retryData, error: retryError } = await supabase
-                .from(tableName)
-                .insert(filteredStageData)
-                .select()
-                .single();
-                
-              if (retryError) {
-                console.error('שגיאה בנסיון השני ליצירת שלב:', retryError);
-                throw retryError;
-              }
-              
-              return retryData as Stage;
-            } else {
-              console.log(`לא הצלחנו לקבל את העמודות של הטבלה ${tableName}.`);
-            }
-          } catch (columnCheckError) {
-            console.error('שגיאה בבדיקת מבנה הטבלה:', columnCheckError);
-          }
-          
-          // אם הבדיקה נכשלה, ננסה ליצור שלב עם שדות בסיסיים בלבד
-          const basicStageData = {
-            title: stage.title || 'שלב חדש',
-            project_id: projectId
-          };
-          
-          try {
-            console.log('מנסה ליצור שלב עם שדות בסיסיים בלבד:', basicStageData);
-            
-            const { data: fallbackData, error: fallbackError } = await supabase
-              .from(tableName)
-              .insert(basicStageData)
-              .select()
-              .single();
-              
-            if (fallbackError) {
-              console.error('שגיאה בנסיון האחרון ליצירת שלב בטבלה הספציפית:', fallbackError);
-              
-              // נסיון אחרון - ליצור בטבלה הרגילה 'stages'
-              if (tableName !== 'stages') {
-                console.log('מנסה ליצור שלב בטבלה הרגילה stages');
-                
-                const { data: regularTableData, error: regularTableError } = await supabase
-                  .from('stages')
-                  .insert(basicStageData)
-                  .select()
-                  .single();
-                  
-                if (regularTableError) {
-                  console.error('שגיאה בנסיון ליצירת שלב בטבלה הרגילה:', regularTableError);
-                  throw regularTableError;
-                }
-                
-                return regularTableData as Stage;
-              }
-              
-              throw fallbackError;
-            }
-            
-            return fallbackData as Stage;
-          } catch (fallbackError) {
-            console.error('שגיאה בנסיון האחרון ליצירת שלב בטבלה הספציפית:', fallbackError);
-            
-            // נסיון אחרון - ליצור בטבלה הרגילה 'stages'
-            if (tableName !== 'stages') {
-              console.log('מנסה ליצור שלב בטבלה הרגילה stages');
-              
-              try {
-                const { data: regularTableData, error: regularTableError } = await supabase
-                  .from('stages')
-                  .insert(basicStageData)
-                  .select()
-                  .single();
-                  
-                if (regularTableError) {
-                  console.error('שגיאה בנסיון ליצירת שלב בטבלה הרגילה:', regularTableError);
-                  throw regularTableError;
-                }
-                
-                return regularTableData as Stage;
-              } catch (regularError) {
-                console.error('שגיאה מוחלטת בנסיון ליצירת שלב:', regularError);
-                throw new Error('לא ניתן ליצור שלב עקב בעיה עם מבנה הטבלה');
-              }
-            }
-            
-            throw fallbackError;
-          }
-        }
-        
-        throw error;
+        throw new Error(`שגיאה ביצירת שלב: ${error.message}`);
       }
-
+      
+      if (!data) {
+        throw new Error('נכשל ביצירת שלב: לא התקבלו נתונים מהשרת');
+      }
+      
+      console.log(`שלב נוצר בהצלחה בטבלה ${tableName}:`, data);
       return data as Stage;
-    } catch (error) {
-      console.error(`שגיאה לא צפויה ביצירת שלב:`, error);
-      throw error;
+    } catch (err) {
+      console.error(`שגיאה ביצירת שלב בפרויקט ${projectId}:`, err);
+      throw err;
     }
   },
   

@@ -538,63 +538,55 @@ export const taskService = {
   
   async getProjectSpecificNextRootHierarchicalNumber(projectId: string): Promise<string> {
     try {
-      console.log(`מחשב מספר היררכי חדש למשימת שורש בטבלה ספציפית לפרויקט ${projectId}`);
-      
-      // השג את כל משימות השורש של הפרויקט
-      const { data: rootTasks, error } = await supabase
-        .from(`project_${projectId}_tasks`)
-        .select('hierarchical_number')
-        .is('parent_task_id', null)
-        .order('hierarchical_number', { ascending: false });
-      
-      if (error) {
-        console.error(`שגיאה בקבלת משימות שורש של פרויקט ${projectId}:`, error);
-        return "1"; // ברירת מחדל
-      }
-      
-      if (!rootTasks || rootTasks.length === 0) {
-        console.log(`אין משימות שורש בטבלה הספציפית לפרויקט ${projectId}, מחזיר 1`);
-        return "1";
-      }
-      
-      // לוג המשימות השורשיות שנמצאו
-      console.log(`נמצאו ${rootTasks.length} משימות שורש בטבלה הספציפית לפרויקט ${projectId} עם המספרים ההיררכיים:`);
-      rootTasks.forEach(task => console.log(`- משימה עם מספר היררכי: ${task.hierarchical_number}`));
-      
-      // מצא את המספר הגבוה ביותר
-      let maxNumber = 0;
-      
-      rootTasks.forEach(task => {
-        if (task.hierarchical_number) {
-          // בדוק אם זה מספר פשוט או מספר היררכי (עם נקודות)
-          const parts = String(task.hierarchical_number).split('.');
-          const rootNumber = parseInt(parts[0], 10);
-          
-          if (!isNaN(rootNumber)) {
-            console.log(`פרסור מספר היררכי: ${task.hierarchical_number} -> ${rootNumber}`);
-            if (rootNumber > maxNumber) {
-              maxNumber = rootNumber;
-            }
-          } else {
-            console.warn(`לא ניתן לפרסר את המספר ההיררכי: ${task.hierarchical_number}`);
-          }
-        }
-      });
-      
-      const nextNumber = maxNumber + 1;
-      console.log(`המספר ההיררכי הבא שיוקצה בטבלה הספציפית: ${nextNumber}`);
-      return `${nextNumber}`;
-    } catch (error) {
-      console.error('שגיאה בחישוב מספר היררכי:', error);
-      return "1"; // ברירת מחדל במקרה של שגיאה
-    }
-  },
-  
-  async getNextRootHierarchicalNumber(projectId: string): Promise<string> {
-    try {
       console.log(`מחשב מספר היררכי חדש למשימת שורש בפרויקט ${projectId}`);
       
-      // השג את כל משימות השורש של הפרויקט
+      let maxNumber = 0;
+      
+      // בדיקת טבלה ספציפית לפרויקט אם קיימת
+      const projectTableName = `project_${projectId}_tasks`;
+      let useProjectTable = false;
+      
+      try {
+        const { data: tableExists, error: checkError } = await supabase
+          .rpc('check_table_exists', { table_name_param: projectTableName });
+          
+        if (!checkError && tableExists) {
+          useProjectTable = true;
+          console.log(`בדיקת מספרים היררכיים בטבלה ספציפית לפרויקט ${projectTableName}`);
+          
+          // השג את כל משימות השורש של הפרויקט מהטבלה הספציפית
+          const { data: projectRootTasks, error: projectError } = await supabase
+            .from(projectTableName)
+            .select('hierarchical_number')
+            .is('parent_task_id', null)
+            .order('hierarchical_number', { ascending: false });
+          
+          if (!projectError && projectRootTasks && projectRootTasks.length > 0) {
+            console.log(`נמצאו ${projectRootTasks.length} משימות שורש בטבלה ספציפית לפרויקט ${projectId}`);
+            
+            // בדיקת המספר הגבוה ביותר מהטבלה הספציפית
+            projectRootTasks.forEach(task => {
+              if (task.hierarchical_number) {
+                // נקה את המספר ההיררכי מכל תווים שאינם מספר
+                const cleanNumber = String(task.hierarchical_number).split('.')[0].trim();
+                const rootNumber = parseInt(cleanNumber, 10);
+                
+                if (!isNaN(rootNumber) && rootNumber > maxNumber) {
+                  maxNumber = rootNumber;
+                  console.log(`מצאתי מספר היררכי גבוה יותר בטבלה הספציפית: ${rootNumber}`);
+                }
+              }
+            });
+          }
+        }
+      } catch (tableCheckError) {
+        console.error(`שגיאה בבדיקת טבלה ספציפית לפרויקט ${projectTableName}:`, tableCheckError);
+      }
+      
+      // בדיקה גם בטבלה הראשית בכל מקרה
+      console.log(`בדיקת מספרים היררכיים בטבלה הראשית 'tasks'`);
+      
+      // השג את כל משימות השורש של הפרויקט מהטבלה הראשית
       const { data: rootTasks, error } = await supabase
         .from('tasks')
         .select('hierarchical_number')
@@ -603,45 +595,144 @@ export const taskService = {
         .order('hierarchical_number', { ascending: false });
       
       if (error) {
-        console.error(`שגיאה בקבלת משימות שורש של פרויקט ${projectId}:`, error);
-        return "1"; // ברירת מחדל
+        console.error(`שגיאה בקבלת משימות שורש של פרויקט ${projectId} מהטבלה הראשית:`, error);
+      } else if (rootTasks && rootTasks.length > 0) {
+        console.log(`נמצאו ${rootTasks.length} משימות שורש בטבלה הראשית עבור פרויקט ${projectId}`);
+        
+        // בדיקת המספר הגבוה ביותר מהטבלה הראשית
+        rootTasks.forEach(task => {
+          if (task.hierarchical_number) {
+            // נקה את המספר ההיררכי מכל תווים שאינם מספר
+            const cleanNumber = String(task.hierarchical_number).split('.')[0].trim();
+            const rootNumber = parseInt(cleanNumber, 10);
+            
+            if (!isNaN(rootNumber) && rootNumber > maxNumber) {
+              maxNumber = rootNumber;
+              console.log(`מצאתי מספר היררכי גבוה יותר בטבלה הראשית: ${rootNumber}`);
+            }
+          }
+        });
       }
       
-      if (!rootTasks || rootTasks.length === 0) {
-        console.log(`אין משימות שורש בפרויקט ${projectId}, מחזיר 1`);
+      // אם לא נמצאו משימות כלל או שיש בעיה בחישוב, החזר 1
+      if (maxNumber === 0) {
+        console.log(`לא נמצאו משימות שורש או שיש בעיה בחישוב, מחזיר מספר התחלתי 1`);
         return "1";
       }
       
-      // לוג המשימות השורשיות שנמצאו
-      console.log(`נמצאו ${rootTasks.length} משימות שורש בפרויקט ${projectId} עם המספרים ההיררכיים:`);
-      rootTasks.forEach(task => console.log(`- משימה עם מספר היררכי: ${task.hierarchical_number}`));
-      
-      // מצא את המספר הגבוה ביותר
-      let maxNumber = 0;
-      
-      rootTasks.forEach(task => {
-        if (task.hierarchical_number) {
-          // בדוק אם זה מספר פשוט או מספר היררכי (עם נקודות)
-          const parts = String(task.hierarchical_number).split('.');
-          const rootNumber = parseInt(parts[0], 10);
-          
-          if (!isNaN(rootNumber)) {
-            console.log(`פרסור מספר היררכי: ${task.hierarchical_number} -> ${rootNumber}`);
-            if (rootNumber > maxNumber) {
-              maxNumber = rootNumber;
-            }
-          } else {
-            console.warn(`לא ניתן לפרסר את המספר ההיררכי: ${task.hierarchical_number}`);
-          }
-        }
-      });
-      
+      // הוסף 1 למספר הגבוה ביותר שנמצא
       const nextNumber = maxNumber + 1;
       console.log(`המספר ההיררכי הבא שיוקצה: ${nextNumber}`);
+      
+      // עדכון ב-build tracking
+      await updateBuildTracking(`נוצר מספר היררכי חדש ${nextNumber} לפרויקט ${projectId}`);
+      
       return `${nextNumber}`;
     } catch (error) {
       console.error('שגיאה בחישוב מספר היררכי:', error);
-      return "1"; // ברירת מחדל במקרה של שגיאה
+      // ברירת מחדל במקרה של שגיאה
+      console.log(`מחזיר ברירת מחדל "1" בגלל שגיאה`);
+      return "1";
+    }
+  },
+  
+  async getNextRootHierarchicalNumber(projectId: string): Promise<string> {
+    try {
+      console.log(`מחשב מספר היררכי חדש למשימת שורש בפרויקט ${projectId}`);
+      
+      let maxNumber = 0;
+      
+      // בדיקת טבלה ספציפית לפרויקט אם קיימת
+      const projectTableName = `project_${projectId}_tasks`;
+      let useProjectTable = false;
+      
+      try {
+        const { data: tableExists, error: checkError } = await supabase
+          .rpc('check_table_exists', { table_name_param: projectTableName });
+          
+        if (!checkError && tableExists) {
+          useProjectTable = true;
+          console.log(`בדיקת מספרים היררכיים בטבלה ספציפית לפרויקט ${projectTableName}`);
+          
+          // השג את כל משימות השורש של הפרויקט מהטבלה הספציפית
+          const { data: projectRootTasks, error: projectError } = await supabase
+            .from(projectTableName)
+            .select('hierarchical_number')
+            .is('parent_task_id', null)
+            .order('hierarchical_number', { ascending: false });
+          
+          if (!projectError && projectRootTasks && projectRootTasks.length > 0) {
+            console.log(`נמצאו ${projectRootTasks.length} משימות שורש בטבלה ספציפית לפרויקט ${projectId}`);
+            
+            // בדיקת המספר הגבוה ביותר מהטבלה הספציפית
+            projectRootTasks.forEach(task => {
+              if (task.hierarchical_number) {
+                // נקה את המספר ההיררכי מכל תווים שאינם מספר
+                const cleanNumber = String(task.hierarchical_number).split('.')[0].trim();
+                const rootNumber = parseInt(cleanNumber, 10);
+                
+                if (!isNaN(rootNumber) && rootNumber > maxNumber) {
+                  maxNumber = rootNumber;
+                  console.log(`מצאתי מספר היררכי גבוה יותר בטבלה הספציפית: ${rootNumber}`);
+                }
+              }
+            });
+          }
+        }
+      } catch (tableCheckError) {
+        console.error(`שגיאה בבדיקת טבלה ספציפית לפרויקט ${projectTableName}:`, tableCheckError);
+      }
+      
+      // בדיקה גם בטבלה הראשית בכל מקרה
+      console.log(`בדיקת מספרים היררכיים בטבלה הראשית 'tasks'`);
+      
+      // השג את כל משימות השורש של הפרויקט מהטבלה הראשית
+      const { data: rootTasks, error } = await supabase
+        .from('tasks')
+        .select('hierarchical_number')
+        .eq('project_id', projectId)
+        .is('parent_task_id', null)
+        .order('hierarchical_number', { ascending: false });
+      
+      if (error) {
+        console.error(`שגיאה בקבלת משימות שורש של פרויקט ${projectId} מהטבלה הראשית:`, error);
+      } else if (rootTasks && rootTasks.length > 0) {
+        console.log(`נמצאו ${rootTasks.length} משימות שורש בטבלה הראשית עבור פרויקט ${projectId}`);
+        
+        // בדיקת המספר הגבוה ביותר מהטבלה הראשית
+        rootTasks.forEach(task => {
+          if (task.hierarchical_number) {
+            // נקה את המספר ההיררכי מכל תווים שאינם מספר
+            const cleanNumber = String(task.hierarchical_number).split('.')[0].trim();
+            const rootNumber = parseInt(cleanNumber, 10);
+            
+            if (!isNaN(rootNumber) && rootNumber > maxNumber) {
+              maxNumber = rootNumber;
+              console.log(`מצאתי מספר היררכי גבוה יותר בטבלה הראשית: ${rootNumber}`);
+            }
+          }
+        });
+      }
+      
+      // אם לא נמצאו משימות כלל או שיש בעיה בחישוב, החזר 1
+      if (maxNumber === 0) {
+        console.log(`לא נמצאו משימות שורש או שיש בעיה בחישוב, מחזיר מספר התחלתי 1`);
+        return "1";
+      }
+      
+      // הוסף 1 למספר הגבוה ביותר שנמצא
+      const nextNumber = maxNumber + 1;
+      console.log(`המספר ההיררכי הבא שיוקצה: ${nextNumber}`);
+      
+      // עדכון ב-build tracking
+      await updateBuildTracking(`נוצר מספר היררכי חדש ${nextNumber} לפרויקט ${projectId}`);
+      
+      return `${nextNumber}`;
+    } catch (error) {
+      console.error('שגיאה בחישוב מספר היררכי:', error);
+      // ברירת מחדל במקרה של שגיאה
+      console.log(`מחזיר ברירת מחדל "1" בגלל שגיאה`);
+      return "1";
     }
   },
 

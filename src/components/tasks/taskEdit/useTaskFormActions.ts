@@ -222,22 +222,58 @@ export const useTaskFormActions = ({
       
       if (isEditMode && task) {
         // עדכון משימה קיימת
-        result = await taskService.updateTask(task.id, taskData);
-        
-        toast({
-          title: "המשימה עודכנה בהצלחה",
-          status: "success",
-          duration: 3000,
-          isClosable: true,
-        });
-        
-        if (onTaskUpdated) {
-          onTaskUpdated(result);
+        try {
+          result = await taskService.updateTask(task.id, taskData);
+          
+          toast({
+            title: "המשימה עודכנה בהצלחה",
+            status: "success",
+            duration: 3000,
+            isClosable: true,
+          });
+          
+          if (onTaskUpdated) {
+            onTaskUpdated(result);
+          }
+          
+          // איפוס מצב הטעינה לפני סיום הפונקציה
+          setLoading(false);
+          onClose();
+        } catch (updateError) {
+          console.error('שגיאה בעדכון משימה:', updateError);
+          
+          const errorMessage = updateError instanceof Error ? updateError.message : 'שגיאה לא ידועה';
+          
+          // בדיקה אם השגיאה קשורה להרשאות או לבעיית טעינה
+          if (errorMessage.includes('permission') || errorMessage.includes('unauthorized') || 
+              errorMessage.includes('access') || errorMessage.includes('403')) {
+            toast({
+              title: "אין הרשאות לעריכת משימה",
+              description: "אין לך הרשאות מתאימות לעריכת משימה זו.",
+              status: "error",
+              duration: 5000,
+              isClosable: true,
+            });
+          } else if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+            toast({
+              title: "המשימה לא נמצאה",
+              description: "ייתכן שהמשימה נמחקה או שינתה את מיקומה במערכת.",
+              status: "error",
+              duration: 5000,
+              isClosable: true,
+            });
+          } else {
+            toast({
+              title: "שגיאה בעדכון המשימה",
+              description: errorMessage,
+              status: "error",
+              duration: 5000,
+              isClosable: true,
+            });
+          }
+          
+          setLoading(false);
         }
-        
-        // איפוס מצב הטעינה לפני סיום הפונקציה
-        setLoading(false);
-        onClose();
       } else {
         // יצירת משימה חדשה
         if (!formData.title) {
@@ -350,29 +386,30 @@ export const useTaskFormActions = ({
             }
           }
           
-          throw error; // מעביר את השגיאה למנגנון הטיפול בשגיאות הכללי
+          const errorMessage = error instanceof Error ? error.message : 'שגיאה לא ידועה';
+          
+          toast({
+            title: "שגיאה ביצירת המשימה",
+            description: errorMessage,
+            status: "error",
+            duration: 5000,
+            isClosable: true,
+          });
+          
+          setLoading(false);
         }
       }
-    } catch (error) {
-      console.error('Error saving task:', error);
-      
-      // שיפור הודעת השגיאה עבור שגיאת Load failed
-      let errorMessage = "אירעה שגיאה לא ידועה";
-      if (error instanceof TypeError && (error as Error).message.includes('Load failed')) {
-        errorMessage = "שגיאה בפורמט הנתונים - נסה להסיר שדות או משתתפים ולנסות שוב";
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
+    } catch (err) {
+      console.error('שגיאה בשמירת משימה:', err);
       
       toast({
         title: "שגיאה בשמירת המשימה",
-        description: errorMessage,
+        description: err instanceof Error ? err.message : 'אירעה שגיאה בלתי צפויה',
         status: "error",
         duration: 5000,
         isClosable: true,
       });
       
-      // תמיד לאפס את מצב הטעינה גם במקרה של שגיאה
       setLoading(false);
     }
   };

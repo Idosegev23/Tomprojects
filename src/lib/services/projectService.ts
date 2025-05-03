@@ -284,6 +284,9 @@ export const projectService = {
     const tableName = `project_${projectId}_tasks`;
     
     try {
+      let total = 0;
+      let completed = 0;
+      
       // בדיקה אם הטבלה הייחודית קיימת
       let tableExists = false;
       try {
@@ -302,44 +305,55 @@ export const projectService = {
         console.error(`Error checking project table ${tableName}:`, err);
       }
       
+      // קריאת המשימות מהטבלה הספציפית אם היא קיימת
       if (tableExists) {
         // שימוש בטבלה הספציפית של הפרויקט
-        const { data: allTasks, error: allTasksError } = await supabase
+        const { data: projectSpecificTasks, error: projectSpecificError } = await supabase
           .from(tableName)
           .select('status');
         
-        if (allTasksError) {
-          console.error(`Error counting tasks from project-specific table ${tableName}:`, allTasksError);
-          throw new Error(allTasksError.message);
+        if (projectSpecificError) {
+          console.error(`Error counting tasks from project-specific table ${tableName}:`, projectSpecificError);
+          // ממשיכים לבדוק גם בטבלה הראשית
+        } else {
+          // אם קיבלנו נתונים תקינים, נוסיף אותם לספירה
+          if (projectSpecificTasks && Array.isArray(projectSpecificTasks)) {
+            total += projectSpecificTasks.length;
+            completed += projectSpecificTasks.filter(task => task.status === 'done').length;
+          }
         }
-        
-        const total = allTasks?.length || 0;
-        const completed = allTasks?.filter(task => task.status === 'done').length || 0;
-        
-        return { total, completed };
-      } else {
-        // שימוש בטבלה הכללית (לתאימות לאחור)
-        console.warn(`Project table ${tableName} does not exist, falling back to main tasks table`);
-        
-        // שליפת כל המשימות בפרויקט
-        const { data: allTasks, error: allTasksError } = await supabase
-          .from('tasks')
-          .select('status')
-          .eq('project_id', projectId);
-        
-        if (allTasksError) {
-          console.error(`Error counting tasks for project ${projectId} from main table:`, allTasksError);
-          throw new Error(allTasksError.message);
-        }
-        
-        const total = allTasks?.length || 0;
-        const completed = allTasks?.filter(task => task.status === 'done').length || 0;
-        
-        return { total, completed };
       }
+      
+      // בדיקה גם בטבלה הראשית (לתאימות לאחור או במקרה של תקלה)
+      const { data: mainTableTasks, error: mainTableError } = await supabase
+        .from('tasks')
+        .select('status')
+        .eq('project_id', projectId);
+      
+      if (mainTableError) {
+        console.error(`Error counting tasks for project ${projectId} from main table:`, mainTableError);
+        // אם יש שגיאה בטבלה הראשית, נחזיר את מה שכבר מצאנו בטבלה הייחודית
+      } else {
+        // אם קיבלנו נתונים תקינים, נוסיף אותם לספירה
+        if (mainTableTasks && Array.isArray(mainTableTasks)) {
+          total += mainTableTasks.length;
+          completed += mainTableTasks.filter(task => task.status === 'done').length;
+        }
+      }
+      
+      // תיעוד המידע שנאסף
+      await this.updateBuildTracking(projectId, {
+        task_count: total,
+        completed_task_count: completed,
+        progress_percentage: total > 0 ? Math.round((completed / total) * 100) : 0,
+        last_count_update: new Date().toISOString()
+      });
+      
+      return { total, completed };
     } catch (err) {
       console.error(`Error in countTasksInProject for project ${projectId}:`, err);
-      throw new Error(err instanceof Error ? err.message : 'אירעה שגיאה בספירת משימות');
+      // במקרה של שגיאה, נחזיר ערכי אפס כברירת מחדל
+      return { total: 0, completed: 0 };
     }
   },
   
