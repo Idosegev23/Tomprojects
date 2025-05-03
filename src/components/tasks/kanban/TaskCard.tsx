@@ -35,12 +35,15 @@ const MotionBox = motion(Box);
 
 const TaskCard: React.FC<TaskCardProps> = ({
   task,
-  isDragging,
-  onDragStart,
+  isDragging = false,
+  onDragStart = () => {},
   onEditTask,
   onDeleteTask,
-  getProjectName,
-  onStatusChange
+  getProjectName = () => 'פרויקט',
+  onStatusChange,
+  onEdit,
+  onDelete,
+  onChangeStatus
 }) => {
   const dueStatus = getDueStatus(task.due_date);
   const borderColor = useColorModeValue('gray.200', 'gray.600');
@@ -110,7 +113,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
       console.log(`TaskCard: Changing task ${task.id} status from ${task.status} to ${newStatus}`);
       
       // אם קיימת פונקציית callback לשינוי סטטוס, נשתמש בה
-      if (onStatusChange) {
+      if (onChangeStatus) {
+        await onChangeStatus(task.id, newStatus);
+      } else if (onStatusChange) {
         await onStatusChange(task.id, newStatus);
       } else {
         // אחרת נעדכן ישירות
@@ -196,7 +201,13 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   {onEditTask && (
                     <MenuItem 
                       icon={<FiEdit />} 
-                      onClick={() => onEditTask(task)}
+                      onClick={() => {
+                        if (onEdit) {
+                          onEdit(task);
+                        } else if (onEditTask) {
+                          onEditTask(task);
+                        }
+                      }}
                     >
                       ערוך
                     </MenuItem>
@@ -237,7 +248,13 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   {onDeleteTask && (
                     <MenuItem 
                       icon={<FiTrash2 />} 
-                      onClick={() => onDeleteTask(task.id)}
+                      onClick={() => {
+                        if (onDelete) {
+                          onDelete(task.id);
+                        } else if (onDeleteTask) {
+                          onDeleteTask(task.id);
+                        }
+                      }}
                       color="red.500"
                     >
                       מחק
@@ -296,7 +313,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
         <Flex justify="space-between" alignItems="center" mt={2}>
           {/* פרויקט */}
           {task.project_id && (
-            <Tooltip label={`פרויקט: ${getProjectName(task.project_id)}`}>
+            <Tooltip label={getProjectName ? getProjectName(task.project_id) : 'פרויקט'}>
               <Tag 
                 size="sm"
                 variant="subtle"

@@ -36,30 +36,32 @@ export interface TaskKanbanProps {
 
 // טיפוס לעמודת קנבן
 export interface KanbanColumnProps {
-  id: string;
+  id?: string;
   title: string;
-  tasks: Task[];
-  color: string;
-  isCollapsed: boolean;
-  isDragOver: boolean;
-  onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
-  onDragLeave: (e: React.DragEvent<HTMLDivElement>) => void;
-  onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
-  onToggleCollapse: () => void;
+  tasks?: Task[];
+  color?: string;
+  isCollapsed?: boolean;
+  isDragOver?: boolean;
+  status?: string;
+  onAddTask?: () => void;
+  onDragOver?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragLeave?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDrop?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onToggleCollapse?: () => void;
   onEditTask?: (task: Task) => void;
   onDeleteTask?: (taskId: string) => void;
-  getProjectName: (projectId: string) => string;
+  getProjectName?: (projectId: string) => string;
   children?: ReactNode;
 }
 
 // טיפוס לכרטיס משימה
 export interface TaskCardProps {
   task: Task;
-  isDragging: boolean;
-  onDragStart: (e: React.DragEvent<HTMLDivElement>, task: Task) => void;
+  isDragging?: boolean;
+  onDragStart?: (e: React.DragEvent<HTMLDivElement>, task: Task) => void;
   onEditTask?: (task: Task) => void;
   onDeleteTask?: (taskId: string) => void;
-  getProjectName: (projectId: string) => string;
+  getProjectName?: (projectId: string) => string;
   onStatusChange?: (taskId: string, newStatus: string) => Promise<void>;
   onEdit?: (task: Task) => void;
   onDelete?: (taskId: string) => void;

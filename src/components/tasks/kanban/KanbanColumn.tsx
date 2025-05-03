@@ -21,13 +21,6 @@ import { AddIcon } from '@chakra-ui/icons';
 // קומפוננטה מונפשת
 const MotionFlex = motion(Flex);
 
-interface KanbanColumnProps {
-  title: string;
-  status: string;
-  onAddTask: () => void;
-  children: ReactNode;
-}
-
 /**
  * עמודת קנבן למשימות
  */
@@ -57,7 +50,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
   const parentBoxBg = useColorModeValue('purple.50', 'purple.900');
   
   // מיון המשימות: משימות אב בראש, ולאחר מכן לפי מספר היררכי
-  const sortedTasks = [...tasks].sort((a, b) => {
+  const sortedTasks = tasks ? [...tasks].sort((a, b) => {
     // אם יש לשניהם מספר היררכי, מיון לפי הסדר הטבעי
     if (a.hierarchical_number && b.hierarchical_number) {
       return String(a.hierarchical_number).localeCompare(String(b.hierarchical_number), undefined, { numeric: true });
@@ -69,7 +62,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
     
     // אם לאף אחד אין מספר היררכי, מיון לפי כותרת
     return a.title.localeCompare(b.title);
-  });
+  }) : [];
   
   // קבלת משימות אב למיוחס ויזואלית
   const parentTasks = sortedTasks.filter(task => task.isParentTask);
@@ -90,7 +83,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
         e.preventDefault(); // חשוב מאוד לאפשר את הdrop
         e.stopPropagation();
         console.log(`עמודה ${id}: גרירת אובייקט מעל העמודה`);
-        onDragOver(e);
+        if (onDragOver) onDragOver(e);
       }}
       onDragEnter={(e) => {
         e.preventDefault(); // מניעת ברירת המחדל חשובה גם כאן
@@ -101,13 +94,13 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
         e.preventDefault();
         e.stopPropagation();
         console.log(`עמודה ${id}: יציאת אובייקט מהעמודה`);
-        onDragLeave(e);
+        if (onDragLeave) onDragLeave(e);
       }}
       onDrop={(e) => {
         e.preventDefault();
         e.stopPropagation();
         console.log(`עמודה ${id}: שחרור אובייקט בעמודה`);
-        onDrop(e);
+        if (onDrop) onDrop(e);
       }}
       position="relative"
       className={isDragOver ? "drop-highlight column-droppable" : "column-droppable"}
@@ -137,7 +130,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
           e.preventDefault();
           e.stopPropagation();
           console.log(`עמודה ${id} (כותרת): גרירת אובייקט מעל הכותרת`);
-          onDragOver(e);
+          if (onDragOver) onDragOver(e);
         }}
         onDragEnter={(e) => {
           e.preventDefault();
@@ -148,7 +141,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
           e.preventDefault();
           e.stopPropagation();
           console.log(`עמודה ${id} (כותרת): שחרור אובייקט בכותרת`);
-          onDrop(e);
+          if (onDrop) onDrop(e);
         }}
         className="column-header droppable-area"
         data-column-id={id}
@@ -158,7 +151,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
             <Badge colorScheme={color} fontSize="sm" px={2} py={1}>
               {title}
             </Badge>
-            <Text fontWeight="bold">{tasks.length}</Text>
+            <Text fontWeight="bold">{tasks?.length || 0}</Text>
           </HStack>
           
           <IconButton
@@ -184,7 +177,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
             e.preventDefault();
             e.stopPropagation();
             console.log(`עמודה ${id} (תוכן): גרירת אובייקט מעל התוכן`);
-            onDragOver(e);
+            if (onDragOver) onDragOver(e);
           }}
           onDragEnter={(e) => {
             e.preventDefault();
@@ -195,7 +188,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
             e.preventDefault();
             e.stopPropagation();
             console.log(`עמודה ${id} (תוכן): שחרור אובייקט בתוכן`);
-            onDrop(e);
+            if (onDrop) onDrop(e);
           }}
         >
           {/* משימות אב */}
@@ -238,7 +231,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
             />
           ))}
           
-          {tasks.length === 0 && (
+          {tasks?.length === 0 && (
             <MotionFlex 
               justify="center" 
               align="center" 
@@ -293,7 +286,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
             color="gray.500"
             whiteSpace="nowrap"
           >
-            {title} ({tasks.length})
+            {title} ({tasks?.length || 0})
           </Text>
         </Flex>
       )}

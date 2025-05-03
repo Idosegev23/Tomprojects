@@ -28,11 +28,11 @@ export interface ExtendedTask extends Task {
 export interface TaskEditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  task?: ExtendedTask | null;
+  task: any;
   projectId: string;
   initialData?: Partial<ExtendedTask>;
-  onTaskCreated?: (task: ExtendedTask) => void;
-  onTaskUpdated?: (task: ExtendedTask) => void;
+  onTaskCreated?: (task: any) => void;
+  onTaskUpdated?: (task: any) => void;
 }
 
 // פונקציית עזר למיון משימות לפי מספר היררכי
