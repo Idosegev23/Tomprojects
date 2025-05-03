@@ -167,11 +167,20 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
     setSelectedTask({
       id: '',
       title: '',
+      description: '',
       status,
       project_id: projectId,
       assignees_info: [],
-      created_at: new Date().toISOString()
-    } as Task);
+      created_at: new Date().toISOString(),
+      deleted: false,
+      due_date: null,
+      category: null,
+      stage_id: null,
+      priority: 'medium',
+      hierarchical_number: null,
+      parent_task_id: null,
+      updated_at: new Date().toISOString()
+    } as unknown as Task);
     onOpen();
   };
 

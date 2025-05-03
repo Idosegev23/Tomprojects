@@ -1,5 +1,6 @@
 import { Project } from '@/types/supabase';
 import { ExtendedTask } from '@/types/extendedTypes';
+import { ReactNode } from 'react';
 
 // הרחבת הטיפוס של משימה לכלול מידע נוסף, מבוסס על ExtendedTask
 export interface Task extends Omit<ExtendedTask, 'assignees' | 'assignees_info'> {
@@ -48,6 +49,7 @@ export interface KanbanColumnProps {
   onEditTask?: (task: Task) => void;
   onDeleteTask?: (taskId: string) => void;
   getProjectName: (projectId: string) => string;
+  children?: ReactNode;
 }
 
 // טיפוס לכרטיס משימה
@@ -59,6 +61,9 @@ export interface TaskCardProps {
   onDeleteTask?: (taskId: string) => void;
   getProjectName: (projectId: string) => string;
   onStatusChange?: (taskId: string, newStatus: string) => Promise<void>;
+  onEdit?: (task: Task) => void;
+  onDelete?: (taskId: string) => void;
+  onChangeStatus?: (taskId: string, newStatus: string) => Promise<void>;
 }
 
 // טיפוס לכותרת הקנבן

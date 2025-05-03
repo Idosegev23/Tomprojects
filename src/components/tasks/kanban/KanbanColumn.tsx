@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 import {
   Box,
   Text,
@@ -9,14 +9,24 @@ import {
   HStack,
   IconButton,
   Center,
+  Heading,
+  Button
 } from '@chakra-ui/react';
 import { FiMaximize, FiMinimize } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import { KanbanColumnProps } from './types';
 import TaskCard from './TaskCard';
+import { AddIcon } from '@chakra-ui/icons';
 
 // קומפוננטה מונפשת
 const MotionFlex = motion(Flex);
+
+interface KanbanColumnProps {
+  title: string;
+  status: string;
+  onAddTask: () => void;
+  children: ReactNode;
+}
 
 /**
  * עמודת קנבן למשימות
@@ -35,6 +45,8 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
   onEditTask,
   onDeleteTask,
   getProjectName,
+  onAddTask,
+  children
 }) => {
   // קריאות ל-hooks - חייבות להיות באותו סדר בכל רנדור!
   const bgColor = useColorModeValue(`${color}.100`, `${color}.800`);
