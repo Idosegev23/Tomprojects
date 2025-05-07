@@ -995,10 +995,91 @@ export const taskService = {
       console.log(`Updating status for task ${taskId} to ${normalizedStatus}`);
       await updateBuildTracking(`Updating task ${taskId} status to ${normalizedStatus}`);
       
-      // עדכון הסטטוס דרך הפונקציה המשופרת שלנו
-      const updatedTask = await this.updateTask(taskId, { status: normalizedStatus });
+      // קבלת המשימה הנוכחית כדי לבדוק את פרטי הפרויקט
+      const currentTask = await this.getTaskById(taskId);
+      if (!currentTask) {
+        throw new Error(`Task ${taskId} not found`);
+      }
       
-      if (updatedTask && updatedTask.status !== normalizedStatus) {
+      let updatedTask: ExtendedTask | null = null;
+      let projectTableUpdated = false;
+      
+      // אם המשימה שייכת לפרויקט, ננסה לעדכן קודם את טבלת הפרויקט
+      if (currentTask.project_id) {
+        const projectTableName = `project_${currentTask.project_id}_tasks`;
+        
+        try {
+          // בדיקה אם טבלת הפרויקט קיימת
+          const { data: tableExists, error: checkError } = await supabase
+            .rpc('check_table_exists', { table_name_param: projectTableName });
+            
+          if (!checkError && tableExists) {
+            console.log(`עדכון סטטוס בטבלת הפרויקט ${projectTableName} עבור משימה ${taskId}`);
+            
+            // עדכון בטבלת הפרויקט
+            const { data: projectTaskData, error: updateError } = await supabase
+              .from(projectTableName)
+              .update({ 
+                status: normalizedStatus, 
+                updated_at: new Date().toISOString() 
+              })
+              .eq('id', taskId)
+              .select('*')
+              .single();
+              
+            if (updateError) {
+              console.error(`שגיאה בעדכון סטטוס בטבלת הפרויקט:`, updateError);
+            } else {
+              console.log(`סטטוס עודכן בהצלחה בטבלת הפרויקט עבור משימה ${taskId}`);
+              updatedTask = projectTaskData as ExtendedTask;
+              projectTableUpdated = true;
+            }
+          }
+        } catch (projectError) {
+          console.error(`שגיאה בבדיקת/עדכון טבלת הפרויקט עבור משימה ${taskId}:`, projectError);
+        }
+        
+        // רק אם העדכון בטבלת הפרויקט נכשל, נעדכן את הטבלה הראשית
+        if (!projectTableUpdated) {
+          console.log(`עדכון הטבלה הספציפית נכשל, מעדכן את הטבלה הראשית עבור משימה ${taskId}`);
+          updatedTask = await this.updateTask(taskId, { status: normalizedStatus });
+        }
+      } else {
+        // אם המשימה לא שייכת לפרויקט, נעדכן את הטבלה הראשית
+        console.log(`משימה ${taskId} אינה שייכת לפרויקט, מעדכן את הטבלה הראשית`);
+        updatedTask = await this.updateTask(taskId, { status: normalizedStatus });
+      }
+      
+      if (!updatedTask) {
+        throw new Error(`Failed to update task ${taskId} status`);
+      }
+      
+      // סנכרון מהטבלה הספציפית לטבלה הראשית אם העדכון התבצע בטבלת הפרויקט
+      if (currentTask.project_id && projectTableUpdated) {
+        try {
+          console.log(`סנכרון ההפוך - מעדכן את הטבלה הראשית עם הסטטוס החדש מטבלת הפרויקט: ${normalizedStatus}`);
+          
+          // עדכון שקט של הטבלה הראשית על סמך העדכון שכבר בוצע בטבלת הפרויקט
+          const { error: mainTableUpdateError } = await supabase
+            .from('tasks')
+            .update({ 
+              status: normalizedStatus, 
+              updated_at: new Date().toISOString() 
+            })
+            .eq('id', taskId);
+            
+          if (mainTableUpdateError) {
+            console.error(`שגיאה בסנכרון ההפוך לטבלה הראשית:`, mainTableUpdateError);
+          } else {
+            console.log(`סנכרון הפוך לטבלה הראשית הושלם בהצלחה עבור משימה ${taskId}`);
+          }
+        } catch (syncError) {
+          console.error(`שגיאה בסנכרון ההפוך:`, syncError);
+          // לא נזרוק שגיאה כדי לא לפגוע בתהליך העדכון שכבר הצליח
+        }
+      }
+      
+      if (updatedTask.status !== normalizedStatus) {
         console.warn(`Warning: Task ${taskId} status was not updated correctly. Expected ${normalizedStatus}, got ${updatedTask.status}`);
       }
       
