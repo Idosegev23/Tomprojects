@@ -241,10 +241,15 @@ export default function TaskPage() {
         }
       }
       
-      await taskService.updateTaskStatus(taskId, normalizedStatus);
+      const updatedTask = await taskService.updateTaskStatus(taskId, normalizedStatus);
       
       // עדכון המשימה המקומית
       setTask({ ...task, status: normalizedStatus });
+      
+      // אם המשימה שייכת לפרויקט, צריך לסנכרן גם את טבלת הפרויקט
+      if (task.project_id) {
+        await taskService.syncProjectTasks(task.project_id);
+      }
       
       toast({
         title: 'סטטוס המשימה עודכן',
@@ -253,6 +258,11 @@ export default function TaskPage() {
         isClosable: true,
         position: 'top-right',
       });
+      
+      // רפרוש לאחר עדכון ההודעה
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (err) {
       console.error('שגיאה בעדכון סטטוס המשימה:', err);
       

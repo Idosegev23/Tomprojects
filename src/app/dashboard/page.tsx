@@ -46,7 +46,12 @@ import {
   TabList,
   Tab,
   TabPanels,
-  TabPanel
+  TabPanel,
+  TableContainer,
+  LinkBox,
+  LinkOverlay,
+  IconButton,
+  useToast
 } from '@chakra-ui/react';
 import { 
   FiUsers, 
@@ -59,7 +64,9 @@ import {
   FiRefreshCw,
   FiBell,
   FiTrendingUp,
-  FiBarChart2
+  FiBarChart2,
+  FiEdit,
+  FiArrowRight
 } from 'react-icons/fi';
 import NextLink from 'next/link';
 import projectService from '@/lib/services/projectService';
@@ -67,6 +74,8 @@ import taskService from '@/lib/services/taskService';
 import entrepreneurService from '@/lib/services/entrepreneurService';
 import { Project, Task } from '@/types/supabase';
 import { useSearchParams } from 'next/navigation';
+import { toast } from '@chakra-ui/react';
+import TaskKanban from '@/components/tasks/TaskKanban';
 
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -79,6 +88,7 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const searchParams = useSearchParams();
+  const toast = useToast();
   
   // טעינת נתונים
   useEffect(() => {
@@ -430,6 +440,78 @@ export default function Dashboard() {
     if (!entrepreneurId) return '-';
     const entrepreneur = entrepreneurs.find(e => e.id === entrepreneurId);
     return entrepreneur ? entrepreneur.name : '-';
+  };
+  
+  // פונקציה לטיפול בשינוי סטטוס משימה
+  const handleStatusChange = async (taskId: string, newStatus: string) => {
+    try {
+      console.log(`Dashboard: Updating task ${taskId} status to ${newStatus}`);
+      // עדכון הסטטוס בשרת
+      const updatedTask = await taskService.updateTaskStatus(taskId, newStatus);
+      
+      // עדכון מקומי של המשימה
+      setTasks(prevTasks => prevTasks.map(task => 
+        task.id === taskId ? { ...task, ...updatedTask } : task
+      ));
+      
+      toast({
+        title: 'סטטוס המשימה עודכן',
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+      });
+      
+      // רענון הנתונים מהשרת לאחר זמן קצר
+      setTimeout(() => {
+        refreshData();
+      }, 500);
+    } catch (error) {
+      console.error('שגיאה בעדכון סטטוס המשימה:', error);
+      
+      toast({
+        title: 'שגיאה בעדכון סטטוס המשימה',
+        description: error instanceof Error ? error.message : 'אירעה שגיאה בעדכון סטטוס המשימה',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+  
+  // פונקציה לטיפול בשינויים במשימות
+  const handleTaskUpdated = (updatedTask: any) => {
+    setTasks(prevTasks => prevTasks.map(task => 
+      task.id === updatedTask.id ? { ...task, ...updatedTask } : task
+    ));
+    
+    toast({
+      title: 'המשימה עודכנה',
+      status: 'success',
+      duration: 2000,
+      isClosable: true,
+    });
+    
+    // רענון הנתונים מהשרת
+    setTimeout(() => {
+      refreshData();
+    }, 500);
+  };
+  
+  // פונקציה לטיפול במחיקת משימה
+  const handleTaskDeleted = (taskId: string) => {
+    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+    
+    toast({
+      title: 'המשימה נמחקה',
+      status: 'success',
+      duration: 2000,
+      isClosable: true,
+    });
+    
+    // רענון הנתונים מהשרת
+    setTimeout(() => {
+      refreshData();
+    }, 500);
   };
   
   if (loading) {
@@ -820,6 +902,126 @@ export default function Dashboard() {
           </TabPanel>
         </TabPanels>
       </Tabs>
+      
+      {/* קארד משימות אחרונות */}
+      <Card variant="outline" mb={6}>
+        <CardHeader pb={0}>
+          <Flex justify="space-between" align="center">
+            <Heading size="md">
+              <Icon as={FiClock} mr={2} />
+              משימות אחרונות
+            </Heading>
+            <Tabs variant="soft-rounded" colorScheme="blue" size="sm">
+              <TabList>
+                <Tab>רשימה</Tab>
+                <Tab>קנבן</Tab>
+              </TabList>
+            </Tabs>
+          </Flex>
+        </CardHeader>
+        <CardBody>
+          <TabPanels>
+            <TabPanel px={0}>
+              {/* תצוגת רשימה */}
+              <TableContainer>
+                <Table variant="simple" size={{ base: 'sm', md: 'md' }}>
+                  <Thead>
+                    <Tr>
+                      <Th>משימה</Th>
+                      <Th>פרויקט</Th>
+                      <Th>תאריך יעד</Th>
+                      <Th>סטטוס</Th>
+                      <Th>פעולות</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {tasks.map((task) => (
+                      <Tr key={task.id}>
+                        <Td>
+                          <LinkBox>
+                            <LinkOverlay href={`/dashboard/tasks/${task.id}`}>
+                              <Text fontWeight="medium">{task.title}</Text>
+                            </LinkOverlay>
+                          </LinkBox>
+                        </Td>
+                        <Td>
+                          {task.project_id ? (
+                            <Button
+                              as={NextLink}
+                              href={`/dashboard/projects/${task.project_id}`}
+                              size="sm"
+                              variant="ghost"
+                            >
+                              {getProjectName(task.project_id)}
+                            </Button>
+                          ) : (
+                            <Text fontSize="sm" color="gray.500">-</Text>
+                          )}
+                        </Td>
+                        <Td>
+                          {task.due_date ? (
+                            <Text color={isTaskOverdue(task.due_date) ? 'red.500' : undefined}>
+                              {formatDate(task.due_date)}
+                            </Text>
+                          ) : (
+                            <Text fontSize="sm" color="gray.500">לא נקבע</Text>
+                          )}
+                        </Td>
+                        <Td>
+                          <Badge
+                            colorScheme={getTaskStatusColor(task.status)}
+                            rounded="full"
+                            px={2}
+                            py={1}
+                          >
+                            {getTaskStatusText(task.status)}
+                          </Badge>
+                        </Td>
+                        <Td>
+                          <HStack spacing={1}>
+                            <IconButton
+                              aria-label="ערוך משימה"
+                              icon={<FiEdit />}
+                              size="sm"
+                              variant="ghost"
+                              as={NextLink}
+                              href={`/dashboard/tasks/${task.id}`}
+                            />
+                          </HStack>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              </TableContainer>
+            </TabPanel>
+            <TabPanel px={0}>
+              {/* תצוגת קנבן */}
+              <Box mt={2}>
+                <TaskKanban
+                  projectId=""
+                  tasks={tasks}
+                  onTaskUpdated={handleTaskUpdated}
+                  onTaskDeleted={handleTaskDeleted}
+                  onStatusChange={handleStatusChange}
+                />
+              </Box>
+            </TabPanel>
+          </TabPanels>
+        </CardBody>
+        <CardFooter pt={0}>
+          <Button
+            as={NextLink}
+            href="/dashboard/tasks"
+            rightIcon={<FiArrowRight />}
+            variant="link"
+            size="sm"
+            colorScheme="blue"
+          >
+            לכל המשימות
+          </Button>
+        </CardFooter>
+      </Card>
     </Box>
   );
 }

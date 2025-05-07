@@ -302,7 +302,9 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       await taskService.syncProjectTasks(id);
       
       // עדכון המשימה ברשימה המקומית
-      setTasks(tasks.map(task => task.id === taskId ? updatedTask : task));
+      setTasks(prevTasks => prevTasks.map(task => 
+        task.id === taskId ? { ...task, ...updatedTask } : task
+      ));
       
       // עדכון התקדמות הפרויקט
       const updatedProgress = await projectService.calculateProjectProgress(id);
@@ -311,9 +313,11 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       toast({
         title: 'סטטוס המשימה עודכן',
         status: 'success',
-        duration: 3000,
+        duration: 2000,
         isClosable: true,
       });
+      
+      // לא נעשה רפרוש אוטומטי של העמוד
     } catch (error) {
       console.error('שגיאה בעדכון סטטוס המשימה:', error);
       

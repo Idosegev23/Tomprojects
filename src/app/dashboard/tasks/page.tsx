@@ -266,7 +266,7 @@ export default function Tasks() {
         }
       }
       
-      await taskService.updateTaskStatus(taskId, normalizedStatus);
+      const updatedTask = await taskService.updateTaskStatus(taskId, normalizedStatus);
       
       // עדכון המשימה ברשימה המקומית
       setTasks(prevTasks => 
@@ -282,6 +282,11 @@ export default function Tasks() {
         isClosable: true,
         position: 'top-right',
       });
+      
+      // רפרוש העמוד לאחר עדכון הסטטוס
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (err) {
       console.error('שגיאה בעדכון סטטוס משימה:', err);
       

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Box,
   Text,
@@ -21,7 +21,8 @@ import {
   Divider,
   Progress,
   Icon,
-  MenuDivider
+  MenuDivider,
+  useToast
 } from '@chakra-ui/react';
 import { FiMoreVertical, FiEdit, FiTrash2, FiCalendar, FiUser, FiBriefcase, FiClock, FiLink, FiCheckCircle, FiXCircle, FiUserPlus } from 'react-icons/fi';
 import { motion } from 'framer-motion';
@@ -65,6 +66,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
       default: return 'gray';
     }
   };
+  
+  const toast = useToast();
   
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
     console.log('TaskCard: התחלת גרירת משימה', task.id);
@@ -121,18 +124,45 @@ const TaskCard: React.FC<TaskCardProps> = ({
         // אחרת נעדכן ישירות
         try {
           // עדכון הסטטוס בשרת
-          await taskService.updateTaskStatus(task.id, newStatus);
+          const updatedTask = await taskService.updateTaskStatus(task.id, newStatus);
           
           // סנכרון טבלת הפרויקט אם קיים מזהה פרויקט
           if (task.project_id) {
             await taskService.syncProjectTasks(task.project_id);
           }
+          
+          // עדכון UI
+          if (updatedTask) {
+            toast({
+              title: "סטטוס המשימה עודכן",
+              status: "success",
+              duration: 2000,
+              isClosable: true,
+              position: "top-right"
+            });
+          }
         } catch (error) {
           console.error('Error updating task status directly:', error);
+          toast({
+            title: "שגיאה בעדכון סטטוס המשימה",
+            description: error instanceof Error ? error.message : "אירעה שגיאה לא ידועה",
+            status: "error",
+            duration: 3000,
+            isClosable: true,
+            position: "top-right"
+          });
         }
       }
     } catch (error) {
       console.error('TaskCard: Error changing task status:', error);
+      toast({
+        title: "שגיאה בעדכון סטטוס המשימה",
+        description: error instanceof Error ? error.message : "אירעה שגיאה לא ידועה",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+        position: "top-right"
+      });
     }
   };
   

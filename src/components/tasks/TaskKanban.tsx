@@ -140,12 +140,13 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
         // וידוא שהעדכון ישתקף גם בטבלת הפרויקט
         await taskService.syncProjectTasks(projectId);
         
+        // עדכון מקומי של המשימה
         onTaskUpdated(updatedTask);
         
         toast({
           title: 'סטטוס המשימה עודכן',
           status: 'success',
-          duration: 3000,
+          duration: 2000,
           isClosable: true,
         });
       }
