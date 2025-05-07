@@ -919,94 +919,96 @@ export default function Dashboard() {
           </Flex>
         </CardHeader>
         <CardBody>
-          <TabPanels>
-            <TabPanel px={0}>
-              {/* תצוגת רשימה */}
-              <TableContainer>
-                <Table variant="simple" size={{ base: 'sm', md: 'md' }}>
-                  <Thead>
-                    <Tr>
-                      <Th>משימה</Th>
-                      <Th>פרויקט</Th>
-                      <Th>תאריך יעד</Th>
-                      <Th>סטטוס</Th>
-                      <Th>פעולות</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {tasks.map((task) => (
-                      <Tr key={task.id}>
-                        <Td>
-                          <LinkBox>
-                            <LinkOverlay href={`/dashboard/tasks/${task.id}`}>
-                              <Text fontWeight="medium">{task.title}</Text>
-                            </LinkOverlay>
-                          </LinkBox>
-                        </Td>
-                        <Td>
-                          {task.project_id ? (
-                            <Button
-                              as={NextLink}
-                              href={`/dashboard/projects/${task.project_id}`}
-                              size="sm"
-                              variant="ghost"
-                            >
-                              {getProjectName(task.project_id)}
-                            </Button>
-                          ) : (
-                            <Text fontSize="sm" color="gray.500">-</Text>
-                          )}
-                        </Td>
-                        <Td>
-                          {task.due_date ? (
-                            <Text color={isTaskOverdue(task.due_date) ? 'red.500' : undefined}>
-                              {formatDate(task.due_date)}
-                            </Text>
-                          ) : (
-                            <Text fontSize="sm" color="gray.500">לא נקבע</Text>
-                          )}
-                        </Td>
-                        <Td>
-                          <Badge
-                            colorScheme={getTaskStatusColor(task.status)}
-                            rounded="full"
-                            px={2}
-                            py={1}
-                          >
-                            {getTaskStatusText(task.status)}
-                          </Badge>
-                        </Td>
-                        <Td>
-                          <HStack spacing={1}>
-                            <IconButton
-                              aria-label="ערוך משימה"
-                              icon={<FiEdit />}
-                              size="sm"
-                              variant="ghost"
-                              as={NextLink}
-                              href={`/dashboard/tasks/${task.id}`}
-                            />
-                          </HStack>
-                        </Td>
+          <Tabs variant="soft-rounded" colorScheme="blue" size="sm" defaultIndex={0}>
+            <TabPanels>
+              <TabPanel px={0}>
+                {/* תצוגת רשימה */}
+                <TableContainer>
+                  <Table variant="simple" size={{ base: 'sm', md: 'md' }}>
+                    <Thead>
+                      <Tr>
+                        <Th>משימה</Th>
+                        <Th>פרויקט</Th>
+                        <Th>תאריך יעד</Th>
+                        <Th>סטטוס</Th>
+                        <Th>פעולות</Th>
                       </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </TableContainer>
-            </TabPanel>
-            <TabPanel px={0}>
-              {/* תצוגת קנבן */}
-              <Box mt={2}>
-                <TaskKanban
-                  projectId=""
-                  tasks={tasks}
-                  onTaskUpdated={handleTaskUpdated}
-                  onTaskDeleted={handleTaskDeleted}
-                  onStatusChange={handleStatusChange}
-                />
-              </Box>
-            </TabPanel>
-          </TabPanels>
+                    </Thead>
+                    <Tbody>
+                      {tasks.map((task) => (
+                        <Tr key={task.id}>
+                          <Td>
+                            <LinkBox>
+                              <LinkOverlay href={`/dashboard/tasks/${task.id}`}>
+                                <Text fontWeight="medium">{task.title}</Text>
+                              </LinkOverlay>
+                            </LinkBox>
+                          </Td>
+                          <Td>
+                            {task.project_id ? (
+                              <Button
+                                as={NextLink}
+                                href={`/dashboard/projects/${task.project_id}`}
+                                size="sm"
+                                variant="ghost"
+                              >
+                                {getProjectName(task.project_id)}
+                              </Button>
+                            ) : (
+                              <Text fontSize="sm" color="gray.500">-</Text>
+                            )}
+                          </Td>
+                          <Td>
+                            {task.due_date ? (
+                              <Text color={isTaskOverdue(task.due_date) ? 'red.500' : undefined}>
+                                {formatDate(task.due_date)}
+                              </Text>
+                            ) : (
+                              <Text fontSize="sm" color="gray.500">לא נקבע</Text>
+                            )}
+                          </Td>
+                          <Td>
+                            <Badge
+                              colorScheme={getTaskStatusColor(task.status)}
+                              rounded="full"
+                              px={2}
+                              py={1}
+                            >
+                              {getTaskStatusText(task.status)}
+                            </Badge>
+                          </Td>
+                          <Td>
+                            <HStack spacing={1}>
+                              <IconButton
+                                aria-label="ערוך משימה"
+                                icon={<FiEdit />}
+                                size="sm"
+                                variant="ghost"
+                                as={NextLink}
+                                href={`/dashboard/tasks/${task.id}`}
+                              />
+                            </HStack>
+                          </Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+              </TabPanel>
+              <TabPanel px={0}>
+                {/* תצוגת קנבן */}
+                <Box mt={2}>
+                  <TaskKanban
+                    projectId=""
+                    tasks={tasks}
+                    onTaskUpdated={handleTaskUpdated}
+                    onTaskDeleted={handleTaskDeleted}
+                    onStatusChange={handleStatusChange}
+                  />
+                </Box>
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
         </CardBody>
         <CardFooter pt={0}>
           <Button
