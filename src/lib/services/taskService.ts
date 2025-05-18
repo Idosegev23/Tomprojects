@@ -1135,6 +1135,52 @@ export const taskService = {
       console.log(`Successfully updated task ${taskId} status to ${normalizedStatus}`);
       await updateBuildTracking(`Successfully updated task ${taskId} status to ${normalizedStatus}`);
       
+      // אם יש פרויקט, נוודא סנכרון מלא עם הטבלה הספציפית
+      if (updatedTask.project_id) {
+        try {
+          console.log(`וידוא סנכרון בין הטבלאות עבור משימה ${taskId} בפרויקט ${updatedTask.project_id}`);
+          await updateBuildTracking(`וידוא סנכרון בין הטבלאות עבור משימה ${taskId} בפרויקט ${updatedTask.project_id}`);
+          
+          // סנכרון ממוקד של המשימה
+          await this.forceSyncTaskBetweenTables(taskId, updatedTask.project_id, normalizedStatus);
+          
+          // מוסיפים השהייה קצרה לוודא שהעדכון עבר
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // בדיקה שהסנכרון עבד כראוי
+          const projectTableName = `project_${updatedTask.project_id}_tasks`;
+          const { data: projectTask, error: checkError } = await supabase
+            .from(projectTableName)
+            .select('status')
+            .eq('id', taskId)
+            .maybeSingle();
+            
+          if (checkError) {
+            console.warn(`שגיאה בבדיקת סטטוס משימה ${taskId} בטבלת הפרויקט:`, checkError);
+            await updateBuildTracking(`שגיאה בבדיקת סטטוס משימה ${taskId} בטבלת הפרויקט: ${checkError.message}`);
+          } else if (projectTask && projectTask.status !== normalizedStatus) {
+            console.warn(`סטטוס משימה ${taskId} בטבלת הפרויקט עדיין לא תואם: ${projectTask.status} במקום ${normalizedStatus}, מנסה סנכרון נוסף`);
+            await updateBuildTracking(`סטטוס משימה ${taskId} בטבלת הפרויקט עדיין לא תואם: ${projectTask.status} במקום ${normalizedStatus}`);
+            
+            // ניסיון סנכרון נוסף
+            await this.forceSyncTaskBetweenTables(taskId, updatedTask.project_id, normalizedStatus);
+          } else if (projectTask) {
+            console.log(`סטטוס משימה ${taskId} תואם בשתי הטבלאות: ${normalizedStatus}`);
+            await updateBuildTracking(`סטטוס משימה ${taskId} תואם בשתי הטבלאות: ${normalizedStatus}`);
+          } else {
+            console.warn(`משימה ${taskId} לא נמצאה בטבלת הפרויקט, מנסה סנכרון מלא`);
+            await updateBuildTracking(`משימה ${taskId} לא נמצאה בטבלת הפרויקט, מנסה סנכרון מלא`);
+            
+            // ניסיון סנכרון מלא של כל המשימות
+            await this.syncProjectTasks(updatedTask.project_id);
+          }
+        } catch (syncError) {
+          console.error(`שגיאה בסנכרון הסטטוס לטבלת הפרויקט:`, syncError);
+          await updateBuildTracking(`שגיאה בסנכרון הסטטוס לטבלת הפרויקט: ${syncError instanceof Error ? syncError.message : 'שגיאה לא ידועה'}`);
+          // אנחנו לא זורקים שגיאה כאן כי העדכון כבר הצליח בטבלה הראשית
+        }
+      }
+      
       return updatedTask;
     } catch (err) {
       console.error(`Error in updateTaskStatus for ${taskId}:`, err);
@@ -1151,7 +1197,8 @@ export const taskService = {
         return;
       }
       
-      console.log(`מתחיל סנכרון ממוקד של משימה ${taskId} בין הטבלאות`);
+      console.log(`מתחיל סנכרון ממוקד של משימה ${taskId} בין הטבלאות עם סטטוס: ${newStatus}`);
+      await updateBuildTracking(`סנכרון ממוקד של משימה ${taskId} בפרויקט ${projectId} עם סטטוס: ${newStatus}`);
       
       // בדיקה אם טבלת הפרויקט קיימת
       const projectTableName = `project_${projectId}_tasks`;
@@ -1160,6 +1207,7 @@ export const taskService = {
         
       if (checkError || !tableExists) {
         console.warn(`טבלת הפרויקט ${projectTableName} לא קיימת, לא ניתן לסנכרן`);
+        await updateBuildTracking(`טבלת הפרויקט ${projectTableName} לא קיימת, לא ניתן לסנכרן`);
         return;
       }
       
@@ -1172,6 +1220,7 @@ export const taskService = {
         
       if (mainTaskError || !mainTask) {
         console.error(`שגיאה בקבלת משימה ${taskId} מהטבלה הראשית:`, mainTaskError);
+        await updateBuildTracking(`שגיאה בקבלת משימה ${taskId} מהטבלה הראשית: ${mainTaskError?.message || 'שגיאה לא ידועה'}`);
         return;
       }
       
@@ -1184,6 +1233,7 @@ export const taskService = {
         
       if (projectTaskError) {
         console.error(`שגיאה בבדיקת קיום משימה ${taskId} בטבלת הפרויקט:`, projectTaskError);
+        await updateBuildTracking(`שגיאה בבדיקת קיום משימה ${taskId} בטבלת הפרויקט: ${projectTaskError.message}`);
       }
       
       // וידוא שהסטטוס זהה בשתי הטבלאות
@@ -1192,6 +1242,7 @@ export const taskService = {
       // אם המשימה לא קיימת בטבלת הפרויקט, נוסיף אותה
       if (!projectTask) {
         console.log(`משימה ${taskId} לא קיימת בטבלת הפרויקט, מוסיף אותה עם סטטוס ${newStatus}`);
+        await updateBuildTracking(`משימה ${taskId} לא קיימת בטבלת הפרויקט, מוסיף אותה עם סטטוס ${newStatus}`);
         
         // הכנת הנתונים לטבלת הפרויקט
         const mainTaskCopy = {...mainTask};
@@ -1200,40 +1251,159 @@ export const taskService = {
         
         const taskToInsert = await this.removeNonExistingFields(mainTaskCopy, true);
         
-        const { error: insertError } = await supabase
-          .from(projectTableName)
-          .insert(taskToInsert);
-          
-        if (insertError) {
-          console.error(`שגיאה בהוספת משימה ${taskId} לטבלת הפרויקט:`, insertError);
-        } else {
-          console.log(`משימה ${taskId} נוספה בהצלחה לטבלת הפרויקט עם סטטוס ${newStatus}`);
+        // מספר ניסיונות להוספת המשימה
+        let insertRetries = 0;
+        const maxRetries = 3;
+        let insertSuccess = false;
+        
+        while (!insertSuccess && insertRetries < maxRetries) {
+          try {
+            const { error: insertError } = await supabase
+              .from(projectTableName)
+              .insert(taskToInsert);
+              
+            if (insertError) {
+              console.error(`שגיאה בהוספת משימה ${taskId} לטבלת הפרויקט (ניסיון ${insertRetries + 1}):`, insertError);
+              await updateBuildTracking(`שגיאה בהוספת משימה ${taskId} לטבלת הפרויקט (ניסיון ${insertRetries + 1}): ${insertError.message}`);
+              insertRetries++;
+              
+              if (insertRetries < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 1000)); // המתנה לפני ניסיון חוזר
+              }
+            } else {
+              console.log(`משימה ${taskId} נוספה בהצלחה לטבלת הפרויקט עם סטטוס ${newStatus}`);
+              await updateBuildTracking(`משימה ${taskId} נוספה בהצלחה לטבלת הפרויקט עם סטטוס ${newStatus}`);
+              insertSuccess = true;
+            }
+          } catch (err) {
+            console.error(`שגיאה לא צפויה בהוספת משימה ${taskId} לטבלת הפרויקט (ניסיון ${insertRetries + 1}):`, err);
+            await updateBuildTracking(`שגיאה לא צפויה בהוספת משימה: ${err instanceof Error ? err.message : 'שגיאה לא ידועה'}`);
+            insertRetries++;
+            
+            if (insertRetries < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 1000)); // המתנה לפני ניסיון חוזר
+            }
+          }
+        }
+        
+        if (!insertSuccess) {
+          console.error(`נכשל בהוספת משימה ${taskId} לטבלת הפרויקט אחרי ${maxRetries} ניסיונות`);
+          await updateBuildTracking(`נכשל בהוספת משימה ${taskId} לטבלת הפרויקט אחרי ${maxRetries} ניסיונות`);
         }
       } 
       // עדכון סטטוס בטבלת הפרויקט
-      else if (projectTask.status !== newStatus) {
-        console.log(`מעדכן סטטוס משימה ${taskId} בטבלת הפרויקט מ-${projectTask.status} ל-${newStatus}`);
-        
-        const { error: updateError } = await supabase
-          .from(projectTableName)
-          .update({ 
-            status: newStatus, 
-            updated_at: currentTime 
-          })
-          .eq('id', taskId);
+      else {
+        // בדיקה אם יש צורך בעדכון
+        if (projectTask.status !== newStatus) {
+          console.log(`מעדכן סטטוס משימה ${taskId} בטבלת הפרויקט מ-${projectTask.status} ל-${newStatus}`);
+          await updateBuildTracking(`מעדכן סטטוס משימה ${taskId} בטבלת הפרויקט מ-${projectTask.status} ל-${newStatus}`);
           
-        if (updateError) {
-          console.error(`שגיאה בעדכון סטטוס משימה ${taskId} בטבלת הפרויקט:`, updateError);
+          // ניסיונות עדכון עם מספר ניסיונות חוזרים
+          let updateRetries = 0;
+          const maxRetries = 3;
+          let updateSuccess = false;
+          
+          while (!updateSuccess && updateRetries < maxRetries) {
+            try {
+              const { data: updateData, error: updateError } = await supabase
+                .from(projectTableName)
+                .update({ 
+                  status: newStatus, 
+                  updated_at: currentTime 
+                })
+                .eq('id', taskId)
+                .select('*')
+                .single();
+                
+              if (updateError) {
+                console.error(`שגיאה בעדכון סטטוס משימה ${taskId} בטבלת הפרויקט (ניסיון ${updateRetries + 1}):`, updateError);
+                await updateBuildTracking(`שגיאה בעדכון סטטוס משימה ${taskId} (ניסיון ${updateRetries + 1}): ${updateError.message}`);
+                updateRetries++;
+                
+                if (updateRetries < maxRetries) {
+                  await new Promise(resolve => setTimeout(resolve, 1000)); // המתנה לפני ניסיון חוזר
+                }
+              } else {
+                if (updateData && updateData.status === newStatus) {
+                  console.log(`סטטוס משימה ${taskId} עודכן בהצלחה בטבלת הפרויקט ל-${newStatus}`);
+                  await updateBuildTracking(`סטטוס משימה ${taskId} עודכן בהצלחה בטבלת הפרויקט ל-${newStatus}`);
+                  updateSuccess = true;
+                } else {
+                  console.warn(`סטטוס משימה ${taskId} לא עודכן כראוי: התקבל ${updateData?.status} במקום ${newStatus}`);
+                  await updateBuildTracking(`סטטוס משימה ${taskId} לא עודכן כראוי: התקבל ${updateData?.status} במקום ${newStatus}`);
+                  updateRetries++;
+                  
+                  if (updateRetries < maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // המתנה לפני ניסיון חוזר
+                  }
+                }
+              }
+            } catch (err) {
+              console.error(`שגיאה לא צפויה בעדכון סטטוס משימה ${taskId} (ניסיון ${updateRetries + 1}):`, err);
+              await updateBuildTracking(`שגיאה לא צפויה בעדכון סטטוס: ${err instanceof Error ? err.message : 'שגיאה לא ידועה'}`);
+              updateRetries++;
+              
+              if (updateRetries < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 1000)); // המתנה לפני ניסיון חוזר
+              }
+            }
+          }
+          
+          if (!updateSuccess) {
+            console.error(`נכשל בעדכון סטטוס משימה ${taskId} בטבלת הפרויקט אחרי ${maxRetries} ניסיונות`);
+            await updateBuildTracking(`נכשל בעדכון סטטוס משימה ${taskId} בטבלת הפרויקט אחרי ${maxRetries} ניסיונות`);
+            
+            // ניסיון אחרון: מחיקה והוספה מחדש
+            console.log(`מנסה למחוק ולהוסיף מחדש את המשימה ${taskId} בטבלת הפרויקט`);
+            await updateBuildTracking(`מנסה למחוק ולהוסיף מחדש את המשימה ${taskId} בטבלת הפרויקט`);
+            
+            try {
+              // מחיקת המשימה מטבלת הפרויקט
+              const { error: deleteError } = await supabase
+                .from(projectTableName)
+                .delete()
+                .eq('id', taskId);
+                
+              if (!deleteError) {
+                // הכנת הנתונים להוספה מחדש
+                const mainTaskCopy = {...mainTask};
+                mainTaskCopy.status = newStatus;
+                mainTaskCopy.updated_at = currentTime;
+                
+                const taskToInsert = await this.removeNonExistingFields(mainTaskCopy, true);
+                
+                // הוספת המשימה מחדש
+                const { error: reinsertError } = await supabase
+                  .from(projectTableName)
+                  .insert(taskToInsert);
+                  
+                if (!reinsertError) {
+                  console.log(`משימה ${taskId} נמחקה והוספה מחדש בהצלחה עם סטטוס ${newStatus}`);
+                  await updateBuildTracking(`משימה ${taskId} נמחקה והוספה מחדש בהצלחה עם סטטוס ${newStatus}`);
+                } else {
+                  console.error(`שגיאה בהוספה מחדש של משימה ${taskId}:`, reinsertError);
+                  await updateBuildTracking(`שגיאה בהוספה מחדש של משימה ${taskId}: ${reinsertError.message}`);
+                }
+              } else {
+                console.error(`שגיאה במחיקת משימה ${taskId} לפני הוספה מחדש:`, deleteError);
+                await updateBuildTracking(`שגיאה במחיקת משימה ${taskId} לפני הוספה מחדש: ${deleteError.message}`);
+              }
+            } catch (finalError) {
+              console.error(`שגיאה סופית בניסיון מחיקה והוספה מחדש של משימה ${taskId}:`, finalError);
+              await updateBuildTracking(`שגיאה סופית בניסיון מחיקה והוספה מחדש: ${finalError instanceof Error ? finalError.message : 'שגיאה לא ידועה'}`);
+            }
+          }
         } else {
-          console.log(`סטטוס משימה ${taskId} עודכן בהצלחה בטבלת הפרויקט ל-${newStatus}`);
+          console.log(`סטטוס משימה ${taskId} זהה בשתי הטבלאות (${newStatus}), אין צורך בסנכרון`);
+          await updateBuildTracking(`סטטוס משימה ${taskId} זהה בשתי הטבלאות (${newStatus}), אין צורך בסנכרון`);
         }
-      } else {
-        console.log(`סטטוס משימה ${taskId} זהה בשתי הטבלאות (${newStatus}), אין צורך בסנכרון`);
       }
       
       console.log(`סנכרון ממוקד של משימה ${taskId} הושלם`);
+      await updateBuildTracking(`סנכרון ממוקד של משימה ${taskId} הושלם`);
     } catch (err) {
       console.error(`שגיאה בסנכרון ממוקד של משימה ${taskId}:`, err);
+      await updateBuildTracking(`שגיאה קריטית בסנכרון ממוקד של משימה ${taskId}: ${err instanceof Error ? err.message : 'שגיאה לא ידועה'}`);
     }
   },
 

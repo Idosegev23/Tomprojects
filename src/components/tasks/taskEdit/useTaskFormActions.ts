@@ -243,13 +243,25 @@ export const useTaskFormActions = ({
             // סנכרון עם טבלת הפרויקט הספציפית
             if (projectId) {
               console.log(`מסנכרן את המשימה עם טבלת הפרויקט ${projectId}`);
-              await taskService.syncProjectTasks(projectId);
               
-              // ניסיון לסנכרון ממוקד של המשימה הספציפית
-              if (result && result.status) {
+              // ניסיון לסנכרון ממוקד של המשימה הספציפית - קודם
+              if (result && result.id && result.status) {
+                console.log(`מפעיל סנכרון ממוקד של המשימה ${result.id} עם סטטוס ${result.status}`);
+                await taskService.forceSyncTaskBetweenTables(task.id, projectId, result.status);
+                console.log('הסנכרון הממוקד הושלם בהצלחה');
+              } else {
+                console.warn('לא ניתן לבצע סנכרון ממוקד - חסרים פרטי תוצאה');
+              }
+              
+              // סנכרון מלא של כל המשימות בפרויקט
+              await taskService.syncProjectTasks(projectId);
+              console.log('הסנכרון הכללי הושלם בהצלחה');
+              
+              // ניסיון נוסף לוודא שהסטטוס נכון
+              if (result && result.id && result.status) {
+                console.log(`מבצע סנכרון ממוקד נוסף לוידוא סטטוס ${result.status}`);
                 await taskService.forceSyncTaskBetweenTables(task.id, projectId, result.status);
               }
-              console.log('הסנכרון הושלם בהצלחה');
             }
           } catch (syncError) {
             console.error('שגיאה בסנכרון המשימה עם טבלת הפרויקט:', syncError);
@@ -366,13 +378,25 @@ export const useTaskFormActions = ({
           try {
             if (projectId) {
               console.log(`מסנכרן את המשימה החדשה עם טבלת הפרויקט ${projectId}`);
-              await taskService.syncProjectTasks(projectId);
               
-              // ניסיון לסנכרון ממוקד של המשימה הספציפית
+              // ניסיון לסנכרון ממוקד של המשימה הספציפית - קודם
               if (result && result.id && result.status) {
+                console.log(`מפעיל סנכרון ממוקד של המשימה החדשה ${result.id} עם סטטוס ${result.status}`);
+                await taskService.forceSyncTaskBetweenTables(result.id, projectId, result.status);
+                console.log('הסנכרון הממוקד הושלם בהצלחה');
+              } else {
+                console.warn('לא ניתן לבצע סנכרון ממוקד - חסרים פרטי תוצאה');
+              }
+              
+              // סנכרון מלא של כל המשימות בפרויקט
+              await taskService.syncProjectTasks(projectId);
+              console.log('הסנכרון הכללי הושלם בהצלחה');
+              
+              // ניסיון נוסף לוודא שהסטטוס נכון
+              if (result && result.id && result.status) {
+                console.log(`מבצע סנכרון ממוקד נוסף לוידוא סטטוס ${result.status}`);
                 await taskService.forceSyncTaskBetweenTables(result.id, projectId, result.status);
               }
-              console.log('הסנכרון הושלם בהצלחה');
             }
           } catch (syncError) {
             console.error('שגיאה בסנכרון המשימה החדשה עם טבלת הפרויקט:', syncError);
