@@ -139,7 +139,19 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
         const updatedTask = await taskService.updateTaskStatus(taskId, normalizedStatus);
         
         // וידוא שהעדכון ישתקף גם בטבלת הפרויקט
-        await taskService.syncProjectTasks(projectId);
+        console.log('מסנכרן את המשימה עם טבלת הפרויקט הספציפית...');
+        try {
+          // סנכרון מלא של כל המשימות
+          await taskService.syncProjectTasks(projectId);
+          
+          // סנכרון ממוקד של המשימה הספציפית
+          if (updatedTask && updatedTask.status) {
+            await taskService.forceSyncTaskBetweenTables(taskId, projectId, updatedTask.status);
+          }
+          console.log('סנכרון הושלם בהצלחה');
+        } catch (syncError) {
+          console.error('שגיאה בסנכרון המשימה:', syncError);
+        }
         
         // עדכון מקומי של המשימה
         onTaskUpdated(updatedTask);

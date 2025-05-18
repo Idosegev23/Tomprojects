@@ -239,24 +239,53 @@ export const useTaskFormActions = ({
           result = await taskService.updateTask(task.id, taskData);
           console.log('המשימה עודכנה בהצלחה:', result);
           
-          toast({
-            title: "המשימה עודכנה בהצלחה",
-            status: "success",
-            duration: 3000,
-            isClosable: true,
-          });
+          try {
+            // סנכרון עם טבלת הפרויקט הספציפית
+            if (projectId) {
+              console.log(`מסנכרן את המשימה עם טבלת הפרויקט ${projectId}`);
+              await taskService.syncProjectTasks(projectId);
+              
+              // ניסיון לסנכרון ממוקד של המשימה הספציפית
+              if (result && result.status) {
+                await taskService.forceSyncTaskBetweenTables(task.id, projectId, result.status);
+              }
+              console.log('הסנכרון הושלם בהצלחה');
+            }
+          } catch (syncError) {
+            console.error('שגיאה בסנכרון המשימה עם טבלת הפרויקט:', syncError);
+            // הודעה למשתמש אבל ממשיכים כי העדכון העיקרי הצליח
+            toast({
+              title: 'אזהרה',
+              description: 'המשימה עודכנה, אך יתכן שהשינוי לא ישתקף מיד בכל חלקי המערכת',
+              status: 'warning',
+              duration: 5000,
+              isClosable: true,
+            });
+          }
           
           if (onTaskUpdated) {
             console.log('קורא לפונקצית onTaskUpdated עם המשימה המעודכנת:', result);
             onTaskUpdated(result);
+            
+            // סגירת המודל והוספת השהייה קצרה לטעינת השינויים מהשרת
+            setLoading(false);
+            
+            // הודעה על הצלחת העדכון עם הנחיה לרענון אם לא רואים שינויים
+            toast({
+              title: "המשימה עודכנה בהצלחה",
+              description: "אם השינויים לא מופיעים מיד, רענן את הדף",
+              status: "success",
+              duration: 5000,
+              isClosable: true,
+            });
+            
+            // סגירת המודל
+            onClose();
           } else {
             console.warn('אין פונקצית onTaskUpdated, לא ניתן לעדכן את ממשק המשתמש');
             setLoading(false);
             onClose();
           }
-          
-          // איפוס מצב הטעינה לפני סיום הפונקציה
-          setLoading(false);
         } catch (updateError) {
           console.error('שגיאה בעדכון משימה:', updateError);
           
@@ -332,6 +361,30 @@ export const useTaskFormActions = ({
           console.log('קורא לשירות taskService.createTask');
           result = await taskService.createTask(newTaskData);
           console.log('משימה נוצרה בהצלחה:', result);
+          
+          // סנכרון עם טבלת הפרויקט הספציפית
+          try {
+            if (projectId) {
+              console.log(`מסנכרן את המשימה החדשה עם טבלת הפרויקט ${projectId}`);
+              await taskService.syncProjectTasks(projectId);
+              
+              // ניסיון לסנכרון ממוקד של המשימה הספציפית
+              if (result && result.id && result.status) {
+                await taskService.forceSyncTaskBetweenTables(result.id, projectId, result.status);
+              }
+              console.log('הסנכרון הושלם בהצלחה');
+            }
+          } catch (syncError) {
+            console.error('שגיאה בסנכרון המשימה החדשה עם טבלת הפרויקט:', syncError);
+            // הודעה למשתמש אבל ממשיכים כי היצירה העיקרית הצליחה
+            toast({
+              title: 'אזהרה',
+              description: 'המשימה נוצרה, אך יתכן שהיא לא תופיע מיד בכל חלקי המערכת',
+              status: 'warning',
+              duration: 5000,
+              isClosable: true,
+            });
+          }
           
           // שמירת המשימה שנוצרה לשימוש בפופאפ התבנית
           setCreatedTaskData(result);
