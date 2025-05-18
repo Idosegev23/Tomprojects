@@ -24,8 +24,18 @@ export const useTaskForm = ({
   // פורמט תאריך עבור input מסוג date
   const formatDateForInput = (dateString: string | null): string => {
     if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toISOString().split('T')[0];
+    try {
+      const date = new Date(dateString);
+      // בדיקה שהתאריך תקין (לא Invalid Date)
+      if (isNaN(date.getTime())) {
+        console.warn(`תאריך לא תקין: ${dateString}`);
+        return '';
+      }
+      return date.toISOString().split('T')[0];
+    } catch (error) {
+      console.error(`שגיאה בעיבוד תאריך ${dateString}:`, error);
+      return '';
+    }
   };
   
   // הכנת התאריך הנוכחי בפורמט המתאים ל-input מסוג date
@@ -260,7 +270,16 @@ export const useTaskForm = ({
   // טיפול בשינויים בטופס
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // טיפול מיוחד בשדות תאריך
+    if (name === 'start_date' || name === 'due_date' || name === 'completed_date') {
+      // אם הערך ריק, שמור null במקום מחרוזת ריקה
+      const dateValue = value === '' ? null : value;
+      setFormData(prev => ({ ...prev, [name]: dateValue }));
+    } else {
+      // טיפול רגיל בשאר השדות
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
     
     // ניקוי שגיאות בעת שינוי
     if (errors[name]) {

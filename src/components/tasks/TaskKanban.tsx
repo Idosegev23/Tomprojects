@@ -104,6 +104,7 @@ const TaskKanban: React.FC<TaskKanbanProps> = ({
 
   // עדכון משימה
   const handleTaskUpdated = (updatedTask: Task) => {
+    console.log('TaskKanban.handleTaskUpdated נקרא עם המשימה המעודכנת:', updatedTask);
     onTaskUpdated(updatedTask);
     onClose();
   };

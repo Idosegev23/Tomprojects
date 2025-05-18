@@ -209,6 +209,19 @@ export const useTaskFormActions = ({
         project_id: projectId,
       };
       
+      // טיפול בשדות תאריך ריקים
+      if (taskData.start_date === '') {
+        taskData.start_date = null;
+      }
+      
+      if (taskData.due_date === '') {
+        taskData.due_date = null;
+      }
+      
+      if (taskData.completed_date === '') {
+        taskData.completed_date = null;
+      }
+      
       // בדיקת האם יש צורך לעדכן את המספר ההיררכי
       if (isSubtask && formData.parent_task_id) {
         // וידוא שיש parent_task_id תקין
@@ -224,6 +237,7 @@ export const useTaskFormActions = ({
         // עדכון משימה קיימת
         try {
           result = await taskService.updateTask(task.id, taskData);
+          console.log('המשימה עודכנה בהצלחה:', result);
           
           toast({
             title: "המשימה עודכנה בהצלחה",
@@ -233,12 +247,16 @@ export const useTaskFormActions = ({
           });
           
           if (onTaskUpdated) {
+            console.log('קורא לפונקצית onTaskUpdated עם המשימה המעודכנת:', result);
             onTaskUpdated(result);
+          } else {
+            console.warn('אין פונקצית onTaskUpdated, לא ניתן לעדכן את ממשק המשתמש');
+            setLoading(false);
+            onClose();
           }
           
           // איפוס מצב הטעינה לפני סיום הפונקציה
           setLoading(false);
-          onClose();
         } catch (updateError) {
           console.error('שגיאה בעדכון משימה:', updateError);
           
@@ -301,8 +319,8 @@ export const useTaskFormActions = ({
           status: formData.status || 'todo',
           priority: formData.priority || 'medium',
           parent_task_id: taskData.parent_task_id, // משתמש בערך שהוגדר למעלה
-          start_date: formData.start_date || null,
-          due_date: formData.due_date || null,
+          start_date: formData.start_date && formData.start_date !== '' ? formData.start_date : null,
+          due_date: formData.due_date && formData.due_date !== '' ? formData.due_date : null,
           responsible: formData.responsible || null,
           assignees_info: assigneesArray,
         };
