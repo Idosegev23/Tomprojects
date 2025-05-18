@@ -1,0 +1,80 @@
+'use client';
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Box, 
+  SimpleGrid, 
+  Heading, 
+  Text, 
+  Flex, 
+  Stat, 
+  StatLabel, 
+  StatNumber, 
+  StatHelpText,
+  Card, 
+  CardBody,
+  CardHeader,
+  CardFooter,
+  Icon,
+  Select,
+  Button,
+  HStack,
+  VStack,
+  Spinner,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  Badge,
+  Link,
+  Tooltip,
+  Progress,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  Divider,
+  Tag,
+  TagLabel,
+  TagLeftIcon,
+  AlertIcon,
+  Alert,
+  useColorModeValue,
+  Tabs,
+  TabList,
+  Tab,
+  TabPanels,
+  TabPanel,
+  TableContainer,
+  LinkBox,
+  LinkOverlay,
+  IconButton,
+  useToast
+} from '@chakra-ui/react';
+import { 
+  FiUsers, 
+  FiFolder, 
+  FiCheckSquare, 
+  FiAlertCircle, 
+  FiCalendar,
+  FiClock,
+  FiFilter,
+  FiRefreshCw,
+  FiBell,
+  FiTrendingUp,
+  FiBarChart2,
+  FiEdit,
+  FiArrowRight
+} from 'react-icons/fi';
+import NextLink from 'next/link';
+import projectService from '@/lib/services/projectService';
+import taskService from '@/lib/services/taskService';
+import entrepreneurService from '@/lib/services/entrepreneurService';
+import { Project, Task } from '@/types/supabase';
+import { useSearchParams } from 'next/navigation';
+import TaskKanban from '@/components/tasks/TaskKanban';
+
+export default function Dashboard() {
+  const [projects, setProjects] = useState<Project[]>([]);
